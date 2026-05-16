@@ -63,3 +63,38 @@ export const projects: ProjectItem[] = [
     year: "2024",
   },
 ];
+
+export type WritingItem = {
+  title: string;
+  description: string;
+  date: string;
+  link: string;
+};
+
+export type WritingCategory = {
+  key: string;
+  title: string;
+  description: string;
+  posts: WritingItem[];
+};
+
+export const writing: WritingCategory[] = [
+  {
+    key: "ml-guide",
+    title: "ML Guide",
+    description: "Notes and walkthroughs on machine learning concepts.",
+    posts: [],
+  },
+  {
+    key: "robotics-guide",
+    title: "Robotics Guide",
+    description: "Hands-on robotics learnings, from kinematics to control.",
+    posts: [],
+  },
+  {
+    key: "personal-reflections",
+    title: "Personal Reflections",
+    description: "Essays and thoughts on life, work, and everything between.",
+    posts: [],
+  },
+];
