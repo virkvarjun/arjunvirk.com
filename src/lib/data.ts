@@ -33,3 +33,33 @@ export const work: WorkItem[] = [
     description: "Placeholder — add your work experience here.",
   },
 ];
+
+export type ProjectItem = {
+  name: string;
+  description: string;
+  tags: string[];
+  link?: string;
+  github?: string;
+  year: string;
+};
+
+export const projects: ProjectItem[] = [
+  {
+    name: "Project Alpha",
+    description: "Placeholder — describe your project here.",
+    tags: ["TypeScript", "Next.js"],
+    year: "2025",
+  },
+  {
+    name: "Project Beta",
+    description: "Placeholder — describe your project here.",
+    tags: ["Python", "ML"],
+    year: "2024",
+  },
+  {
+    name: "Project Gamma",
+    description: "Placeholder — describe your project here.",
+    tags: ["Rust", "Systems"],
+    year: "2024",
+  },
+];
