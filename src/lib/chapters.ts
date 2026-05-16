@@ -48,30 +48,119 @@ export const mlGuideChapters: Chapter[] = [
   {
     slug: "chapter-1-fundamentals",
     number: "1",
-    title: "Fundamentals",
+    title: "ML Fundamentals",
     summary:
-      "The two pillars of modern ML: a differentiable loss function, and an optimizer that can follow gradients downhill.",
+      "The vocabulary and ground rules of machine learning — the terms every later chapter assumes you already know.",
     sections: [
       {
-        paragraphs: [
-          "Everything else — architectures, data augmentation, regularization — is in service of these two ideas. Once you understand them deeply, the rest of the field looks like variations on a theme.",
+        heading: "Part 1: Preliminary Definitions",
+        definitions: [
+          {
+            term: "Model",
+            definition:
+              "A function with learnable parameters that maps inputs to outputs. Formally, f(x, θ) where x is the input and θ are the parameters learned during training.",
+          },
+          {
+            term: "Label",
+            definition:
+              "The output a supervised model is trained to predict, typically denoted y — e.g. the house price in a price-prediction model.",
+          },
+          {
+            term: "Features",
+            definition:
+              "The input variables that describe each example, typically denoted x — e.g. square footage in a house-price model.",
+          },
+          {
+            term: "Supervised Learning",
+            definition:
+              "A training regime where every example carries a label, and the model learns to map inputs to those labels.",
+          },
+          {
+            term: "Unsupervised Learning",
+            definition:
+              "A training regime with no labels. The model must discover structure — clusters, manifolds, latent factors — on its own.",
+          },
+          {
+            term: "Semi-Supervised Learning",
+            definition:
+              "Training on a small pool of labeled data alongside a much larger pool of unlabeled data. Useful when labels are expensive to obtain (e.g. medical imaging).",
+          },
+          {
+            term: "Self-Supervised Learning",
+            definition:
+              "The model generates its own labels from the structure of the input, then trains on them in a supervised fashion. Next-token prediction (Chapter 3) is the canonical example.",
+          },
+          {
+            term: "Classification",
+            definition:
+              "A supervised task where the label is a discrete category. The model assigns each input to one of a finite set of classes — spam detection is the textbook example.",
+          },
+          {
+            term: "Regression",
+            definition:
+              "A supervised task where the label is a continuous numerical value. The model predicts a real number rather than a category — e.g. a house price.",
+          },
+          {
+            term: "Train / Validation / Test Split",
+            definition:
+              "A partition of the dataset. Train fits parameters, validation tunes hyperparameters, test is held out and used only for final performance estimates.",
+          },
+          {
+            term: "Cross-Validation",
+            definition:
+              "Estimating model performance by repeatedly training and evaluating on different splits of the data. Especially useful when data is limited.",
+          },
+          {
+            term: "Parameters",
+            definition:
+              "The internal variables learned from data during training. In linear regression y = wx + b, the weight w and bias b are parameters.",
+          },
+          {
+            term: "Hyperparameters",
+            definition:
+              "Configuration values set before training that are not learned from data — learning rate, batch size, model depth, and so on.",
+          },
+          {
+            term: "Underfitting",
+            definition:
+              "When a model is too simple or under-trained to capture the underlying structure in the data, resulting in poor performance on both training and unseen examples.",
+          },
+          {
+            term: "Overfitting",
+            definition:
+              "When a model memorizes the noise and idiosyncrasies of the training data instead of learning generalizable patterns. Train accuracy is high; test accuracy isn't.",
+          },
+          {
+            term: "Generalization",
+            definition:
+              "The ability of a model to perform well on new, unseen data drawn from the same distribution as the training data. The ultimate goal of machine learning.",
+          },
+          {
+            term: "Tensor",
+            definition:
+              "A multi-dimensional array of numbers — the fundamental data structure of modern ML. Its rank is the number of dimensions. Tensors map cleanly onto GPU and TPU hardware.",
+          },
+          {
+            term: "Matrix",
+            definition:
+              "A two-dimensional, rectangular array of numbers — a rank-2 tensor.",
+          },
+          {
+            term: "Pre-Training",
+            definition:
+              "The initial training phase where a model learns broad, general representations from large quantities of (typically unlabeled) data. Expensive, done once per model family.",
+          },
+          {
+            term: "Post-Training",
+            definition:
+              "Everything that follows pre-training to specialize a model: supervised fine-tuning, RLHF, alignment, evaluation. Cheap relative to pre-training, but where most of the product polish happens.",
+          },
         ],
-        image: {
-          label: "loss landscape",
-          caption: "Fig 1.1 — A 2D slice of a loss surface near a saddle point.",
-        },
       },
       {
-        heading: "Loss functions",
+        heading: "Part 2: Neural Networks",
         paragraphs: [
-          "We'll cover MLE vs. MAP, cross-entropy and its cousins, hinge loss, and the practical tradeoffs of choosing one over another.",
-          "A subtle point: the loss function is a modeling choice, not a given. It encodes your assumptions about the noise in the data.",
-        ],
-      },
-      {
-        heading: "Optimizers",
-        paragraphs: [
-          "Why Adam beats SGD on average but loses on the tasks that matter most. What it means for a loss surface to be 'sharp,' and why sharpness predicts generalization gaps.",
+          "Coming soon — perceptrons, MLPs, activation functions, backpropagation, and what makes a network 'deep.'",
         ],
       },
     ],
