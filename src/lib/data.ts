@@ -1,3 +1,5 @@
+import { type Chapter, mlGuideChapters } from "./chapters";
+
 export const profile = {
   name: "Arjun Virk",
   tagline: "software engineering @ university of waterloo",
@@ -75,7 +77,8 @@ export type WritingCategory = {
   key: string;
   title: string;
   description: string;
-  posts: WritingItem[];
+  chapters?: Chapter[];
+  posts?: WritingItem[];
 };
 
 export const writing: WritingCategory[] = [
@@ -83,7 +86,7 @@ export const writing: WritingCategory[] = [
     key: "ml-guide",
     title: "ML Guide",
     description: "Notes and walkthroughs on machine learning concepts.",
-    posts: [],
+    chapters: mlGuideChapters,
   },
   {
     key: "robotics-guide",

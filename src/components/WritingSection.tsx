@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { writing } from "@/lib/data";
 import { ArrowUpRight } from "lucide-react";
 
@@ -15,11 +16,25 @@ export default function WritingSection() {
             </p>
           </div>
 
-          {category.posts.length === 0 ? (
-            <p className="text-xs text-[var(--muted)] italic">
-              Nothing here yet — coming soon.
-            </p>
-          ) : (
+          {category.chapters && category.chapters.length > 0 ? (
+            <ul className="space-y-1.5">
+              {category.chapters.map((chapter) => (
+                <li key={chapter.slug}>
+                  <Link
+                    href={`/writing/${category.key}/${chapter.slug}`}
+                    className="group flex items-baseline gap-3 text-sm hover:opacity-80 transition-opacity"
+                  >
+                    <span className="text-xs font-mono text-[var(--muted)] w-16 shrink-0">
+                      Chapter {chapter.number}
+                    </span>
+                    <span className="font-medium group-hover:underline underline-offset-2">
+                      {chapter.title}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : category.posts && category.posts.length > 0 ? (
             <div className="space-y-4">
               {category.posts.map((post, i) => (
                 <a
@@ -44,6 +59,10 @@ export default function WritingSection() {
                 </a>
               ))}
             </div>
+          ) : (
+            <p className="text-xs text-[var(--muted)] italic">
+              Nothing here yet — coming soon.
+            </p>
           )}
         </section>
       ))}
