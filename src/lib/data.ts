@@ -83,6 +83,7 @@ export type WritingCategory = {
   description: string;
   chapters?: Chapter[];
   posts?: WritingItem[];
+  link?: { label: string; href: string };
 };
 
 export const writing: WritingCategory[] = [
@@ -91,6 +92,12 @@ export const writing: WritingCategory[] = [
     title: "ML Guide",
     description: "Notes and walkthroughs on machine learning concepts.",
     chapters: mlGuideChapters,
+  },
+  {
+    key: "ml-dictionary",
+    title: "ML Dictionary",
+    description: "A running glossary of machine learning terms and definitions.",
+    link: { label: "Browse glossary", href: "/writing/ml-dictionary" },
   },
   {
     key: "robotics-guide",

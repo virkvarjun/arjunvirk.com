@@ -34,6 +34,16 @@ export default function WritingSection() {
                 </li>
               ))}
             </ul>
+          ) : category.link ? (
+            <Link
+              href={category.link.href}
+              className="group inline-flex items-center gap-1 text-sm font-medium hover:opacity-80 transition-opacity"
+            >
+              <span className="group-hover:underline underline-offset-2">
+                {category.link.label}
+              </span>
+              <ArrowUpRight size={13} className="text-[var(--muted)]" />
+            </Link>
           ) : category.posts && category.posts.length > 0 ? (
             <div className="space-y-4">
               {category.posts.map((post, i) => (
