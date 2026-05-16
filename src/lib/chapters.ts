@@ -1,6 +1,12 @@
+export type ChapterDefinition = {
+  term: string;
+  definition: string;
+};
+
 export type ChapterSection = {
   heading?: string;
-  paragraphs: string[];
+  paragraphs?: string[];
+  definitions?: ChapterDefinition[];
   image?: { label: string; caption: string };
 };
 

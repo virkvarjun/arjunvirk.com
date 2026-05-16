@@ -62,13 +62,27 @@ export default async function ChapterPage({
                   {section.heading}
                 </h2>
               )}
-              <div className="space-y-3">
-                {section.paragraphs.map((p, j) => (
-                  <p key={j} className="text-sm leading-relaxed">
-                    {p}
-                  </p>
-                ))}
-              </div>
+              {section.paragraphs && section.paragraphs.length > 0 && (
+                <div className="space-y-3">
+                  {section.paragraphs.map((p, j) => (
+                    <p key={j} className="text-sm leading-relaxed">
+                      {p}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {section.definitions && section.definitions.length > 0 && (
+                <dl className="mt-4 space-y-4">
+                  {section.definitions.map((d) => (
+                    <div key={d.term}>
+                      <dt className="text-sm font-semibold">{d.term}</dt>
+                      <dd className="mt-0.5 text-sm text-[var(--muted)] leading-relaxed">
+                        {d.definition}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               {section.image && (
                 <ChapterImage
                   label={section.image.label}
