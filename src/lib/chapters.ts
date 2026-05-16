@@ -231,3 +231,54 @@ export const mlGuideChapters: Chapter[] = [
     ],
   },
 ];
+
+export const roboticsGuideChapters: Chapter[] = [
+  {
+    slug: "chapter-1-fundamentals",
+    number: "1",
+    title: "Fundamentals",
+    summary:
+      "Robotics sits at the messy intersection of physics, control, perception, and software.",
+    sections: [
+      {
+        paragraphs: [
+          "This chapter covers the fundamentals: rigid body transformations, forward and inverse kinematics, dynamics (Lagrangian and Newton-Euler), and the sensor stack that makes a robot aware of itself and the world.",
+        ],
+        image: {
+          label: "kinematic chain",
+          caption: "Fig 1.1 — A serial kinematic chain with three revolute joints.",
+        },
+      },
+      {
+        heading: "Coordinate frames",
+        paragraphs: [
+          "Half of robotics is bookkeeping: which frame is this vector expressed in, and what's the transform to where I need it? Get this right and the rest gets easier.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "chapter-2-classical-robotics",
+    number: "2",
+    title: "Classical Robotics",
+    summary:
+      "PID controllers still run most of the world. SLAM gets you a map. Filters keep state estimates honest.",
+    sections: [
+      {
+        paragraphs: [
+          "The Kalman filter and its many descendants (EKF, UKF, particle filters) form the backbone of state estimation. SLAM stitches these together with a map. PID is everywhere, and tuning it well is a craft.",
+        ],
+        image: {
+          label: "occupancy grid",
+          caption: "Fig 2.1 — An occupancy grid built from simulated LiDAR scans.",
+        },
+      },
+      {
+        heading: "Why classical still matters",
+        paragraphs: [
+          "Learned policies are great when they work, but a classical controller you can reason about is often the difference between a robot that ships and one that doesn't. Most production stacks are hybrids.",
+        ],
+      },
+    ],
+  },
+];

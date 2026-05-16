@@ -1,4 +1,8 @@
-import { type Chapter, mlGuideChapters } from "./chapters";
+import {
+  type Chapter,
+  mlGuideChapters,
+  roboticsGuideChapters,
+} from "./chapters";
 
 export const profile = {
   name: "Arjun Virk",
@@ -92,7 +96,7 @@ export const writing: WritingCategory[] = [
     key: "robotics-guide",
     title: "Robotics Guide",
     description: "Hands-on robotics learnings, from kinematics to control.",
-    posts: [],
+    chapters: roboticsGuideChapters,
   },
   {
     key: "personal-reflections",
