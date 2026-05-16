@@ -10,3 +10,26 @@ export const profile = {
     email: "a23virk@uwaterloo.ca",
   },
 };
+
+export type WorkItem = {
+  company: string;
+  role: string;
+  period: string;
+  description: string;
+  link?: string;
+};
+
+export const work: WorkItem[] = [
+  {
+    company: "Company A",
+    role: "Software Engineering Intern",
+    period: "Summer 2025",
+    description: "Placeholder — add your work experience here.",
+  },
+  {
+    company: "Company B",
+    role: "Software Engineering Intern",
+    period: "Winter 2025",
+    description: "Placeholder — add your work experience here.",
+  },
+];
