@@ -16,6 +16,12 @@ import {
   BackpropFlow,
   TrainValLoss,
 } from "./ch1";
+import {
+  SumOverPaths,
+  WeightIndexing,
+  ErrorBackprop,
+  SigmoidDerivative,
+} from "./ch2";
 
 type Entry = { Comp: ComponentType; viewBox?: string };
 
@@ -34,6 +40,11 @@ const registry: Record<string, Entry> = {
   "gradient-descent": { Comp: GradientDescent },
   "backprop-flow": { Comp: BackpropFlow, viewBox: "0 0 470 150" },
   "train-val-loss": { Comp: TrainValLoss },
+  // chapter 2
+  "sum-over-paths": { Comp: SumOverPaths, viewBox: "0 0 400 200" },
+  "weight-indexing": { Comp: WeightIndexing, viewBox: "0 0 400 205" },
+  "error-backprop": { Comp: ErrorBackprop, viewBox: "0 0 420 205" },
+  "sigmoid-derivative": { Comp: SigmoidDerivative, viewBox: "0 0 400 215" },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
