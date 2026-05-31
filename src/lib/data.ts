@@ -27,6 +27,7 @@ export const landing = {
     "Prev. Data and Transformer Researcher @ Triage Technologies ($50M)",
     "Named Top ML Researcher in Canada (0.1%)",
     "ML Agents and Research Consulting Business",
+    "Worked with Google, Microsoft, Verizon for ML/Datacentre Consulting",
   ],
   subtitle:
     "Software engineering at the University of Waterloo, building at the intersection of systems and product.",
