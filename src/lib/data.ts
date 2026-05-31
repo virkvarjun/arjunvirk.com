@@ -149,7 +149,7 @@ export const workSection = {
       date: "Jun 2024",
       description:
         "Led a 13-person team to reach 700K+ students, secure $13K in funding, recruit judges from Amazon, Elegoo, and Dell, and scale Hack49 into a global student hackathon.",
-      href: "#",
+      href: "https://www.youtube.com/@hack_49",
     },
     {
       title: "Robot See, Robot Do",
