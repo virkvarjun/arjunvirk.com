@@ -72,7 +72,7 @@ export const workSection = {
       date: "May 2026",
       description:
         "A 200-page handwritten guide breaking down the math, intuition, and architectures behind modern machine learning and deep learning systems.",
-      href: "#",
+      href: "/writing/ml-guide",
       image: "/projects/ml-bible.png",
       imagePosition: "30% center",
     },

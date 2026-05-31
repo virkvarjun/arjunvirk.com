@@ -106,6 +106,7 @@ export default function Home() {
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
           {workSection.projects.map((project) => {
             const hasLink = Boolean(project.href) && project.href !== "#";
+            const isExternal = hasLink && !project.href.startsWith("/");
             const imageClasses =
               "block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)]";
             const thumbnail = project.image ? (
@@ -125,8 +126,8 @@ export default function Home() {
                 {hasLink ? (
                   <a
                     href={project.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    target={isExternal ? "_blank" : undefined}
+                    rel={isExternal ? "noopener noreferrer" : undefined}
                     className={`${imageClasses} transition-opacity hover:opacity-80`}
                     aria-label={project.title}
                   >
@@ -139,8 +140,8 @@ export default function Home() {
                   {hasLink ? (
                     <a
                       href={project.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      target={isExternal ? "_blank" : undefined}
+                      rel={isExternal ? "noopener noreferrer" : undefined}
                       className="font-semibold underline-offset-2 hover:underline"
                     >
                       {project.title}
