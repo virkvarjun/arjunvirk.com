@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail } from "lucide-react";
+import { Mail, MapPin } from "lucide-react";
 import { landing, profile, workSection } from "@/lib/data";
 
 function GithubIcon({ size = 20 }: { size?: number }) {
@@ -41,6 +41,11 @@ export default function Home() {
               <li key={item}>{item}</li>
             ))}
           </ul>
+
+          <p className="mt-4 flex items-center gap-1.5 text-sm text-[var(--muted)]">
+            <MapPin size={15} strokeWidth={2} />
+            SF
+          </p>
 
           <nav className="mt-6 sm:mt-7 flex items-center gap-3.5 text-[var(--muted)]">
             <a
@@ -100,29 +105,46 @@ export default function Home() {
         </p>
 
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
-          {workSection.projects.map((project) => (
-            <article key={project.title} className="flex flex-col">
-              <a
-                href={project.href}
-                className="block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)] transition-opacity hover:opacity-80"
-                aria-label={project.title}
-              />
-              <h3 className="mt-3 text-sm leading-snug">
-                <a
-                  href={project.href}
-                  className="font-semibold underline-offset-2 hover:underline"
-                >
-                  {project.title}
-                </a>
-              </h3>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {project.date}, {project.category}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
-                {project.description}
-              </p>
-            </article>
-          ))}
+          {workSection.projects.map((project) => {
+            const hasLink = Boolean(project.href) && project.href !== "#";
+            const imageClasses =
+              "block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)]";
+            return (
+              <article key={project.title} className="flex flex-col">
+                {hasLink ? (
+                  <a
+                    href={project.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${imageClasses} transition-opacity hover:opacity-80`}
+                    aria-label={project.title}
+                  />
+                ) : (
+                  <div className={imageClasses} />
+                )}
+                <h3 className="mt-3 text-sm leading-snug">
+                  {hasLink ? (
+                    <a
+                      href={project.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold underline-offset-2 hover:underline"
+                    >
+                      {project.title}
+                    </a>
+                  ) : (
+                    <span className="font-semibold">{project.title}</span>
+                  )}
+                </h3>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  {project.date}, {project.category}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
+                  {project.description}
+                </p>
+              </article>
+            );
+          })}
         </div>
       </section>
     </main>

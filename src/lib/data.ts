@@ -77,15 +77,15 @@ export const workSection = {
       date: "Apr 2026",
       description:
         "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
-      href: "#",
+      href: "https://github.com/virkvarjun/ChemKernel",
     },
     {
       title: "LoRA VLA Research @ BracketBot",
       category: "Research",
       date: "May 2026",
       description:
-        "Developing novel LoRA and DoRA adapter architectures for efficient VLA fine-tuning, robotic manipulation, and continual learning under Isaac Bautista at BracketBot.",
-      href: "#",
+        "Developing novel LoRA and DoRA adapter architectures for efficient VLA fine-tuning, robotic manipulation, and continual learning under Isaac Bautista at BracketBot. (more soon)",
+      href: "https://www.bracketbot.com/",
     },
     {
       title: "Failure-Aware ACT (FAACT)",
@@ -93,7 +93,7 @@ export const workSection = {
       date: "Mar 2026",
       description:
         "Built a failure-aware action chunking Transformer that detects trajectory failures with minimal pretraining and autonomously recovers through a self-correction algorithm.",
-      href: "#",
+      href: "https://x.com/virkvarjun/status/2030850380502831463",
     },
     {
       title: "SOTA Pan-Cancer Immunotherapy Quantification",
@@ -101,23 +101,23 @@ export const workSection = {
       date: "Apr 2024",
       description:
         "Developed RL PPO system to predict immunotherapy efficacy and recommend ICI inhibitors across cancer types from 15% to 80%. Silver Medal at Canada’s National Science Fair.",
-      href: "#",
+      href: "https://partner.projectboard.world/ysc/project/using-machine-learning-to-quantify-pan-cancer-immunotherapy-response-and-optimizing-treatments",
     },
     {
       title: "Novel Thyroid Cancer Risk Stratification System (UCLA BAIR)",
       category: "Research",
       date: "Jun 2025",
       description:
-        "Worked with Dr. William Speier and Ashwath Radhachandran, PhD, on JEPA and ViT-based models to improve thyroid cancer risk stratification beyond ACR TI-RADS.",
-      href: "#",
+        "Worked with Dr. William Speier and Ashwath Radhachandran, PhD, on JEPA and ViT-based models to improve thyroid cancer risk stratification beyond ACR TI-RADS. (more soon)",
+      href: "https://bair.seas.ucla.edu/",
     },
     {
       title: "Explanation Tuning Research (Triage)",
       category: "Engineering",
       date: "Jun 2024",
       description:
-        "Worked under Mat Kallada from Mila to organize medical sequence data pipelines and research explanation-guided tuning for medical vision-language transformers.",
-      href: "#",
+        "Worked under Mat Kallada from Mila to organize medical sequence data pipelines and research explanation-guided tuning for medical vision-language transformers. (more soon)",
+      href: "https://github.com/triagemd",
     },
     {
       title: "BigBrother: First Autonomous Interactive Agentic Browser",
@@ -125,7 +125,7 @@ export const workSection = {
       date: "Jan 2026",
       description:
         "Built an autonomous agentic browser extension that completes web tasks from natural-language prompts. Awarded $200 in prizes.",
-      href: "#",
+      href: "https://devpost.com/software/big-bro-tsv0i9",
     },
     {
       title: "Wisp: Custom MCP for Daily Notion and Google Workspace",
@@ -133,7 +133,7 @@ export const workSection = {
       date: "Nov 2026",
       description:
         "Led the implementation of a custom MCP server that exposes Notion and Google Workspace as structured, machine-readable tools instead of unstructured text context.",
-      href: "#",
+      href: "https://drive.google.com/file/d/1iY6WqhUoQef0hN14b8RVFlftUAU0BiyM/view?resourcekey",
     },
     {
       title: "Dancing Humanoid (1st Place Provincially)",
@@ -157,7 +157,7 @@ export const workSection = {
       date: "2025",
       description:
         "Wrote a viral technical article explaining the math behind imitation learning, Action Chunking Transformers, and DAgger for robotics learning.",
-      href: "#",
+      href: "https://x.com/virkvarjun/status/2018586817327489435",
     },
   ] as WorkProject[],
 };
