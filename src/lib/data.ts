@@ -14,6 +14,7 @@ export const profile = {
     linkedin: "https://linkedin.com/in/virkvarjun",
     twitter: "https://x.com/virkvarjun",
     email: "a23virk@uwaterloo.ca",
+    orcid: "https://orcid.org/0009-0003-5922-7285",
   },
 };
 
