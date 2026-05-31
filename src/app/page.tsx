@@ -29,20 +29,20 @@ function XIcon({ size = 18 }: { size?: number }) {
 
 export default function Home() {
   return (
-    <main className="w-full max-w-5xl mx-auto px-6 md:px-10 py-16 md:py-24">
-      <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between md:gap-12">
-        <div className="max-w-xl">
-          <h1 className="font-[family-name:var(--font-display)] text-3xl sm:text-4xl font-normal tracking-tight">
+    <main className="w-full max-w-5xl mx-auto px-5 sm:px-8 md:px-10 py-12 sm:py-16 md:py-24">
+      <div className="flex flex-col-reverse gap-8 sm:gap-10 md:flex-row md:items-start md:justify-between md:gap-12">
+        <div className="w-full md:max-w-xl">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl sm:text-3xl md:text-4xl font-normal tracking-tight">
             {profile.name}
           </h1>
 
-          <ul className="mt-6 max-w-md space-y-1.5 text-base leading-snug text-[var(--foreground)] list-disc pl-5 marker:text-[var(--muted)]">
+          <ul className="mt-5 sm:mt-6 max-w-md space-y-1.5 text-sm sm:text-base leading-snug text-[var(--foreground)] list-disc pl-5 marker:text-[var(--muted)]">
             {landing.bullets.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
 
-          <nav className="mt-9 flex items-center gap-5 text-[var(--muted)]">
+          <nav className="mt-7 sm:mt-9 flex items-center gap-5 text-[var(--muted)]">
             <a
               href={profile.socials.twitter}
               target="_blank"
@@ -80,8 +80,8 @@ export default function Home() {
           </nav>
         </div>
 
-        <div className="shrink-0">
-          <div className="relative h-56 w-44 sm:h-64 sm:w-52 overflow-hidden rounded-2xl bg-[var(--card)] ring-1 ring-[var(--border)]">
+        <div className="shrink-0 self-center md:self-auto">
+          <div className="relative h-52 w-40 sm:h-64 sm:w-52 overflow-hidden rounded-2xl bg-[var(--card)] ring-1 ring-[var(--border)]">
             <img
               src="/arjun_photo.png"
               alt={profile.name}
