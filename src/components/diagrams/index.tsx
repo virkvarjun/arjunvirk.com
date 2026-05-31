@@ -9,6 +9,13 @@ import {
   KMeans,
   PCA,
 } from "./ch0";
+import {
+  MLPNetwork,
+  ActivationFunctions,
+  GradientDescent,
+  BackpropFlow,
+  TrainValLoss,
+} from "./ch1";
 
 type Entry = { Comp: ComponentType; viewBox?: string };
 
@@ -21,6 +28,12 @@ const registry: Record<string, Entry> = {
   "decision-tree": { Comp: DecisionTree, viewBox: "0 0 470 228" },
   kmeans: { Comp: KMeans },
   pca: { Comp: PCA },
+  // chapter 1
+  "mlp-network": { Comp: MLPNetwork, viewBox: "0 0 400 224" },
+  "activation-functions": { Comp: ActivationFunctions, viewBox: "0 0 400 220" },
+  "gradient-descent": { Comp: GradientDescent },
+  "backprop-flow": { Comp: BackpropFlow, viewBox: "0 0 470 150" },
+  "train-val-loss": { Comp: TrainValLoss },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
