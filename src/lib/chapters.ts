@@ -647,14 +647,14 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "Chapter 1 stated the four equations of backpropagation and used them. This chapter builds them from the math up. Three prerequisites sit in the background: working linear algebra (the matrix–vector product, the transpose, the dot product, and the element-wise / Hadamard product $\\odot$); single-variable calculus, above all the chain rule; and partial derivatives.",
-          "The whole story in one paragraph: a neural network is a function. Feed it an input $\\mathbf{x}$ and it produces $\\hat{\\mathbf{y}}$ by stacking layers, each a matrix multiply, a bias, and a nonlinearity. To train it is to choose the weights and biases so that $\\hat{\\mathbf{y}}$ is close to the true $\\mathbf{y}$, measured by a cost $C$. Gradient descent nudges every parameter in the direction that lowers $C$. Backpropagation is the algorithm that computes all of those gradients in one backward pass, instead of doing a separate derivative for each parameter.",
+          "Chapter 1 stated the four equations of backpropagation and put them to work. Here we're going to earn them — build them up from the math, one step at a time. You'll want three things sitting comfortably in your head: enough linear algebra to be at ease with the matrix–vector product, the transpose, the dot product, and the element-wise (Hadamard) product $\\odot$; single-variable calculus, and above all the chain rule; and partial derivatives. You do not need to have seen any of this derived before.",
+          "Here's the whole story in one breath. A neural network is a function. You feed it an input $\\mathbf{x}$, and it produces $\\hat{\\mathbf{y}}$ by stacking layers, each one a matrix multiply, a bias, and a nonlinearity. Training means choosing the weights and biases so that $\\hat{\\mathbf{y}}$ lands close to the true $\\mathbf{y}$, with a cost $C$ measuring how close. Gradient descent nudges every parameter in the direction that lowers $C$. And backpropagation is the trick that gets you all of those gradients in a single backward pass, instead of grinding out a separate derivative for each parameter. Everything below is just detail on that sentence.",
         ],
       },
       {
         heading: "Notation",
         paragraphs: [
-          "Notation matters more here than almost anywhere, because so many indices fly around. The conventions used throughout:",
+          "Notation matters more in this chapter than almost anywhere else, simply because there are so many indices flying around — and bad notation will sink you. So here are the conventions, and it's worth keeping them nearby:",
         ],
         list: [
           "Lowercase italic ($x$, $w$, $b$) are scalars; lowercase bold ($\\mathbf{x}$, $\\mathbf{w}$) are column vectors; uppercase ($W$) are matrices.",
@@ -683,7 +683,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "One fact gets used over and over: for an element-wise function — each output depends only on the same-index input — the Jacobian is diagonal, $\\mathrm{diag}(g'(x_1), \\dots, g'(x_n))$. And a diagonal Jacobian acts like element-wise multiplication inside a chain-rule product: $\\mathrm{diag}(\\mathbf{v})\\,\\mathbf{w} = \\mathbf{v} \\odot \\mathbf{w}$. That is why every $\\mathrm{diag}(\\cdot)$ collapses into a $\\odot$ in the final equations. Activation functions are element-wise, so this happens at every layer.",
+          "One fact here gets used over and over, so it's worth slowing down on. For an element-wise function — one where each output depends only on the input at the same position — the Jacobian is diagonal: $\\mathrm{diag}(g'(x_1), \\dots, g'(x_n))$. And a diagonal Jacobian behaves like element-wise multiplication inside a chain-rule product, since $\\mathrm{diag}(\\mathbf{v})\\,\\mathbf{w} = \\mathbf{v} \\odot \\mathbf{w}$. That's the reason every $\\mathrm{diag}(\\cdot)$ you'd expect to see ends up written as a $\\odot$ in the final equations. Activation functions are element-wise, so this happens at every single layer.",
         ],
       },
       {
@@ -710,13 +710,13 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "Backpropagation is, in essence, this: multiply Jacobians together as you traverse the network from the output back to the input.",
+          "And that, stripped to its bones, is all backpropagation is: multiply Jacobians together as you walk the network from the output back to the input. Everything that follows is just figuring out what those Jacobians actually are.",
         ],
       },
       {
         heading: "Part II: Forward propagation",
         paragraphs: [
-          "A neuron computes $z = \\mathbf{w}^\\top\\mathbf{x} + b$ and then $a = \\sigma(z)$. When you stack many neurons in many layers, the bookkeeping is the whole reason matrix notation buys you anything — and the key choice is the destination-first weight index $w^{(\\ell)}_{jk}$.",
+          "A single neuron computes $z = \\mathbf{w}^\\top\\mathbf{x} + b$ and then $a = \\sigma(z)$ — nothing new there. The trouble starts when you stack many neurons across many layers and have to keep track of all of it. That bookkeeping is the whole reason matrix notation earns its keep, and the one choice that makes or breaks it is the destination-first weight index $w^{(\\ell)}_{jk}$.",
         ],
         diagram: {
           id: "weight-indexing",
@@ -736,7 +736,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Part III: Differentiating the network",
         paragraphs: [
-          "Take mean squared error as the cost. Working with a single training example keeps the indices clean — the full-dataset cost is just the average, and the gradient of an average is the average of the gradients, so nothing changes structurally:",
+          "Let's take mean squared error as the cost and work with a single training example — that keeps the indices clean, and we lose nothing by it. The full-dataset cost is just the average over examples, and the gradient of an average is the average of the gradients, so the structure is identical either way:",
         ],
         equations: ["C = \\tfrac{1}{2}\\lVert \\mathbf{y} - \\hat{\\mathbf{y}} \\rVert^2"],
       },
@@ -759,7 +759,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The slow way (and why it doesn't scale)",
         paragraphs: [
-          "For the smallest network that still shows the structure — one neuron per layer, two layers — the chain rule gives the two weight gradients directly:",
+          "Before the clever algorithm, it's worth seeing the naive one — partly so you appreciate why the clever one exists. Take the smallest network that still shows the structure: one neuron per layer, two layers. Crank the chain rule and the two weight gradients come out directly:",
         ],
         equations: [
           "\\frac{\\partial C}{\\partial w^{(2)}} = (a^{(2)} - y)\\,\\sigma'(z^{(2)})\\,a^{(1)}",
@@ -775,7 +775,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Part IV: The four equations",
         paragraphs: [
-          "Define the error of a neuron as the sensitivity of the cost to its pre-activation, $\\delta^{(\\ell)}_j = \\partial C / \\partial z^{(\\ell)}_j$. We hinge on $z$ rather than $a$ because it sits exactly between the linear part (weights, bias, previous activations) and the nonlinear part (the activation), so everything upstream becomes easy once $\\delta$ is known. Backprop computes $\\boldsymbol{\\delta}^{(L)}$, then $\\boldsymbol{\\delta}^{(L-1)}$, and so on backward, reading off the gradients along the way.",
+          "Here is the reusable quantity. Define the error of a neuron as how sensitive the cost is to its pre-activation, $\\delta^{(\\ell)}_j = \\partial C / \\partial z^{(\\ell)}_j$. Why hinge on $z$ and not $a$? Because $z$ sits exactly at the seam between the linear part (weights, bias, previous activations) and the nonlinear part (the activation) — and once you know $\\delta$, everything upstream of it falls out almost for free. Backprop computes $\\boldsymbol{\\delta}^{(L)}$ first, then $\\boldsymbol{\\delta}^{(L-1)}$, and so on backward, reading off the gradients as it goes.",
         ],
         diagram: {
           id: "error-backprop",
@@ -831,7 +831,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "That is the entire mathematical content of backpropagation. The cost is now linear in the number of parameters instead of quadratic. Every architecture in the chapters ahead — CNNs, transformers, diffusion models — trains with exactly this procedure; only the structure of the layers changes.",
+          "And that's it — that is the entire mathematical content of backpropagation. The cost is now linear in the number of parameters instead of quadratic, which is the whole reason training deep networks is even feasible. Keep this in your back pocket: every architecture in the chapters ahead — CNNs, transformers, diffusion models — trains with exactly this procedure. Only the shape of the layers changes; the engine underneath stays the same.",
         ],
       },
     ],
