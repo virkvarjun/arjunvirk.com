@@ -143,6 +143,22 @@ export const workSection = {
         "Placeholder description. A choreographed humanoid robot routine that took first place provincially.",
       href: "#",
     },
+    {
+      title: "Soilane: Novel Soil Retention R&D",
+      category: "Engineering",
+      date: "May 2024",
+      description:
+        "Placeholder description. Research and development on a novel approach to soil retention.",
+      href: "#",
+    },
+    {
+      title: "Hack49: 700K Reached, $13K Funding",
+      category: "Leadership",
+      date: "Jun 2024",
+      description:
+        "Placeholder description. Led a hackathon initiative reaching 700K people and securing $13K in funding.",
+      href: "#",
+    },
   ] as WorkProject[],
 };
 
