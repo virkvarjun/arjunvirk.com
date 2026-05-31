@@ -30,7 +30,7 @@ function XIcon({ size = 18 }: { size?: number }) {
 export default function Home() {
   return (
     <main className="w-full max-w-5xl mx-auto px-6 md:px-10 py-16 md:py-24">
-      <div className="flex flex-col gap-10 md:flex-row-reverse md:items-start md:justify-between md:gap-12">
+      <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between md:gap-12">
         <div className="max-w-xl">
           <h1 className="font-[family-name:var(--font-display)] text-3xl sm:text-4xl font-normal tracking-tight">
             {profile.name}
