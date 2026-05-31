@@ -22,6 +22,13 @@ import {
   ErrorBackprop,
   SigmoidDerivative,
 } from "./ch2";
+import {
+  CpuVsGpu,
+  MemoryHierarchy,
+  SystolicArray,
+  Roofline,
+  Parallelism,
+} from "./ch3";
 
 type Entry = { Comp: ComponentType; viewBox?: string };
 
@@ -45,6 +52,12 @@ const registry: Record<string, Entry> = {
   "weight-indexing": { Comp: WeightIndexing, viewBox: "0 0 400 205" },
   "error-backprop": { Comp: ErrorBackprop, viewBox: "0 0 420 205" },
   "sigmoid-derivative": { Comp: SigmoidDerivative, viewBox: "0 0 400 215" },
+  // chapter 3
+  "cpu-vs-gpu": { Comp: CpuVsGpu, viewBox: "0 0 420 205" },
+  "memory-hierarchy": { Comp: MemoryHierarchy, viewBox: "0 0 400 225" },
+  "systolic-array": { Comp: SystolicArray, viewBox: "0 0 400 235" },
+  roofline: { Comp: Roofline, viewBox: "0 0 400 235" },
+  parallelism: { Comp: Parallelism, viewBox: "0 0 600 165" },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
