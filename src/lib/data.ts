@@ -141,7 +141,7 @@ export const workSection = {
       date: "Jul 2022",
       description:
         "Designed the CAD, wiring schematics, and C++ control system for a music-synced humanoid robot that performed a choreographed dance routine. Awarded $200 in prizes.",
-      href: "#",
+      href: "https://www.youtube.com/watch?v=To6ZkVqr8FM",
     },
     {
       title: "Hack49: 700K Reached, $13K Funding",

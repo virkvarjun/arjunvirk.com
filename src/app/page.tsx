@@ -42,11 +42,6 @@ export default function Home() {
             ))}
           </ul>
 
-          <p className="mt-4 flex items-center gap-1.5 text-sm text-[var(--muted)]">
-            <MapPin size={15} strokeWidth={2} />
-            SF
-          </p>
-
           <nav className="mt-6 sm:mt-7 flex items-center gap-3.5 text-[var(--muted)]">
             <a
               href={profile.socials.twitter}
@@ -82,6 +77,10 @@ export default function Home() {
             >
               <Mail size={20} />
             </a>
+            <span className="flex items-center gap-1 text-sm">
+              <MapPin size={15} strokeWidth={2} />
+              SF
+            </span>
           </nav>
         </div>
 
