@@ -29,6 +29,18 @@ import {
   Roofline,
   Parallelism,
 } from "./ch3";
+import {
+  RnnUnroll,
+  LstmCell,
+  AttentionQKV,
+  MultiHead,
+  CausalMask,
+  TransformerBlock,
+  KvCache,
+  GroupedQuery,
+  MoE,
+  LoRA,
+} from "./ch4";
 
 type Entry = { Comp: ComponentType; viewBox?: string };
 
@@ -58,6 +70,17 @@ const registry: Record<string, Entry> = {
   "systolic-array": { Comp: SystolicArray, viewBox: "0 0 400 235" },
   roofline: { Comp: Roofline, viewBox: "0 0 400 235" },
   parallelism: { Comp: Parallelism, viewBox: "0 0 600 165" },
+  // chapter 4
+  "rnn-unroll": { Comp: RnnUnroll, viewBox: "0 0 460 185" },
+  "lstm-cell": { Comp: LstmCell, viewBox: "0 0 440 165" },
+  "attention-qkv": { Comp: AttentionQKV, viewBox: "0 0 420 235" },
+  "multi-head": { Comp: MultiHead, viewBox: "0 0 420 205" },
+  "causal-mask": { Comp: CausalMask, viewBox: "0 0 280 245" },
+  "transformer-block": { Comp: TransformerBlock, viewBox: "0 0 350 320" },
+  "kv-cache": { Comp: KvCache, viewBox: "0 0 430 180" },
+  "grouped-query": { Comp: GroupedQuery, viewBox: "0 0 480 160" },
+  moe: { Comp: MoE, viewBox: "0 0 400 228" },
+  lora: { Comp: LoRA, viewBox: "0 0 400 185" },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {

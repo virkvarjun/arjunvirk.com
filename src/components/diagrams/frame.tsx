@@ -6,6 +6,7 @@ export const C = {
   ink: "var(--foreground)",
   muted: "var(--muted)",
   line: "var(--border)",
+  card: "var(--card)",
   grid: "#ececea",
   blue: "#3f5fd6",
   blueFill: "#dde3f8",
