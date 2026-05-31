@@ -93,18 +93,11 @@ export default function Home() {
         </div>
 
         <div className="shrink-0">
-          <div className="relative h-44 w-44 sm:h-52 sm:w-52 overflow-hidden rounded-2xl bg-[var(--card)] ring-1 ring-[var(--border)]">
-            <div className="absolute inset-0 flex items-center justify-center font-[family-name:var(--font-display)] text-4xl font-black text-[var(--muted)]/40">
-              AV
-            </div>
-            {/* Drop a photo at /public/profile.jpg to replace the placeholder */}
+          <div className="relative h-56 w-44 sm:h-64 sm:w-52 overflow-hidden rounded-2xl bg-[var(--card)] ring-1 ring-[var(--border)]">
             <img
-              src="/profile.jpg"
+              src="/arjun_photo.png"
               alt={profile.name}
               className="absolute inset-0 h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
             />
           </div>
         </div>
