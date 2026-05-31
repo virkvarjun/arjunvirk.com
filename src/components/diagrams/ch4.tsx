@@ -249,33 +249,34 @@ export function KvCache() {
 }
 
 // 4.8 MHA vs GQA vs MQA
+function GqaPanel({ ox, title, q, kv }: { ox: number; title: string; q: number; kv: number }) {
+  return (
+    <g transform={`translate(${ox},0)`}>
+      <Label x={70} y={24} anchor="middle" size={10} fill={C.ink} weight={600}>
+        {title}
+      </Label>
+      {Array.from({ length: q }).map((_, i) => (
+        <rect key={`q${i}`} x={18 + i * 22} y={40} width={16} height={16} rx={3} fill={C.blueFill} stroke={C.blue} />
+      ))}
+      <Label x={70} y={70} anchor="middle" size={8}>
+        {`${q} query heads`}
+      </Label>
+      {Array.from({ length: kv }).map((_, i) => (
+        <rect key={`k${i}`} x={18 + i * (q / kv) * 22 + ((q / kv - 1) * 22) / 2} y={92} width={16} height={16} rx={3} fill={C.coralFill} stroke={C.coral} />
+      ))}
+      <Label x={70} y={122} anchor="middle" size={8}>
+        {`${kv} KV head${kv > 1 ? "s" : ""}`}
+      </Label>
+    </g>
+  );
+}
+
 export function GroupedQuery() {
-  function Panel({ ox, title, q, kv }: { ox: number; title: string; q: number; kv: number }) {
-    return (
-      <g transform={`translate(${ox},0)`}>
-        <Label x={70} y={24} anchor="middle" size={10} fill={C.ink} weight={600}>
-          {title}
-        </Label>
-        {Array.from({ length: q }).map((_, i) => (
-          <rect key={`q${i}`} x={18 + i * 22} y={40} width={16} height={16} rx={3} fill={C.blueFill} stroke={C.blue} />
-        ))}
-        <Label x={70} y={70} anchor="middle" size={8}>
-          {`${q} query heads`}
-        </Label>
-        {Array.from({ length: kv }).map((_, i) => (
-          <rect key={`k${i}`} x={18 + i * (q / kv) * 22 + ((q / kv - 1) * 22) / 2} y={92} width={16} height={16} rx={3} fill={C.coralFill} stroke={C.coral} />
-        ))}
-        <Label x={70} y={122} anchor="middle" size={8}>
-          {`${kv} KV head${kv > 1 ? "s" : ""}`}
-        </Label>
-      </g>
-    );
-  }
   return (
     <>
-      <Panel ox={0} title="Multi-head" q={4} kv={4} />
-      <Panel ox={160} title="Grouped-query" q={4} kv={2} />
-      <Panel ox={320} title="Multi-query" q={4} kv={1} />
+      <GqaPanel ox={0} title="Multi-head" q={4} kv={4} />
+      <GqaPanel ox={160} title="Grouped-query" q={4} kv={2} />
+      <GqaPanel ox={320} title="Multi-query" q={4} kv={1} />
       <Label x={240} y={150} anchor="middle" size={9} fill={C.muted}>
         fewer KV heads → smaller KV cache, nearly no quality loss
       </Label>

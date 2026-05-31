@@ -190,7 +190,7 @@ export function YoloGrid() {
       <rect x={130} y={120} width={30} height={30} fill={C.coral + "33"} stroke={C.coral} strokeWidth={1.4} />
       <circle cx={145} cy={135} r={3} fill={C.coral} />
       <Label x={145} y={250} anchor="middle" size={9} fill={C.coral}>
-        the cell holding the object's center is responsible
+        the cell holding the object’s center is responsible
       </Label>
       <Box x={285} y={90} w={100} h={90} label="" />
       <text x={335} y={112} fontSize={9} fill={C.ink} fontFamily={MONO} textAnchor="middle">each cell:</text>

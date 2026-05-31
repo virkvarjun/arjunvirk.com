@@ -1,4 +1,4 @@
-import { C, MONO, Dot, Label, Arrow, plotCurve } from "./frame";
+import { C, MONO, Label, Arrow, plotCurve } from "./frame";
 
 function NodeC({
   x,
