@@ -20,6 +20,14 @@ export const profile = {
 export type RichSegment = string | { text: string; href: string };
 
 export const landing = {
+  bullets: [
+    "Software Engineering @ UWaterloo",
+    "Robotics Research Engineer @ BracketBot Founding Team",
+    "Computational Oncology Researcher @ Top Global AI Cancer Lab UCLA BAIR",
+    "Prev. Data Infrastructure and Transformer Research Engineer @ Triage Technologies",
+    "Named Top ML Researcher in Canada (0.1%)",
+    "ML Agents and Research Consulting Business",
+  ],
   subtitle:
     "Software engineering at the University of Waterloo, building at the intersection of systems and product.",
   more: [

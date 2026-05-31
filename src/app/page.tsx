@@ -38,9 +38,11 @@ export default function Home() {
             {profile.name}
           </h1>
 
-          <p className="mt-6 max-w-md text-lg md:text-xl leading-snug text-[var(--foreground)]">
-            {landing.subtitle}
-          </p>
+          <ul className="mt-6 max-w-md space-y-1.5 text-base leading-snug text-[var(--foreground)] list-disc pl-5 marker:text-[var(--muted)]">
+            {landing.bullets.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
 
           <button
             onClick={() => setOpen((v) => !v)}
