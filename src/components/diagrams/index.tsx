@@ -53,6 +53,14 @@ import {
   Vlm,
   ClipMatrix,
 } from "./ch5";
+import {
+  AgentLoop,
+  FourLevels,
+  ToolCall,
+  McpNxM,
+  AgentPatterns,
+  LethalTrifecta,
+} from "./ch6";
 
 type Entry = { Comp: ComponentType; viewBox?: string };
 
@@ -104,6 +112,13 @@ const registry: Record<string, Entry> = {
   "vit-patches": { Comp: VitPatches, viewBox: "0 0 440 200" },
   vlm: { Comp: Vlm, viewBox: "0 0 410 165" },
   "clip-matrix": { Comp: ClipMatrix, viewBox: "0 0 320 250" },
+  // chapter 6
+  "agent-loop": { Comp: AgentLoop, viewBox: "0 0 400 235" },
+  "four-levels": { Comp: FourLevels, viewBox: "0 0 420 195" },
+  "tool-call": { Comp: ToolCall, viewBox: "0 0 430 185" },
+  "mcp-nxm": { Comp: McpNxM, viewBox: "0 0 440 220" },
+  "agent-patterns": { Comp: AgentPatterns, viewBox: "0 0 330 185" },
+  "lethal-trifecta": { Comp: LethalTrifecta, viewBox: "0 0 380 260" },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
