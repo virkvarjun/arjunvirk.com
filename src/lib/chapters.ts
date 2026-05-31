@@ -1402,7 +1402,7 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "An AI agent is a system where an LLM doesn't just generate text — it operates in a loop, deciding which action to take, executing it via a tool call, observing the result, and continuing until a goal is met. In plain terms: a chatbot answers; an agent decides, acts, observes, and decides again. The architecture is the same across nearly every framework.",
+          "An AI agent is what you get when an LLM stops merely generating text and starts operating in a loop — deciding what to do next, executing it through a tool call, looking at the result, and going around again until the goal is met. The cleanest way to hold the distinction: a chatbot answers you; an agent decides, acts, observes, and then decides again. And once you've seen this loop, you've basically seen every framework, because the architecture barely changes between them.",
         ],
         diagram: {
           id: "agent-loop",
@@ -1413,7 +1413,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The four levels of AI usage",
         paragraphs: [
-          "A useful ladder runs from passive to autonomous, each level adding capability and risk. Level 1 (Chat) — you ask, copy, and paste; the human is the integration layer. Level 2 (Tools) — the model can act inside the conversation (search, run code, read files), grounding its answers in something real. Level 3 (Workflows) — a human designs a fixed chain of steps and the AI fills specific slots; the structure is fixed, the AI is a smart component. Level 4 (Agents) — the structure goes away: you give a goal and tools, and the model decides what to do, in what order, for how long, looping on itself and even acting on a schedule.",
+          "It helps to picture a ladder running from passive to fully autonomous, where each rung buys you more capability and hands you more risk. Level 1 (Chat) — you ask, you copy, you paste; the human is the integration layer. Level 2 (Tools) — the model can act inside the conversation, searching, running code, reading files, so its answers are grounded in something real. Level 3 (Workflows) — a human lays out a fixed chain of steps and the AI fills specific slots; the structure is locked, and the AI is just a smart component inside it. Level 4 (Agents) — the structure disappears entirely: you hand over a goal and some tools, and the model figures out what to do, in what order, and for how long, looping on itself and sometimes acting on a schedule while you're not even watching.",
         ],
         diagram: {
           id: "four-levels",
@@ -1451,7 +1451,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The anatomy of a tool call",
         paragraphs: [
-          "When a model \"calls a tool,\" it isn't running code. It outputs structured JSON describing the call; your runtime executes the real function and feeds the result back as a tool result; the model continues with that context. The model never touches your APIs directly — it only describes what it wants, and your harness arbitrates. This is exactly what makes tool use safe and auditable.",
+          "Here's a detail people consistently get wrong: when a model \"calls a tool,\" it is not running any code. All it does is output structured JSON describing the call it wants. Your runtime is what actually executes the real function and feeds the result back as a tool result, and the model picks up from there with that new context. The model never touches your APIs directly — it only ever describes what it wants, and your harness sits in the middle as the arbiter. That separation is precisely what makes tool use safe and auditable.",
         ],
         diagram: {
           id: "tool-call",
@@ -1462,7 +1462,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The N×M problem and MCP",
         paragraphs: [
-          "Before a standard existed, every AI app needed its own integration for every system: 5 apps × 10 systems meant 50 bespoke connectors. The Model Context Protocol (MCP), an open standard introduced by Anthropic in late 2024, is \"USB-C for AI\" — one connector spec, so any compliant client works with any compliant server. It's a JSON-RPC protocol with three roles (a host the user interacts with, a client managing one connection, and a server exposing capabilities) and three primitives (tools the model can call, resources it can read, and prompts the user can invoke). Build a server once and every MCP client gets it for free.",
+          "Before any standard existed, every AI app had to build its own integration for every system it touched — 5 apps times 10 systems meant 50 bespoke connectors, and the math only gets uglier from there. The Model Context Protocol (MCP), an open standard Anthropic introduced in late 2024, is the \"USB-C for AI\" that fixes this — one connector spec, so any compliant client just works with any compliant server. It's a JSON-RPC protocol with three roles (a host the user interacts with, a client managing one connection, and a server exposing capabilities) and three primitives (tools the model can call, resources it can read, and prompts the user can invoke). Build a server once and every MCP client gets it for free.",
         ],
         diagram: {
           id: "mcp-nxm",
@@ -1473,7 +1473,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Beyond a single loop",
         paragraphs: [
-          "A single agent loop hits a wall: long tasks fill the context window, the model loses focus, and tool-call accuracy degrades. Production agents manage context with compaction (summarize old turns), sub-agents for isolation (spawn a fresh context for focused work and return only a summary — the single most powerful technique for long horizons), external memory (persist state to disk between turns), and just-in-time retrieval (give the agent search and read tools instead of dumping everything up front).",
+          "A single agent loop eventually slams into a wall. Long tasks fill up the context window, the model starts losing the thread, and tool-call accuracy quietly degrades. Production agents fight this on several fronts: compaction (summarize the old turns), sub-agents for isolation (spin up a fresh context for some focused piece of work and return only a summary — far and away the most powerful technique for long horizons), external memory (persist state to disk between turns), and just-in-time retrieval (hand the agent search and read tools instead of dumping everything in up front).",
         ],
         diagram: {
           id: "agent-patterns",
@@ -1489,7 +1489,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The lethal trifecta",
         paragraphs: [
-          "Any agent that combines three things — access to private data, the ability to communicate externally, and exposure to untrusted content — has the ingredients for data exfiltration. Simon Willison named this the lethal trifecta: a malicious instruction hidden in a web page the agent reads can hijack it into sending your private data to an attacker.",
+          "Now for the part that should keep you up at night. Any agent that combines three particular things — access to private data, the ability to communicate externally, and exposure to untrusted content — is holding all the ingredients for data exfiltration. Simon Willison named this the lethal trifecta: a malicious instruction hidden inside a web page the agent happens to read can hijack the whole thing into quietly sending your private data off to an attacker.",
         ],
         diagram: {
           id: "lethal-trifecta",
@@ -1499,12 +1499,12 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The defenses are architectural, not prompt-based — you can't reliably tell a model to \"ignore future instructions,\" because injection bypasses keep being found. What works is removing a leg of the triangle: a read-only network for tasks touching untrusted content, separate agents with different permissions, human-in-the-loop confirmation for irreversible actions, and treating all tool output as data, never instructions. Beyond the trifecta: vet MCP servers like any dependency (you're running third-party code), give each tool the narrowest permissions that work (scope minimization), and log every tool call so you can reconstruct what an agent did (audit logging).",
+          "The defenses here are architectural, not prompt-based — and that distinction matters. You cannot reliably just tell a model to \"ignore any future instructions,\" because people keep finding new ways around exactly that. What genuinely works is removing one leg of the triangle: a read-only network for any task that touches untrusted content, separate agents carrying different permissions, a human in the loop to confirm irreversible actions, and a firm rule that all tool output is data, never instructions. And beyond the trifecta itself, the usual hygiene applies: vet MCP servers like any other dependency (you are running third-party code, after all), give each tool the narrowest permissions it can get away with (scope minimization), and log every tool call so you can reconstruct exactly what an agent did (audit logging).",
         ],
       },
       {
         paragraphs: [
-          "That's the shape of agentic engineering: a simple loop wrapped in real software — routing, queues, memory, and orchestration — with security treated as a first-class concern rather than an afterthought. The model is the stochastic core; everything around it is the engineering that makes it reliable.",
+          "And that's the whole shape of agentic engineering. Strip it down and it's a simple loop wrapped in real software — routing, queues, memory, orchestration — with security treated as a first-class concern from the start rather than something you bolt on later. The model is the stochastic core at the center; everything built around it is the engineering that turns it into something reliable.",
         ],
       },
     ],
