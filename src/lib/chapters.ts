@@ -1398,21 +1398,113 @@ export const mlGuideChapters: Chapter[] = [
     number: "6",
     title: "Agentic Engineering",
     summary:
-      "Models call tools, tools change state, state informs the next call. Building reliable agent loops requires care.",
+      "When an LLM stops answering and starts acting — the agent loop, tools, MCP, and the security that has to come with it.",
     sections: [
       {
         paragraphs: [
-          "Prompt design, schema validation, planning vs. reaction, memory, error recovery, and evaluation. This is software engineering with a stochastic core.",
+          "An AI agent is a system where an LLM doesn't just generate text — it operates in a loop, deciding which action to take, executing it via a tool call, observing the result, and continuing until a goal is met. In plain terms: a chatbot answers; an agent decides, acts, observes, and decides again. The architecture is the same across nearly every framework.",
         ],
-        image: {
-          label: "agent loop",
-          caption: "Fig 7.1 — A minimal agent loop: observe, think, act, repeat.",
+        diagram: {
+          id: "agent-loop",
+          caption:
+            "Fig 6.1 — The agent loop. The model plans the next step, calls a tool, observes the result, and repeats until it emits a final answer.",
         },
       },
       {
-        heading: "Evaluation is the hard part",
+        heading: "The four levels of AI usage",
         paragraphs: [
-          "Anyone can build a demo agent. The interesting engineering problem is knowing whether your agent is getting better over time, on tasks that don't have closed-form answers.",
+          "A useful ladder runs from passive to autonomous, each level adding capability and risk. Level 1 (Chat) — you ask, copy, and paste; the human is the integration layer. Level 2 (Tools) — the model can act inside the conversation (search, run code, read files), grounding its answers in something real. Level 3 (Workflows) — a human designs a fixed chain of steps and the AI fills specific slots; the structure is fixed, the AI is a smart component. Level 4 (Agents) — the structure goes away: you give a goal and tools, and the model decides what to do, in what order, for how long, looping on itself and even acting on a schedule.",
+        ],
+        diagram: {
+          id: "four-levels",
+          caption:
+            "Fig 6.2 — The four levels. Each step up trades human control for autonomy — and adds risk you have to manage.",
+        },
+      },
+      {
+        heading: "A Level-4 agent in practice",
+        paragraphs: [
+          "Take an open-source personal agent that runs on your machine, connects through the messaging apps you already use, and acts on your behalf — shell, browser, email, calendar. Most personal agents converge on the same five subsystems, and it's worth seeing them because the pattern recurs everywhere:",
+        ],
+        list: [
+          "Channel adapters — one per platform, normalizing inbound messages into a common format so you can swap Telegram for Slack without touching the agent.",
+          "Session manager — resolves who is talking and which conversation it belongs to, so different people don't clobber each other's context.",
+          "Queue — serializes runs per session; a message arriving mid-run is held or injected rather than causing a race.",
+          "Agent runtime — assembles context (the Markdown files below, history) and runs the loop: call model → execute tool calls → feed results back → repeat.",
+          "Control plane — a single API surface that the CLI, app, and web UI all connect to.",
+        ],
+      },
+      {
+        heading: "Everything is a Markdown file",
+        paragraphs: [
+          "In traditional software, configuration lives in JSON or a database. Agents flipped this: because the agent is a language model, its \"configuration\" is mostly plain English in Markdown files it reads natively. The popular conventions:",
+        ],
+        list: [
+          "AGENTS.md — who the agents are, what each is responsible for, and how messages route between them. The same convention Claude Code and Cursor use; it's becoming a de facto standard.",
+          "SOUL.md — personality, defaults, and hard rules. The hard-rules section does real safety work: the model reads it every turn, so a constraint stays in front of it even if a later prompt injection suggests otherwise.",
+          "TOOLS.md — the available actions, described not just as \"what does this do\" but \"when to use it and what the constraints are\" — operational policy in language the model attends to.",
+          "MEMORY.md — long-term facts the agent has learned. You can audit, version, and delete a memory by editing one file — far easier than surgically removing an embedding from a vector DB. The cost is scale: past thousands of facts you need real retrieval.",
+          "HEARTBEAT.md — a recurring checklist. Every interval the agent reads it and decides whether anything needs action, which is what makes it autonomous — \"it did something while I slept.\"",
+          "SKILL.md — reusable, just-in-time expertise: a folder with instructions plus supporting files, loaded into context only when a task matches its triggers.",
+        ],
+      },
+      {
+        heading: "The anatomy of a tool call",
+        paragraphs: [
+          "When a model \"calls a tool,\" it isn't running code. It outputs structured JSON describing the call; your runtime executes the real function and feeds the result back as a tool result; the model continues with that context. The model never touches your APIs directly — it only describes what it wants, and your harness arbitrates. This is exactly what makes tool use safe and auditable.",
+        ],
+        diagram: {
+          id: "tool-call",
+          caption:
+            "Fig 6.3 — A tool call. The model emits a structured request, your code runs the real function, and the result is fed back for the model to continue.",
+        },
+      },
+      {
+        heading: "The N×M problem and MCP",
+        paragraphs: [
+          "Before a standard existed, every AI app needed its own integration for every system: 5 apps × 10 systems meant 50 bespoke connectors. The Model Context Protocol (MCP), an open standard introduced by Anthropic in late 2024, is \"USB-C for AI\" — one connector spec, so any compliant client works with any compliant server. It's a JSON-RPC protocol with three roles (a host the user interacts with, a client managing one connection, and a server exposing capabilities) and three primitives (tools the model can call, resources it can read, and prompts the user can invoke). Build a server once and every MCP client gets it for free.",
+        ],
+        diagram: {
+          id: "mcp-nxm",
+          caption:
+            "Fig 6.4 — MCP collapses N×M custom integrations into N+M: each app and each system speaks one protocol.",
+        },
+      },
+      {
+        heading: "Beyond a single loop",
+        paragraphs: [
+          "A single agent loop hits a wall: long tasks fill the context window, the model loses focus, and tool-call accuracy degrades. Production agents manage context with compaction (summarize old turns), sub-agents for isolation (spawn a fresh context for focused work and return only a summary — the single most powerful technique for long horizons), external memory (persist state to disk between turns), and just-in-time retrieval (give the agent search and read tools instead of dumping everything up front).",
+        ],
+        diagram: {
+          id: "agent-patterns",
+          caption:
+            "Fig 6.5 — Common multi-agent shapes: ReAct, orchestrator + workers, an evaluator loop, and planner + executor.",
+        },
+      },
+      {
+        paragraphs: [
+          "A few orchestration patterns recur. ReAct interleaves reasoning and acting in one loop — simplest, easiest to debug. Orchestrator + workers fans out parallel sub-agents and merges their results — good for broad research. Evaluator + optimizer loops a generator against a critic until quality passes — good for writing or code review. Planner + executor plans once up front, then executes — good when the structure is known in advance.",
+        ],
+      },
+      {
+        heading: "The lethal trifecta",
+        paragraphs: [
+          "Any agent that combines three things — access to private data, the ability to communicate externally, and exposure to untrusted content — has the ingredients for data exfiltration. Simon Willison named this the lethal trifecta: a malicious instruction hidden in a web page the agent reads can hijack it into sending your private data to an attacker.",
+        ],
+        diagram: {
+          id: "lethal-trifecta",
+          caption:
+            "Fig 6.6 — The lethal trifecta. Where private data, external communication, and untrusted content overlap, exfiltration becomes possible. Remove any one leg to defuse it.",
+        },
+      },
+      {
+        paragraphs: [
+          "The defenses are architectural, not prompt-based — you can't reliably tell a model to \"ignore future instructions,\" because injection bypasses keep being found. What works is removing a leg of the triangle: a read-only network for tasks touching untrusted content, separate agents with different permissions, human-in-the-loop confirmation for irreversible actions, and treating all tool output as data, never instructions. Beyond the trifecta: vet MCP servers like any dependency (you're running third-party code), give each tool the narrowest permissions that work (scope minimization), and log every tool call so you can reconstruct what an agent did (audit logging).",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's the shape of agentic engineering: a simple loop wrapped in real software — routing, queues, memory, and orchestration — with security treated as a first-class concern rather than an afterthought. The model is the stochastic core; everything around it is the engineering that makes it reliable.",
         ],
       },
     ],
