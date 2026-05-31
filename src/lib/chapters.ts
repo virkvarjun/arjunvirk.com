@@ -907,7 +907,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The GPU",
         paragraphs: [
-          "A GPU makes the opposite bet. Strip out most of the control logic and the big caches, and trade that one heavyweight core for thousands of small arithmetic units (ALUs) — somewhere from 2,500 to 5,000 and up. That's a terrible design for running an operating system and a perfect one for any workload where the same operation runs over millions of independent data points. Multiplying two 4096×4096 matrices is 16 million independent multiply-accumulates; a GPU eats that for breakfast.",
+          "A GPU makes the opposite bet. Strip out most of the control logic and the big caches, and trade that one heavyweight core for thousands of small arithmetic units (ALUs) — somewhere from 2,500 to 5,000 and up. That's a terrible design for running an operating system and a perfect one for any workload where the same operation runs over millions of independent data points. The original use case was 3D graphics: every pixel on the screen needs the same shading calculation, just on different inputs. Neural networks turned out to fit that pattern exactly. Multiplying two 4096×4096 matrices is 16 million independent multiply-accumulates; a GPU eats that for breakfast.",
           "It's worth being honest that this is still a general-purpose processor — every ALU is reading operands from registers or shared memory. The massively parallel memory system softens the von Neumann bottleneck; it doesn't make it disappear.",
         ],
         diagram: {
@@ -941,13 +941,20 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The memory hierarchy",
         paragraphs: [
-          "Performance lives and dies by where data sits. From fastest/smallest to slowest/largest: registers, shared memory / L1, L2 cache, HBM (the GPU's main memory, also called VRAM), and host RAM over PCIe. The gap is enormous — registers and shared memory are about 100× faster than HBM. Most GPU optimization is the art of keeping data in the fast levels and minimizing trips to HBM.",
+          "Performance lives and dies by where data sits. From fastest/smallest to slowest/largest: registers, shared memory / L1, L2 cache, HBM (the GPU's main memory, also called VRAM), and host memory (system RAM) reached over PCIe at a relatively pokey ~32–64 GB/s — going there is a last resort. The gap is enormous — registers and shared memory are about 100× faster than HBM. Most GPU optimization is the art of keeping data in the fast levels and minimizing trips to HBM.",
         ],
         diagram: {
           id: "memory-hierarchy",
           caption:
             "Fig 3.2 — The GPU memory hierarchy. Each level down is larger but slower; registers and shared memory are ~100× faster than HBM.",
         },
+      },
+      {
+        heading: "From C++ to cubin: the CUDA toolchain",
+        paragraphs: [
+          "It's worth knowing the stack your kernels pass through on the way to the metal. Every GPU has a Compute Capability (CC) number written as major.minor — CC 12.0, say, which also names the SM architecture target (sm_120). Sitting underneath everything is the NVIDIA Driver (something like r580), effectively the operating system of the GPU. Above that, the CUDA Toolkit gives you the libraries, headers, and tools for writing GPU software, and the CUDA Runtime is the API you actually call to allocate memory, copy data, and launch kernels.",
+          "When you compile, your C++ is first lowered to PTX (Parallel Thread Execution), a high-level assembly that acts as an abstraction layer over the GPU's instruction set architecture (ISA). PTX is then compiled to a cubin (a CUDA binary) for a specific target. To keep one program runnable across many GPUs, the compiled code is bundled into a fatbin — a container holding cubins and PTX for several different targets at once. The path, end to end: C++ → PTX → cubin, packaged in a fatbin.",
+        ],
       },
       {
         heading: "The CUDA software moat",
@@ -959,7 +966,8 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "TPUs and the systolic array",
         paragraphs: [
-          "Google looked at GPUs and decided even they weren't specialized enough, so they built the TPU (Tensor Processing Unit) from scratch with neural networks as the only customer. Confusingly, Google also named its compute unit a TensorCore — not the same thing as NVIDIA's. Each one has three pieces: a Matrix Multiplication Unit (the MXU, a systolic array — 256×256 multiply-accumulators in v6e/v7), a vector unit for activations, softmax, and norms, and a scalar unit for control flow and addressing.",
+          "Google looked at GPUs and decided even they weren't specialized enough, so they built the TPU (Tensor Processing Unit) from scratch with neural networks as the only customer. The first TPU was deployed in 2015, purely for inference; later generations handle both training and inference. TPUs power Google's own ML across products like Search, Translate, and Photos, and are available to external users through Google Cloud.",
+          "Confusingly, Google also named its compute unit a TensorCore — not the same thing as NVIDIA's. Each one has three pieces: a Matrix Multiplication Unit (the MXU, a systolic array — 256×256 multiply-accumulators in v6e/v7 (\"Ironwood\"); earlier versions used 128×128), a vector unit for activations, softmax, and norms, and a scalar unit for control flow and addressing. A single MXU performs about 16,000 multiply-accumulate operations per cycle — a staggering number out of one unit.",
           "The systolic array is the TPU's defining trick, and it's genuinely elegant once you picture it. Values of A flow in from the left and move right; values of B flow in from the top and move down; each cell multiplies whatever two numbers happen to be passing through it, adds the result to a running total, and hands both operands along to its neighbors. The payoff is in one property: data gets loaded once and then reused over and over as it walks across the array — no memory access happens at all during the computation itself. It's really just a very large, very specialized GEMM engine wired straight into silicon.",
         ],
         diagram: {
@@ -970,13 +978,14 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "A subtle but important detail: TPU MXUs take bfloat16 inputs but accumulate in FP32. BF16 has FP32's exponent range with a smaller mantissa — great for inputs with wide dynamic range, bad for accumulation where small errors compound. Low precision for the multiplies, high precision for the adds: this pattern is now standard across all AI hardware, NVIDIA's tensor cores included. Recent TPUs also add SparseCores for the gather-heavy embedding lookups in recommendation systems.",
+          "A subtle but important detail: TPU MXUs take bfloat16 inputs but accumulate in FP32. BF16 has FP32's exponent range with a smaller mantissa — great for inputs with wide dynamic range, bad for accumulation where small errors compound. Low precision for the multiplies, high precision for the adds: this pattern is now standard across all AI hardware, NVIDIA's tensor cores included.",
+          "Recent TPU generations (v5p, v6e, v7) also include SparseCores alongside the main TensorCores. These are dataflow processors specialized for sparse operations — primarily the embedding lookups in recommendation systems. Picture a recommendation model with a tens-of-billions-row embedding table where each training step only touches a few thousand rows: a dense compute unit would be hopelessly wasteful on that, so the SparseCores handle the gather-heavy workload efficiently instead.",
         ],
       },
       {
         heading: "From chips to pods",
         paragraphs: [
-          "A single chip is rarely enough. Google connects chips into a slice via a custom high-speed Inter-Chip Interconnect (ICI); a TPU cube is a 4×4×4 topology of 64 chips (the 3D mesh maps gradient-communication patterns efficiently); a pod links thousands of chips; and multislice extends beyond a pod over the slower data-center network (DCN). Training a frontier model isn't done on one chip — it's thousands of chips constantly sharing gradients, and the interconnect speed can dominate the compute. You don't write TPU code directly: you write JAX, PyTorch/XLA, or TensorFlow, and the XLA compiler lowers your tensor ops to TPU instructions.",
+          "A single chip is rarely enough. Google connects chips into a slice via a custom high-speed Inter-Chip Interconnect (ICI) — faster and lower-latency than standard data-center networking; a TPU cube is a 4×4×4 topology of 64 chips, applicable starting with TPU v4 (the 3D mesh maps gradient-communication patterns efficiently); a pod links thousands of chips; and multislice extends beyond a single pod over the slower data-center network (DCN) — within a slice the fast ICI handles communication, across slices the slower DCN does. Training a frontier model isn't done on one chip — it's thousands of chips constantly sharing gradients, and the interconnect speed can dominate the compute. You don't write TPU code directly: you write JAX, PyTorch/XLA, or TensorFlow, and the XLA compiler lowers your tensor ops to TPU instructions.",
         ],
       },
       {
@@ -999,6 +1008,11 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        paragraphs: [
+          "This is where the interconnect investment pays off. Whether it's NVIDIA's NVLink + InfiniBand or Google's ICI + DCN, the network is half the supercomputer — the speed of moving gradients between chips can matter as much as the speed of the chips themselves.",
+        ],
+      },
+      {
         heading: "Practical numbers and the roofline",
         paragraphs: [
           "A few numbers recur. FLOPs measure raw throughput — an H100 does roughly 1,000 teraflops in FP16/BF16 and twice that in FP8, but real workloads hit only 30–60% of peak. Memory bandwidth is often the actual bottleneck (the H100 has ~3 TB/s of HBM). Whether you're limited by compute or by bandwidth is captured by the roofline model.",
@@ -1011,7 +1025,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "Arithmetic intensity — the ratio of operations to bytes moved — decides which side you're on. Large matmuls have high intensity (each loaded value is reused many times), so they are compute-bound and benefit from peak FLOPs. Element-wise operations have low intensity and are memory-bound — which is exactly why operator fusion matters, combining many small ops into one kernel to reuse loaded values. As a rule, inference for a small batch is memory-bandwidth bound (you reload all the weights per token), while training is more compute-bound.",
+          "Arithmetic intensity — the ratio of operations to bytes moved — decides which side you're on. Large matmuls have high intensity (each loaded value is reused many times), so they are compute-bound and benefit from peak FLOPs. Element-wise operations have low intensity and are memory-bound — which is exactly why operator fusion matters, combining many small ops into one kernel to reuse loaded values. As a rule, inference for a small batch is memory-bandwidth bound (you reload all the weights per token), while training is more compute-bound. Attention in long contexts is its own beast — quadratic in sequence length, with specific memory-access patterns that motivated optimizations like FlashAttention.",
           "Here's the whole arc in one breath. CPUs are universal but slow at parallel math. GPUs give up some of that flexibility for thousands of cores and turn out to be perfect for matrix multiplication. CUDA made GPUs programmable and, in doing so, built a software moat that's nearly as valuable as the silicon underneath it. And TPUs push further still, with purpose-built systolic arrays networked into pods the size of data centers. So the next time a training run is mysteriously slow, trust that the answer is almost always hiding somewhere in this hierarchy — a memory bottleneck, an interconnect bottleneck, a precision issue, or plain old kernel-launch overhead.",
         ],
       },
