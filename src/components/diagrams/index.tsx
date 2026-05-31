@@ -41,6 +41,18 @@ import {
   MoE,
   LoRA,
 } from "./ch4";
+import {
+  ImageTensor,
+  Convolution,
+  CnnStack,
+  ReceptiveField,
+  YoloGrid,
+  IoU,
+  UNet,
+  VitPatches,
+  Vlm,
+  ClipMatrix,
+} from "./ch5";
 
 type Entry = { Comp: ComponentType; viewBox?: string };
 
@@ -81,6 +93,17 @@ const registry: Record<string, Entry> = {
   "grouped-query": { Comp: GroupedQuery, viewBox: "0 0 480 160" },
   moe: { Comp: MoE, viewBox: "0 0 400 228" },
   lora: { Comp: LoRA, viewBox: "0 0 400 185" },
+  // chapter 5
+  "image-tensor": { Comp: ImageTensor, viewBox: "0 0 400 235" },
+  convolution: { Comp: Convolution, viewBox: "0 0 420 180" },
+  "cnn-stack": { Comp: CnnStack, viewBox: "0 0 420 200" },
+  "receptive-field": { Comp: ReceptiveField, viewBox: "0 0 430 170" },
+  "yolo-grid": { Comp: YoloGrid, viewBox: "0 0 400 262" },
+  iou: { Comp: IoU, viewBox: "0 0 320 250" },
+  unet: { Comp: UNet, viewBox: "0 0 450 245" },
+  "vit-patches": { Comp: VitPatches, viewBox: "0 0 440 200" },
+  vlm: { Comp: Vlm, viewBox: "0 0 410 165" },
+  "clip-matrix": { Comp: ClipMatrix, viewBox: "0 0 320 250" },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
