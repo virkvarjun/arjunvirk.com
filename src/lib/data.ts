@@ -144,14 +144,6 @@ export const workSection = {
       href: "#",
     },
     {
-      title: "Soilane: Novel Soil Retention R&D",
-      category: "Engineering",
-      date: "May 2024",
-      description:
-        "Placeholder description. Research and development on a novel approach to soil retention.",
-      href: "#",
-    },
-    {
       title: "Hack49: 700K Reached, $13K Funding",
       category: "Leadership",
       date: "Jun 2024",
