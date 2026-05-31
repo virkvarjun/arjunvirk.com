@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { writing } from "@/lib/data";
 import ChapterImage from "@/components/ChapterImage";
+import { BlockMath, MathText } from "@/components/Math";
+import { Diagram } from "@/components/diagrams";
 
 export function generateStaticParams() {
   return writing.flatMap((category) =>
@@ -31,16 +33,50 @@ export default async function ChapterPage({
   const next =
     idx < category.chapters.length - 1 ? category.chapters[idx + 1] : null;
 
+  const navLink =
+    "inline-flex items-center gap-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors";
+  const navDisabled =
+    "inline-flex items-center gap-1 text-xs text-[var(--border)] cursor-default select-none";
+
   return (
     <main className="max-w-2xl mx-auto px-6 w-full">
-      <div className="pt-12 pb-6">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-        >
+      <div className="pt-12 pb-6 flex items-center justify-between gap-4">
+        <Link href={`/writing/${category.key}`} className={navLink}>
           <ArrowLeft size={12} />
-          back
+          {category.title}
         </Link>
+        <nav className="flex items-center gap-4">
+          {prev ? (
+            <Link
+              href={`/writing/${category.key}/${prev.slug}`}
+              className={navLink}
+              aria-label={`Previous chapter: ${prev.title}`}
+            >
+              <ArrowLeft size={13} />
+              Prev
+            </Link>
+          ) : (
+            <span className={navDisabled} aria-hidden="true">
+              <ArrowLeft size={13} />
+              Prev
+            </span>
+          )}
+          {next ? (
+            <Link
+              href={`/writing/${category.key}/${next.slug}`}
+              className={navLink}
+              aria-label={`Next chapter: ${next.title}`}
+            >
+              Next
+              <ArrowRight size={13} />
+            </Link>
+          ) : (
+            <span className={navDisabled} aria-hidden="true">
+              Next
+              <ArrowRight size={13} />
+            </span>
+          )}
+        </nav>
       </div>
 
       <article>
@@ -66,10 +102,26 @@ export default async function ChapterPage({
                 <div className="space-y-3">
                   {section.paragraphs.map((p, j) => (
                     <p key={j} className="text-sm leading-relaxed">
-                      {p}
+                      <MathText>{p}</MathText>
                     </p>
                   ))}
                 </div>
+              )}
+              {section.equations && section.equations.length > 0 && (
+                <div className="mt-1">
+                  {section.equations.map((eq, j) => (
+                    <BlockMath key={j}>{eq}</BlockMath>
+                  ))}
+                </div>
+              )}
+              {section.list && section.list.length > 0 && (
+                <ul className="mt-3 space-y-2 pl-5 list-disc marker:text-[var(--muted)]">
+                  {section.list.map((item, j) => (
+                    <li key={j} className="text-sm leading-relaxed">
+                      <MathText>{item}</MathText>
+                    </li>
+                  ))}
+                </ul>
               )}
               {section.definitions && section.definitions.length > 0 && (
                 <dl className="mt-4 space-y-4">
@@ -77,11 +129,17 @@ export default async function ChapterPage({
                     <div key={d.term}>
                       <dt className="text-sm font-semibold">{d.term}</dt>
                       <dd className="mt-0.5 text-sm text-[var(--muted)] leading-relaxed">
-                        {d.definition}
+                        <MathText>{d.definition}</MathText>
                       </dd>
                     </div>
                   ))}
                 </dl>
+              )}
+              {section.diagram && (
+                <Diagram
+                  id={section.diagram.id}
+                  caption={section.diagram.caption}
+                />
               )}
               {section.image && (
                 <ChapterImage
