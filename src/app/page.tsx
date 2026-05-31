@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Mail } from "lucide-react";
-import { landing, profile, type RichSegment } from "@/lib/data";
+import { Mail } from "lucide-react";
+import { landing, profile } from "@/lib/data";
 
 function GithubIcon({ size = 20 }: { size?: number }) {
   return (
@@ -29,31 +27,7 @@ function XIcon({ size = 18 }: { size?: number }) {
   );
 }
 
-function RichText({ segments }: { segments: RichSegment[] }) {
-  return (
-    <>
-      {segments.map((seg, i) =>
-        typeof seg === "string" ? (
-          <span key={i}>{seg}</span>
-        ) : (
-          <a
-            key={i}
-            href={seg.href}
-            target={seg.href.startsWith("http") ? "_blank" : undefined}
-            rel="noopener noreferrer"
-            className="font-semibold underline underline-offset-2 decoration-1 hover:text-[var(--muted)] transition-colors"
-          >
-            {seg.text}
-          </a>
-        ),
-      )}
-    </>
-  );
-}
-
 export default function Home() {
-  const [open, setOpen] = useState(false);
-
   return (
     <main className="w-full max-w-5xl mx-auto px-6 md:px-10 py-16 md:py-24">
       <div className="flex flex-col gap-10 md:flex-row-reverse md:items-start md:justify-between md:gap-12">
@@ -67,41 +41,6 @@ export default function Home() {
               <li key={item}>{item}</li>
             ))}
           </ul>
-
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="mt-7 flex items-center gap-1.5 font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.18em] text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-            aria-expanded={open}
-          >
-            More info
-            <motion.span
-              animate={{ rotate: open ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex"
-            >
-              <ChevronDown size={14} strokeWidth={2.5} />
-            </motion.span>
-          </button>
-
-          <AnimatePresence initial={false}>
-            {open && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <div className="mt-4 space-y-3.5 text-sm leading-relaxed text-[var(--foreground)] max-w-md">
-                  {landing.more.map((para, i) => (
-                    <p key={i}>
-                      <RichText segments={para} />
-                    </p>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           <nav className="mt-9 flex items-center gap-5 text-[var(--muted)]">
             <a
