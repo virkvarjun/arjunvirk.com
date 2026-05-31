@@ -10,9 +10,9 @@ export const profile = {
   bio: "I build things at the intersection of systems and product. Currently studying at the University of Waterloo.",
   location: "Waterloo, ON",
   socials: {
-    github: "https://github.com/arjunvirk",
-    linkedin: "https://linkedin.com/in/arjunvirk",
-    twitter: "https://x.com/arjunvirk",
+    github: "https://github.com/virkvarjun",
+    linkedin: "https://linkedin.com/in/virkvarjun",
+    twitter: "https://x.com/virkvarjun",
     email: "a23virk@uwaterloo.ca",
   },
 };
