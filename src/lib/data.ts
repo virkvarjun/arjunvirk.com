@@ -17,6 +17,32 @@ export const profile = {
   },
 };
 
+export type RichSegment = string | { text: string; href: string };
+
+export const landing = {
+  subtitle:
+    "Software engineering at the University of Waterloo, building at the intersection of systems and product.",
+  more: [
+    [
+      "I build things at the intersection of systems and product. Currently studying at the ",
+      { text: "University of Waterloo", href: "https://uwaterloo.ca" },
+      ", based in Waterloo, ON.",
+    ],
+    [
+      "I like writing and learning in public — long-form guides on machine learning and robotics, plus a running ",
+      { text: "ML dictionary", href: "/writing/ml-dictionary" },
+      ".",
+    ],
+  ] as RichSegment[][],
+  links: [
+    { label: "linkedin", href: profile.socials.linkedin },
+    { label: "github", href: profile.socials.github },
+    { label: "twitter", href: profile.socials.twitter },
+    { label: "writing", href: "/writing/ml-dictionary" },
+    { label: "mail", href: `mailto:${profile.socials.email}` },
+  ],
+};
+
 export type WorkItem = {
   company: string;
   role: string;
