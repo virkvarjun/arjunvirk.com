@@ -647,7 +647,191 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "Coming soon — the full mathematical derivation of backpropagation.",
+          "Chapter 1 stated the four equations of backpropagation and used them. This chapter builds them from the math up. Three prerequisites sit in the background: working linear algebra (the matrix–vector product, the transpose, the dot product, and the element-wise / Hadamard product $\\odot$); single-variable calculus, above all the chain rule; and partial derivatives.",
+          "The whole story in one paragraph: a neural network is a function. Feed it an input $\\mathbf{x}$ and it produces $\\hat{\\mathbf{y}}$ by stacking layers, each a matrix multiply, a bias, and a nonlinearity. To train it is to choose the weights and biases so that $\\hat{\\mathbf{y}}$ is close to the true $\\mathbf{y}$, measured by a cost $C$. Gradient descent nudges every parameter in the direction that lowers $C$. Backpropagation is the algorithm that computes all of those gradients in one backward pass, instead of doing a separate derivative for each parameter.",
+        ],
+      },
+      {
+        heading: "Notation",
+        paragraphs: [
+          "Notation matters more here than almost anywhere, because so many indices fly around. The conventions used throughout:",
+        ],
+        list: [
+          "Lowercase italic ($x$, $w$, $b$) are scalars; lowercase bold ($\\mathbf{x}$, $\\mathbf{w}$) are column vectors; uppercase ($W$) are matrices.",
+          "A superscript $(\\ell)$ is the layer index — so $W^{(\\ell)}$, $\\mathbf{a}^{(\\ell)}$. The parentheses keep it distinct from an exponent.",
+          "$w^{(\\ell)}_{jk}$ is the weight into neuron $j$ of layer $\\ell$, from neuron $k$ of layer $\\ell-1$. Destination first, source second.",
+          "$z^{(\\ell)}_j$ is the weighted input (pre-activation); $a^{(\\ell)}_j = \\sigma(z^{(\\ell)}_j)$ is the activation; $C$ is the cost.",
+          "$\\delta^{(\\ell)}_j = \\partial C / \\partial z^{(\\ell)}_j$ is the error of a neuron — the quantity backprop propagates.",
+        ],
+      },
+      {
+        heading: "Gradients and Jacobians",
+        paragraphs: [
+          "For a scalar function $f : \\mathbb{R}^n \\to \\mathbb{R}$, the gradient is the column vector of partial derivatives. It points in the direction of steepest ascent, so $-\\nabla f$ points downhill — which is exactly why gradient descent walks in the $-\\nabla f$ direction.",
+        ],
+        equations: [
+          "\\nabla f = \\left[ \\frac{\\partial f}{\\partial x_1},\\ \\frac{\\partial f}{\\partial x_2},\\ \\dots,\\ \\frac{\\partial f}{\\partial x_n} \\right]^\\top",
+        ],
+      },
+      {
+        paragraphs: [
+          "For a vector-valued function $\\mathbf{f} : \\mathbb{R}^n \\to \\mathbb{R}^m$, stack the gradient of each output into the Jacobian — an $m \\times n$ matrix whose rows are outputs and columns are inputs. The gradient is just the special case $m = 1$.",
+        ],
+        equations: [
+          "J = \\frac{\\partial \\mathbf{f}}{\\partial \\mathbf{x}}, \\qquad J_{ij} = \\frac{\\partial f_i}{\\partial x_j}",
+        ],
+      },
+      {
+        paragraphs: [
+          "One fact gets used over and over: for an element-wise function — each output depends only on the same-index input — the Jacobian is diagonal, $\\mathrm{diag}(g'(x_1), \\dots, g'(x_n))$. And a diagonal Jacobian acts like element-wise multiplication inside a chain-rule product: $\\mathrm{diag}(\\mathbf{v})\\,\\mathbf{w} = \\mathbf{v} \\odot \\mathbf{w}$. That is why every $\\mathrm{diag}(\\cdot)$ collapses into a $\\odot$ in the final equations. Activation functions are element-wise, so this happens at every layer.",
+        ],
+      },
+      {
+        heading: "The chain rule, as a sum over paths",
+        paragraphs: [
+          "The scalar chain rule generalizes in a way that makes the matrix version obvious. If $y$ depends on $x$ through several intermediates $u_p$, the total derivative sums over every path from $x$ to $y$:",
+        ],
+        equations: [
+          "\\frac{dy}{dx} = \\sum_p \\frac{\\partial y}{\\partial u_p}\\,\\frac{d u_p}{dx}",
+        ],
+        diagram: {
+          id: "sum-over-paths",
+          caption:
+            "Fig 2.1 — x influences y through two intermediates. The chain rule sums the product of partials along each path.",
+        },
+      },
+      {
+        paragraphs: [
+          "The vector version is a product of Jacobians. If $\\mathbf{y} = \\mathbf{f}(\\mathbf{u})$ and $\\mathbf{u} = \\mathbf{g}(\\mathbf{x})$, then the dimensions chain cleanly ($m \\times k$ times $k \\times n$ gives $m \\times n$), and writing out a single entry recovers the sum over paths:",
+        ],
+        equations: [
+          "\\frac{\\partial \\mathbf{y}}{\\partial \\mathbf{x}} = \\frac{\\partial \\mathbf{y}}{\\partial \\mathbf{u}}\\,\\frac{\\partial \\mathbf{u}}{\\partial \\mathbf{x}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "Backpropagation is, in essence, this: multiply Jacobians together as you traverse the network from the output back to the input.",
+        ],
+      },
+      {
+        heading: "Part II: Forward propagation",
+        paragraphs: [
+          "A neuron computes $z = \\mathbf{w}^\\top\\mathbf{x} + b$ and then $a = \\sigma(z)$. When you stack many neurons in many layers, the bookkeeping is the whole reason matrix notation buys you anything — and the key choice is the destination-first weight index $w^{(\\ell)}_{jk}$.",
+        ],
+        diagram: {
+          id: "weight-indexing",
+          caption:
+            "Fig 2.2 — w⁽ˡ⁾₍ⱼₖ₎ is the weight into destination neuron j of layer ℓ from source neuron k of layer ℓ−1.",
+        },
+      },
+      {
+        paragraphs: [
+          "Destination-first looks backwards, but it is exactly what makes the matrix–vector product $W^{(\\ell)}\\mathbf{a}^{(\\ell-1)}$ produce, in its $j$-th entry, the weighted sum that neuron $j$ wants — no transposes needed. The weight matrix $W^{(\\ell)}$ has shape $n_\\ell \\times n_{\\ell-1}$, and the bias $\\mathbf{b}^{(\\ell)} \\in \\mathbb{R}^{n_\\ell}$. A whole layer is then one line, and the entire network is a deeply nested function:",
+        ],
+        equations: [
+          "\\mathbf{z}^{(\\ell)} = W^{(\\ell)}\\mathbf{a}^{(\\ell-1)} + \\mathbf{b}^{(\\ell)}, \\qquad \\mathbf{a}^{(\\ell)} = \\sigma(\\mathbf{z}^{(\\ell)})",
+          "\\hat{\\mathbf{y}} = \\sigma\\!\\left( W^{(L)} \\sigma\\!\\left( \\cdots \\sigma\\!\\left( W^{(1)}\\mathbf{x} + \\mathbf{b}^{(1)} \\right) \\cdots \\right) + \\mathbf{b}^{(L)} \\right)",
+        ],
+      },
+      {
+        heading: "Part III: Differentiating the network",
+        paragraphs: [
+          "Take mean squared error as the cost. Working with a single training example keeps the indices clean — the full-dataset cost is just the average, and the gradient of an average is the average of the gradients, so nothing changes structurally:",
+        ],
+        equations: ["C = \\tfrac{1}{2}\\lVert \\mathbf{y} - \\hat{\\mathbf{y}} \\rVert^2"],
+      },
+      {
+        paragraphs: [
+          "We need the derivative of each operation a neuron performs. Three building blocks cover them. The element-wise (Hadamard) product has a diagonal Jacobian, $\\partial(\\mathbf{u}\\odot\\mathbf{v})/\\partial\\mathbf{u} = \\mathrm{diag}(\\mathbf{v})$. Addition — adding the bias — passes gradients straight through, an identity Jacobian. A sum collapses to the all-ones vector. And the activation, applied element-wise, has Jacobian $\\partial\\mathbf{a}/\\partial\\mathbf{z} = \\mathrm{diag}(\\sigma'(\\mathbf{z}))$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The sigmoid's derivative is famously clean: if you already computed $\\sigma(z)$ on the forward pass, you have essentially already computed $\\sigma'(z)$ — no exponentials needed on the way back.",
+        ],
+        equations: ["\\sigma'(z) = \\sigma(z)\\,\\bigl(1 - \\sigma(z)\\bigr)"],
+        diagram: {
+          id: "sigmoid-derivative",
+          caption:
+            "Fig 2.3 — The sigmoid and its derivative σ′ = σ(1−σ), which peaks at just 0.25 — the seed of the vanishing-gradient problem.",
+        },
+      },
+      {
+        heading: "The slow way (and why it doesn't scale)",
+        paragraphs: [
+          "For the smallest network that still shows the structure — one neuron per layer, two layers — the chain rule gives the two weight gradients directly:",
+        ],
+        equations: [
+          "\\frac{\\partial C}{\\partial w^{(2)}} = (a^{(2)} - y)\\,\\sigma'(z^{(2)})\\,a^{(1)}",
+          "\\frac{\\partial C}{\\partial w^{(1)}} = (a^{(2)} - y)\\,\\sigma'(z^{(2)})\\,w^{(2)}\\,\\sigma'(z^{(1)})\\,x",
+        ],
+      },
+      {
+        paragraphs: [
+          "Two patterns jump out. Reuse: the leading factors of $\\partial C/\\partial w^{(1)}$ are exactly what we already computed for $\\partial C/\\partial w^{(2)}$. Structural rhythm: every gradient is an error at the end, $(a^{(2)} - y)$, propagated backward and multiplied at the final step by the input that fed the weight in question. And each layer contributes one $\\sigma'$ factor — since the sigmoid's derivative maxes out at 0.25, the product shrinks fast with depth (the vanishing gradient again).",
+          "Doing this naively across a full network costs about $O(L^2 n^3)$ per example and recomputes the same intermediate quantities over and over. The fix is to identify one reusable quantity and propagate it backward — the error of a node.",
+        ],
+      },
+      {
+        heading: "Part IV: The four equations",
+        paragraphs: [
+          "Define the error of a neuron as the sensitivity of the cost to its pre-activation, $\\delta^{(\\ell)}_j = \\partial C / \\partial z^{(\\ell)}_j$. We hinge on $z$ rather than $a$ because it sits exactly between the linear part (weights, bias, previous activations) and the nonlinear part (the activation), so everything upstream becomes easy once $\\delta$ is known. Backprop computes $\\boldsymbol{\\delta}^{(L)}$, then $\\boldsymbol{\\delta}^{(L-1)}$, and so on backward, reading off the gradients along the way.",
+        ],
+        diagram: {
+          id: "error-backprop",
+          caption:
+            "Fig 2.4 — BP2 in pictures: the next layer's error is pulled back through Wᵀ, then gated by σ′(z) — neurons with saturated activations receive almost no signal.",
+        },
+      },
+      {
+        paragraphs: [
+          "BP1 — the output-layer error is the cost gradient times the local activation slope. For MSE this is $(\\mathbf{a}^{(L)} - \\mathbf{y}) \\odot \\sigma'(\\mathbf{z}^{(L)})$:",
+        ],
+        equations: [
+          "\\boldsymbol{\\delta}^{(L)} = \\nabla_{\\mathbf{a}^{(L)}} C \\,\\odot\\, \\sigma'(\\mathbf{z}^{(L)}) \\tag{BP1}",
+        ],
+      },
+      {
+        paragraphs: [
+          "BP2 — the keystone. Propagate the error one layer back by multiplying with the transpose of the next layer's weight matrix, then take an element-wise product with the local slope:",
+        ],
+        equations: [
+          "\\boldsymbol{\\delta}^{(\\ell)} = \\left( (W^{(\\ell+1)})^\\top \\boldsymbol{\\delta}^{(\\ell+1)} \\right) \\odot \\sigma'(\\mathbf{z}^{(\\ell)}) \\tag{BP2}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The transpose appears because we sum over the destination index of layer $\\ell+1$. Geometrically, $W^\\top$ redistributes the error to each upstream neuron in proportion to how much it contributed, and the $\\odot\\,\\sigma'(\\mathbf{z}^{(\\ell)})$ scales it by how much that neuron's $z$ was actually affecting its $a$. Saturated neurons ($\\sigma' \\approx 0$) receive almost no error — that is precisely why saturated sigmoids cause vanishing gradients.",
+        ],
+      },
+      {
+        paragraphs: [
+          "BP3 and BP4 — the parameter gradients now fall out for free. The bias gradient is the error itself; the weight gradient is the outer product of the error and the incoming activation:",
+        ],
+        equations: [
+          "\\frac{\\partial C}{\\partial \\mathbf{b}^{(\\ell)}} = \\boldsymbol{\\delta}^{(\\ell)} \\tag{BP3}",
+          "\\frac{\\partial C}{\\partial W^{(\\ell)}} = \\boldsymbol{\\delta}^{(\\ell)}\\,(\\mathbf{a}^{(\\ell-1)})^\\top \\tag{BP4}",
+        ],
+      },
+      {
+        paragraphs: [
+          "Intuitively (BP4): to find how the cost depends on one weight, multiply two numbers — the activation it receives and the error of the neuron it feeds.",
+        ],
+      },
+      {
+        heading: "The backpropagation algorithm",
+        paragraphs: ["Put together, one training example runs through five steps:"],
+        list: [
+          "Forward pass — set $\\mathbf{a}^{(0)} = \\mathbf{x}$ and compute $\\mathbf{z}^{(\\ell)}, \\mathbf{a}^{(\\ell)}$ for every layer, caching them.",
+          "Output error — $\\boldsymbol{\\delta}^{(L)} = \\nabla_{\\mathbf{a}^{(L)}} C \\odot \\sigma'(\\mathbf{z}^{(L)})$.",
+          "Backpropagate — for $\\ell = L-1, \\dots, 1$: $\\boldsymbol{\\delta}^{(\\ell)} = ((W^{(\\ell+1)})^\\top \\boldsymbol{\\delta}^{(\\ell+1)}) \\odot \\sigma'(\\mathbf{z}^{(\\ell)})$.",
+          "Read off gradients — $\\partial C/\\partial \\mathbf{b}^{(\\ell)} = \\boldsymbol{\\delta}^{(\\ell)}$ and $\\partial C/\\partial W^{(\\ell)} = \\boldsymbol{\\delta}^{(\\ell)}(\\mathbf{a}^{(\\ell-1)})^\\top$.",
+          "Update — step each parameter against its gradient. For a mini-batch, average the gradients over examples first.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That is the entire mathematical content of backpropagation. The cost is now linear in the number of parameters instead of quadratic. Every architecture in the chapters ahead — CNNs, transformers, diffusion models — trains with exactly this procedure; only the structure of the layers changes.",
         ],
       },
     ],
