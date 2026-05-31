@@ -168,7 +168,7 @@ export const workSection = {
     {
       title: "Robot See, Robot Do",
       category: "Writing",
-      date: "2025",
+      date: "Feb 2026",
       description:
         "Wrote a viral technical article explaining the math behind imitation learning, Action Chunking Transformers, and DAgger for robotics learning.",
       href: "https://x.com/virkvarjun/status/2018586817327489435",
