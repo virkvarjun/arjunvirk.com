@@ -57,6 +57,7 @@ export type WorkProject = {
   date: string;
   description: string;
   href: string;
+  image?: string;
 };
 
 export const workSection = {
@@ -70,6 +71,7 @@ export const workSection = {
       description:
         "A 200-page handwritten guide breaking down the math, intuition, and architectures behind modern machine learning and deep learning systems.",
       href: "#",
+      image: "/projects/ml-bible.png",
     },
     {
       title: "PicoChem: Transformer from Scratch in numpy + Custom CUDA Kernels",
@@ -78,6 +80,7 @@ export const workSection = {
       description:
         "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
       href: "https://github.com/virkvarjun/ChemKernel",
+      image: "/projects/picochem.png",
     },
     {
       title: "LoRA VLA Research @ BracketBot",
@@ -86,6 +89,7 @@ export const workSection = {
       description:
         "Developing novel LoRA and DoRA adapter architectures for efficient VLA fine-tuning, robotic manipulation, and continual learning under Isaac Bautista at BracketBot. (more soon)",
       href: "https://www.bracketbot.com/",
+      image: "/projects/lora.png",
     },
     {
       title: "Failure-Aware ACT (FAACT)",
@@ -94,6 +98,7 @@ export const workSection = {
       description:
         "Built a failure-aware action chunking Transformer that detects trajectory failures with minimal pretraining and autonomously recovers through a self-correction algorithm.",
       href: "https://x.com/virkvarjun/status/2030850380502831463",
+      image: "/projects/faact.png",
     },
     {
       title: "SOTA Pan-Cancer Immunotherapy Quantification",
@@ -102,6 +107,7 @@ export const workSection = {
       description:
         "Developed RL PPO system to predict immunotherapy efficacy and recommend ICI inhibitors across cancer types from 15% to 80%. Silver Medal at Canada’s National Science Fair.",
       href: "https://partner.projectboard.world/ysc/project/using-machine-learning-to-quantify-pan-cancer-immunotherapy-response-and-optimizing-treatments",
+      image: "/projects/immuno.png",
     },
     {
       title: "Novel Thyroid Cancer Risk Stratification System (UCLA BAIR)",
@@ -110,6 +116,7 @@ export const workSection = {
       description:
         "Worked with Dr. William Speier and Ashwath Radhachandran, PhD, on JEPA and ViT-based models to improve thyroid cancer risk stratification beyond ACR TI-RADS. (more soon)",
       href: "https://bair.seas.ucla.edu/",
+      image: "/projects/ucla.png",
     },
     {
       title: "Explanation Tuning Research (Triage)",
@@ -118,6 +125,7 @@ export const workSection = {
       description:
         "Worked under Mat Kallada from Mila to organize medical sequence data pipelines and research explanation-guided tuning for medical vision-language transformers. (more soon)",
       href: "https://github.com/triagemd",
+      image: "/projects/triage.png",
     },
     {
       title: "BigBrother: First Autonomous Interactive Agentic Browser",
@@ -126,6 +134,7 @@ export const workSection = {
       description:
         "Built an autonomous agentic browser extension that completes web tasks from natural-language prompts. Awarded $200 in prizes.",
       href: "https://devpost.com/software/big-bro-tsv0i9",
+      image: "/projects/bigbrother.png",
     },
     {
       title: "Wisp: Custom MCP for Daily Notion and Google Workspace",
@@ -134,6 +143,7 @@ export const workSection = {
       description:
         "Led the implementation of a custom MCP server that exposes Notion and Google Workspace as structured, machine-readable tools instead of unstructured text context.",
       href: "https://drive.google.com/file/d/1iY6WqhUoQef0hN14b8RVFlftUAU0BiyM/view?resourcekey",
+      image: "/projects/wisp.png",
     },
     {
       title: "Dancing Humanoid (1st Place Provincially)",
@@ -142,6 +152,7 @@ export const workSection = {
       description:
         "Designed the CAD, wiring schematics, and C++ control system for a music-synced humanoid robot that performed a choreographed dance routine. Awarded $200 in prizes.",
       href: "https://www.youtube.com/watch?v=To6ZkVqr8FM",
+      image: "/projects/dancing.png",
     },
     {
       title: "Hack49: 700K Reached, $13K Funding",
@@ -150,6 +161,7 @@ export const workSection = {
       description:
         "Led a 13-person team to reach 700K+ students, secure $13K in funding, recruit judges from Amazon, Elegoo, and Dell, and scale Hack49 into a global student hackathon.",
       href: "https://www.youtube.com/@hack_49",
+      image: "/projects/hack49.png",
     },
     {
       title: "Robot See, Robot Do",
@@ -158,6 +170,7 @@ export const workSection = {
       description:
         "Wrote a viral technical article explaining the math behind imitation learning, Action Chunking Transformers, and DAgger for robotics learning.",
       href: "https://x.com/virkvarjun/status/2018586817327489435",
+      image: "/projects/robot-see-robot-do.png",
     },
   ] as WorkProject[],
 };

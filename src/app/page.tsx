@@ -108,6 +108,13 @@ export default function Home() {
             const hasLink = Boolean(project.href) && project.href !== "#";
             const imageClasses =
               "block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)]";
+            const thumbnail = project.image ? (
+              <img
+                src={project.image}
+                alt={project.title}
+                className="h-full w-full object-cover"
+              />
+            ) : null;
             return (
               <article key={project.title} className="flex flex-col">
                 {hasLink ? (
@@ -117,9 +124,11 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className={`${imageClasses} transition-opacity hover:opacity-80`}
                     aria-label={project.title}
-                  />
+                  >
+                    {thumbnail}
+                  </a>
                 ) : (
-                  <div className={imageClasses} />
+                  <div className={imageClasses}>{thumbnail}</div>
                 )}
                 <h3 className="mt-3 text-sm leading-snug">
                   {hasLink ? (
