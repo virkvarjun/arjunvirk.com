@@ -516,10 +516,19 @@ export const mlGuideChapters: Chapter[] = [
         ],
         list: [
           "SGD — sample a mini-batch (typical sizes 32–256), compute its gradient, step against it. Cheap and noisy; the noise often helps escape shallow minima and saddles.",
-          "Momentum — a velocity vector averages out oscillations (typically $\\beta = 0.9$).",
+          "Momentum — a velocity vector averages out oscillations and helps push through flat regions (typically $\\beta = 0.9$).",
           "Nesterov (NAG) — look ahead with the momentum step first, compute the gradient there, then correct. Slightly faster convergence.",
-          "AdaGrad — give each parameter its own learning rate, scaled by $1/\\sqrt{\\text{accumulated squared gradients}}$. Great for sparse features, but the effective rate monotonically decays to zero.",
-          "RMSProp — fixes AdaGrad's decay by using an exponentially-decaying average of squared gradients instead of a sum.",
+          "AdaGrad — give each parameter its own learning rate, scaled by $1/\\sqrt{\\text{accumulated squared gradients}}$. Parameters that have seen large gradients get smaller updates; rarely-updated ones get larger updates, which makes it genuinely useful for sparse features (think NLP with rare words). The catch is that the accumulated sum $G_t$ only ever grows, so the effective rate monotonically decays toward zero and learning eventually stalls.",
+          "RMSProp — fixes AdaGrad's vanishing rate by using an exponentially-decaying average of squared gradients instead of an ever-growing sum (typically $\\beta = 0.9$). Works well in practice, especially for RNNs. A fun bit of ML history: Geoff Hinton proposed it in a Coursera lecture and never formally published it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "It's worth seeing the two adaptive updates written out, because the difference between them is exactly the difference between a sum and a decaying average. AdaGrad accumulates $G_t = G_{t-1} + g_t^2$ and divides by its square root; RMSProp swaps that growing sum for an exponential moving average $v_t$:",
+        ],
+        equations: [
+          "\\theta_{t+1} = \\theta_t - \\frac{\\eta}{\\sqrt{G_t + \\epsilon}}\\,g_t \\qquad\\text{(AdaGrad)}",
+          "v_t = \\beta v_{t-1} + (1-\\beta)\\,g_t^2, \\qquad \\theta_{t+1} = \\theta_t - \\frac{\\eta}{\\sqrt{v_t + \\epsilon}}\\,g_t \\qquad\\text{(RMSProp)}",
         ],
       },
       {
@@ -532,7 +541,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "Typical values are $\\beta_1 = 0.9$, $\\beta_2 = 0.999$, $\\epsilon = 10^{-8}$. AdamW is a small but important fix: in plain Adam, L2 weight decay gets scaled by the adaptive rate (wrong); AdamW decouples it, applying the decay directly. AdamW is the actual default for transformers and LLMs:",
+          "Typical values are $\\beta_1 = 0.9$, $\\beta_2 = 0.999$, $\\epsilon = 10^{-8}$, and the bias-correction terms (dividing by $1 - \\beta^t$) compensate for $m$ and $v$ being initialized to zero, which would otherwise bias them toward zero early in training. Adam works out of the box on a huge range of problems and needs less learning-rate tuning — but it has a real weakness: it can generalize worse than SGD on some tasks (notably vision). AdamW is a small but important fix: in plain Adam, L2 weight decay gets scaled by the adaptive rate (wrong — small for high-gradient parameters, large for low-gradient ones); AdamW decouples it, applying the decay directly. AdamW is the actual default for transformers and LLMs:",
         ],
         equations: [
           "\\theta_{t+1} = \\theta_t - \\eta\\left( \\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon} + \\lambda\\theta_t \\right)",
@@ -546,9 +555,29 @@ export const mlGuideChapters: Chapter[] = [
         list: [
           "Step decay — drop $\\eta$ by a factor every $N$ epochs.",
           "Exponential decay — $\\eta_t = \\eta_0\\,\\gamma^t$ for $\\gamma < 1$.",
-          "Cosine annealing — $\\eta$ follows a cosine curve from $\\eta_{\\max}$ down to $\\eta_{\\min}$ over the run. Very popular for transformers.",
+          "Cosine annealing — $\\eta$ follows a cosine curve from $\\eta_{\\max}$ down to $\\eta_{\\min}$ over the run (see the formula below). Very popular for transformers.",
           "Warmup — start tiny and linearly ramp up over the first few thousand steps. Critical for transformers, where large initial Adam steps destabilize the variance estimates.",
           "Warmup + cosine decay — the standard combo for modern large-model training.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Cosine annealing is worth writing out, since it's the schedule you'll meet most often. Over a run of length $T$, the rate sweeps smoothly from $\\eta_{\\max}$ to $\\eta_{\\min}$ along half a cosine wave:",
+        ],
+        equations: [
+          "\\eta_t = \\eta_{\\min} + \\tfrac{1}{2}(\\eta_{\\max} - \\eta_{\\min})\\left(1 + \\cos\\tfrac{t\\pi}{T}\\right)",
+        ],
+      },
+      {
+        heading: "Hyperparameter tuning",
+        paragraphs: [
+          "Everything above — learning rate, batch size, $\\beta$ values, weight decay, depth — has to be chosen, and there's a whole toolkit for choosing well.",
+        ],
+        list: [
+          "Grid search — try every combination on a predefined grid. Exhaustive, but the cost explodes with the number of hyperparameters.",
+          "Random search — sample combinations at random. Counterintuitively, it beats grid search in high dimensions, because it explores more distinct values of each individual hyperparameter rather than wasting trials on a coarse lattice.",
+          "Bayesian optimization — build a probabilistic model of the objective and use it to pick the next promising point (e.g. with Optuna).",
+          "Population-based training — evolve a population of models, periodically copying the winners' weights and perturbing their hyperparameters mid-training.",
         ],
       },
       {
@@ -559,11 +588,12 @@ export const mlGuideChapters: Chapter[] = [
         list: [
           "L2 (weight decay) — add $\\lambda\\lVert\\theta\\rVert^2$ to the loss. Penalizes large weights; equivalent to a Gaussian prior.",
           "L1 — add $\\lambda\\lVert\\theta\\rVert_1$. Encourages sparse weights (many exactly zero); useful for feature selection.",
-          "Dropout — randomly zero a fraction of activations during training ($p = 0.1$–$0.5$). Forces redundant, robust representations.",
+          "Dropout — randomly zero a fraction of activations during training ($p = 0.1$–$0.5$). At test time you use all the activations, scaled appropriately, so the expected signal matches. This forces the network into redundant, robust representations, because it can't lean on any single neuron.",
           "Early stopping — halt when validation loss stops improving.",
           "Data augmentation — apply label-preserving transforms (crops, flips, color jitter; back-translation for text) to enlarge the dataset and bake in invariances.",
           "Label smoothing — replace one-hot targets with soft ones to curb overconfidence and improve calibration.",
           "Mixup / CutMix — train on linear combinations of pairs of examples and labels. Strong regularizers for vision.",
+          "Stochastic depth / DropPath — randomly drop entire layers during training (not just individual activations). Used in very deep networks like deep ResNets and modern vision transformers.",
         ],
       },
       {
@@ -608,7 +638,25 @@ export const mlGuideChapters: Chapter[] = [
           "Attention — let the network weight all parts of the input by learned relevance; the core of the transformer (Chapter 4).",
           "Mixture of Experts (MoE) — replace a dense layer with many experts and a router that sends each token to a few. Grows parameters without proportional compute.",
           "Mixed precision — compute in 16-bit (bf16) for speed and memory while keeping a master copy in fp32. Roughly 2× faster with no quality loss.",
-          "Gradient accumulation & checkpointing — simulate larger batches, or trade compute for memory by recomputing activations in the backward pass. Distributed training (data / tensor / pipeline / ZeRO-FSDP) splits work across devices when a model or dataset doesn't fit.",
+          "Batch size — larger batches give better gradient estimates and parallelize better on GPUs, but they typically need the learning rate scaled up (often linearly with batch size — the \"linear scaling rule\" — paired with warmup) and can hurt generalization. Typical sizes run from 32 to a few hundred for SGD, far larger for big distributed runs.",
+          "Gradient accumulation — run several mini-batches and sum their gradients before stepping, simulating a larger batch when memory is tight.",
+        ],
+      },
+      {
+        heading: "Scaling across devices",
+        paragraphs: [
+          "Once a model or its data no longer fits on a single accelerator, you split the work — and there are a few distinct ways to do it, often combined.",
+        ],
+        list: [
+          "Data parallelism — replicate the whole model on each device, split the batch across them, and average the gradients before stepping.",
+          "Tensor / model parallelism — split individual layers across devices, so one matrix multiply is shared.",
+          "Pipeline parallelism — split the network depth-wise across devices and pipeline mini-batches through the stages.",
+          "ZeRO / FSDP — shard the optimizer states, gradients, and parameters across devices to save memory rather than replicating them.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Two more tools earn their keep on long runs. Gradient checkpointing trades compute for memory: instead of caching every activation on the forward pass, you recompute them during the backward pass — essential for very large models. And checkpointing-and-resumption means periodically saving the model and optimizer state to disk, because a run that takes weeks cannot afford to lose progress to a single crash.",
         ],
       },
       {
@@ -629,6 +677,7 @@ export const mlGuideChapters: Chapter[] = [
           "Train loss falls but validation loss rises — classic overfitting. Add regularization, get more data, shrink the model, or stop earlier.",
           "Both plateau high — underfitting. Bigger model, better features, more training, less regularization.",
           "Loss oscillates wildly — learning rate too high or batch size too small.",
+          "Loss decreases then suddenly spikes — often a single bad batch or a moment of numerical instability. Inspect the outlier examples in that batch.",
         ],
       },
       {
