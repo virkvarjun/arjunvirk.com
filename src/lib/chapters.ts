@@ -342,8 +342,22 @@ export const mlGuideChapters: Chapter[] = [
     ],
   },
   {
-    slug: "chapter-2-inference-engineering-and-compute",
+    slug: "chapter-2-advanced-math",
     number: "2",
+    title: "Advanced Math Behind Deep Learning",
+    summary:
+      "Matrix calculus and the four equations of backpropagation, derived from the ground up.",
+    sections: [
+      {
+        paragraphs: [
+          "Coming soon — the full mathematical derivation of backpropagation.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "chapter-3-inference-engineering-and-compute",
+    number: "3",
     title: "Inference Engineering and Compute",
     summary:
       "Training is glamorous; inference pays the bills. The bag of tricks for serving a 70B parameter model on commodity hardware.",
@@ -367,8 +381,8 @@ export const mlGuideChapters: Chapter[] = [
     ],
   },
   {
-    slug: "chapter-3-transformers",
-    number: "3",
+    slug: "chapter-4-transformers",
+    number: "4",
     title: "Transformers",
     summary:
       "Attention Is All You Need was published in 2017 and we're still living in its world.",
@@ -391,8 +405,8 @@ export const mlGuideChapters: Chapter[] = [
     ],
   },
   {
-    slug: "chapter-4-vision",
-    number: "4",
+    slug: "chapter-5-vision",
+    number: "5",
     title: "Vision",
     summary: "From LeNet to ViT to Sora — a tour of how machines learned to see.",
     sections: [
@@ -414,72 +428,8 @@ export const mlGuideChapters: Chapter[] = [
     ],
   },
   {
-    slug: "chapter-5-rl",
-    number: "5",
-    title: "RL",
-    summary:
-      "Where rewards are sparse, environments are non-stationary, and your gradients are a noisy mess.",
-    sections: [
-      {
-        paragraphs: [
-          "We'll cover the classics — value iteration, Q-learning, policy gradients, actor-critic — then move to PPO, GRPO, and the techniques powering the RLHF revolution.",
-        ],
-        image: {
-          label: "policy rollout",
-          caption: "Fig 5.1 — A policy rollout visualized as a trajectory through state space.",
-        },
-      },
-      {
-        heading: "Why it's hard",
-        paragraphs: [
-          "Three structural difficulties: credit assignment over long horizons, exploration vs. exploitation, and off-policy correction. Most modern algorithms are clever workarounds for one of these.",
-        ],
-      },
-    ],
-  },
-  {
-    slug: "chapter-5-advanced-topics",
-    number: "5",
-    title: "Advanced Topics",
-    summary: "What didn't fit elsewhere — the frontier topics worth knowing.",
-    sections: [
-      {
-        paragraphs: [
-          "Diffusion models and their probabilistic interpretation, flow matching, state-space models (Mamba, RWKV), mixture-of-experts routing, world models, and the latest attempts at lifelong learning.",
-        ],
-        image: {
-          label: "diffusion process",
-          caption: "Fig 5b.1 — The forward diffusion process gradually corrupts data into noise.",
-        },
-      },
-    ],
-  },
-  {
-    slug: "chapter-6-programming-ml-models",
+    slug: "chapter-6-agentic-engineering",
     number: "6",
-    title: "Programming ML Models",
-    summary: "PyTorch, JAX, and the tooling around them.",
-    sections: [
-      {
-        paragraphs: [
-          "Autograd internals, custom CUDA kernels, distributed training with FSDP, dataloader bottlenecks that silently halve your throughput, and the dark art of debugging NaN losses at 3am.",
-        ],
-        image: {
-          label: "tensor parallel layout",
-          caption: "Fig 6.1 — Sharding a weight matrix across four GPUs.",
-        },
-      },
-      {
-        heading: "What's worth your time",
-        paragraphs: [
-          "Most ML engineering pain comes from a small number of recurring failure modes. We'll catalog them, then go deep on the debugging tools that actually help.",
-        ],
-      },
-    ],
-  },
-  {
-    slug: "chapter-7-agentic-engineering",
-    number: "7",
     title: "Agentic Engineering",
     summary:
       "Models call tools, tools change state, state informs the next call. Building reliable agent loops requires care.",

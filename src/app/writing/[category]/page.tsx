@@ -56,15 +56,8 @@ export default async function CategoryContentsPage({
               <span className="text-xs font-mono text-[var(--muted)] w-20 shrink-0">
                 Chapter {chapter.number}
               </span>
-              <span className="flex-1">
-                <span className="text-sm font-medium group-hover:underline underline-offset-2">
-                  {chapter.title}
-                </span>
-                {chapter.summary && (
-                  <span className="mt-0.5 block text-xs text-[var(--muted)] leading-relaxed">
-                    {chapter.summary}
-                  </span>
-                )}
+              <span className="flex-1 text-sm font-medium group-hover:underline underline-offset-2">
+                {chapter.title}
               </span>
               <ArrowRight
                 size={14}
