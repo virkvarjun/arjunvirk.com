@@ -1221,7 +1221,7 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "To a computer, an image is a grid of pixels, each a few intensity numbers. A color image is a 3-D tensor of height, width, and channels (3 for RGB), and a batch of them is 4-D: $(N, C, H, W)$. After the first convolutional layer, though, \"channels\" stop meaning colors — they become learned features (one channel fires on horizontal edges, another on red blobs), growing from 3 at the input to hundreds deep in the network.",
+          "Strip away the abstraction and an image, to a computer, is just a grid of pixels — each one a few numbers describing intensity. A color image is a 3-D tensor of height, width, and channels (3 of them for RGB), and a whole batch of images is 4-D: $(N, C, H, W)$. Here's the part that trips people up, though: after the very first convolutional layer, \"channels\" stop meaning colors entirely. They turn into learned features — one channel might fire on horizontal edges, another on red blobs — and their count climbs from 3 at the input to hundreds deep inside the network.",
           "Raw pixel values in $[0, 255]$ are poor inputs — too large and not zero-centered — so the standard preprocessing divides by 255 and then subtracts the dataset mean and divides by the standard deviation, per channel. Always normalize the same way at inference as in training.",
         ],
         diagram: {
@@ -1233,13 +1233,13 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Why not just an MLP?",
         paragraphs: [
-          "Flattening a 224×224×3 image into a 150,528-vector and feeding a fully connected layer fails for two reasons. Parameter explosion: the first weight matrix alone would have ~150M parameters. And no translation invariance: a dog in the top-left and the same dog in the bottom-right activate completely different neurons, so the network must relearn \"dog\" for every position. CNNs are engineered around the two facts MLPs ignore — locality (nearby pixels are correlated) and translation invariance (a feature means the same thing wherever it appears).",
+          "The obvious thing to try is to flatten a 224×224×3 image into a 150,528-element vector and feed it to a fully connected layer — and it fails, for two reasons worth understanding. First, parameter explosion: the first weight matrix alone would carry around 150M parameters. Second, no translation invariance: a dog in the top-left corner and the exact same dog in the bottom-right corner light up completely different neurons, so the network is forced to relearn \"dog\" separately for every position. CNNs are built precisely around the two facts an MLP throws away — locality (nearby pixels are correlated) and translation invariance (a feature means the same thing no matter where it shows up).",
         ],
       },
       {
         heading: "The convolution operation",
         paragraphs: [
-          "A convolution slides a small filter (a 3×3 or 5×5 tensor of weights, with the same depth as the input) across the image. At each position it multiplies the filter element-wise with the patch it covers, sums, adds a bias, and writes one output value. Slide across the whole input and you get a 2-D feature map showing how strongly that filter's pattern is detected at each position:",
+          "So here's what a convolution actually does. It slides a small filter — a 3×3 or 5×5 tensor of weights, with the same depth as the input — across the image. At each stop, it multiplies the filter element-wise against the patch it's sitting on, sums everything up, adds a bias, and writes out a single value. Do that across the whole input and you've got a 2-D feature map showing how strongly that filter's pattern shows up at each position:",
         ],
         equations: [
           "y(i, j) = \\sum_{m}\\sum_{n}\\sum_{c} x(i+m,\\, j+n,\\, c)\\,w(m, n, c) + b",
@@ -1291,7 +1291,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "YOLO: detection as one regression",
         paragraphs: [
-          "Object detection asks where the objects are, not just what's in the image. The pre-deep-learning approach (DPM) and the first deep approach (R-CNN) both repurposed classifiers, running them at thousands of locations — accurate but slow (R-CNN took 40+ seconds per image). YOLO's insight: make detection one regression problem solved by a single network pass. Resize the image, run one CNN, threshold the detections — you only look once.",
+          "Classification tells you what's in an image; detection asks the harder question of where everything is. The pre-deep-learning approach (DPM) and the first deep one (R-CNN) both took the same tack — repurpose a classifier and run it at thousands of locations. Accurate, but painfully slow; R-CNN took 40-plus seconds per image. YOLO's insight was to stop treating it as classification at all and make detection a single regression problem solved in one network pass. Resize the image, run one CNN, threshold the detections — you only look once.",
           "YOLO divides the image into an $S \\times S$ grid (7×7 for VOC). Each cell predicts $B$ bounding boxes plus $C$ class probabilities, and the cell containing an object's center is responsible for detecting it. The output is a single $7 \\times 7 \\times 30$ tensor laid out spatially — for $B=2$ boxes (5 numbers each) plus 20 class probabilities.",
         ],
         diagram: {
@@ -1319,13 +1319,13 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Segmentation",
         paragraphs: [
-          "Segmentation labels every pixel. Semantic segmentation gives each pixel a class (all dogs become one mass); instance segmentation separates the individual dogs; panoptic does both — instances for countable \"things,\" classes for uncountable \"stuff\" like sky and road. The architectural tension is that a classifier aggressively downsamples (good for semantics, bad for pixel precision), but segmentation needs both deep semantics and full resolution. The Fully Convolutional Network first solved this by upsampling a coarse score grid back to full size, but the masks were blurry — the spatial detail had been thrown away.",
+          "Detection draws boxes; segmentation goes all the way down and labels every single pixel. There are flavors: semantic segmentation hands each pixel a class (so all the dogs blur into one mass), instance segmentation separates the individual dogs, and panoptic does both at once — instances for countable \"things,\" classes for uncountable \"stuff\" like sky and road. The hard part is an architectural tug-of-war: a classifier wants to aggressively downsample (great for semantics, terrible for pixel precision), yet segmentation demands both deep semantics and full resolution at the same time. The Fully Convolutional Network took the first crack at this by upsampling a coarse score grid back up to full size — but the masks came out blurry, because the spatial detail had already been thrown away.",
         ],
       },
       {
         heading: "U-Net",
         paragraphs: [
-          "U-Net solved the resolution-versus-semantics problem with a clean, symmetric design: an encoder that downsamples (building semantics), a decoder that upsamples (recovering resolution), and skip connections that splice each encoder feature map into the matching decoder stage. The deep \"what\" flows up through the bottleneck; the precise \"where\" flows across through the skips; and the decoder's conv layers merge them. It's sample-efficient, gives sharp boundaries, works on 2-D and 3-D, and — a decade on — is still the backbone inside diffusion models.",
+          "U-Net cut through the resolution-versus-semantics problem with a design so clean it's almost obvious in hindsight: an encoder that downsamples (building up semantics), a decoder that upsamples (recovering resolution), and skip connections that splice each encoder feature map straight into the matching decoder stage. The deep \"what\" flows up through the bottleneck; the precise \"where\" flows sideways across the skips; and the decoder's conv layers fuse the two. It's sample-efficient, produces sharp boundaries, works in both 2-D and 3-D, and — a full decade later — is still sitting at the heart of diffusion models.",
         ],
         diagram: {
           id: "unet",
@@ -1347,7 +1347,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Vision Transformers",
         paragraphs: [
-          "For a decade CNNs owned vision. Then ViT (2020) asked: can we drop the CNN's inductive biases and just feed a transformer raw image patches? Chop the image into fixed 16×16 patches, flatten and linearly project each into a token, prepend a learnable [CLS] token, add positional embeddings, and run a standard transformer encoder — identical to BERT, just on image tokens. The [CLS] token's final state feeds the classifier.",
+          "For a solid decade, CNNs simply owned vision. Then ViT came along in 2020 and asked a deliberately provocative question: what if we drop all of the CNN's hand-built inductive biases and just feed a transformer raw image patches? The recipe is almost suspiciously simple. Chop the image into fixed 16×16 patches, flatten and linearly project each one into a token, prepend a learnable [CLS] token, add positional embeddings, and run a completely standard transformer encoder over it — the exact same thing as BERT, only on image tokens. The [CLS] token's final state is what feeds the classifier.",
         ],
         diagram: {
           id: "vit-patches",
@@ -1357,13 +1357,13 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The catch is data. With a few million images ViTs underperform CNNs, because they have weak inductive biases and must learn locality and translation invariance from scratch; with 300 million they overtake the best CNNs, and the gap widens with scale. This is the same inductive-bias-versus-scale story from language: strong priors win at small scale, weak priors plus parameters win at large scale. Follow-ups made ViTs practical without Google-scale data: DeiT (strong augmentation + distillation), Swin (windowed, hierarchical attention for high resolution), and the self-supervised pair MAE (mask 75% of patches and reconstruct) and DINO (self-distillation), which learn rich features with no labels at all.",
+          "The catch, as always, is data. Give a ViT only a few million images and it actually underperforms CNNs — with such weak inductive biases, it has to learn locality and translation invariance from scratch. Give it 300 million and it overtakes the best CNNs, and the gap only widens as you scale further. It's the same inductive-bias-versus-scale story we saw in language: strong priors win at small scale, weak priors plus a mountain of parameters win at large scale. Follow-ups made ViTs practical without Google-scale data: DeiT (strong augmentation + distillation), Swin (windowed, hierarchical attention for high resolution), and the self-supervised pair MAE (mask 75% of patches and reconstruct) and DINO (self-distillation), which learn rich features with no labels at all.",
         ],
       },
       {
         heading: "Vision-language models",
         paragraphs: [
-          "A VLM takes images and text and generates text. The winning recipe: encode the image with a ViT into tokens, project them into the LLM's space, and interleave them with text tokens — the LLM attends to visual tokens just like words. This is the unifying insight of modern ML: anything you can tokenize can become input to a transformer.",
+          "A VLM takes images and text in and generates text out. The recipe that won is delightfully reusable: encode the image with a ViT into tokens, project those tokens into the LLM's space, and interleave them with the text tokens — and from there the LLM attends to visual tokens exactly the way it attends to words. This is the unifying idea underneath so much of modern ML: anything you can tokenize can be fed to a transformer.",
         ],
         diagram: {
           id: "vlm",
@@ -1388,7 +1388,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The arc is one of the cleanest in ML: convolutions and residuals made deep vision work; detection and segmentation specialized it; and then the transformer — once it had enough data — absorbed vision too, until everything became tokens flowing into one model. CNN, detector, segmenter, ViT, VLM: the same conceptual DNA, scaled up.",
+          "The arc here is one of the cleanest in all of ML, and it's worth saying out loud. Convolutions and residuals made deep vision work in the first place; detection and segmentation specialized it for harder questions; and then the transformer, once it finally had enough data behind it, swallowed vision too — until everything just became tokens flowing into one model. CNN, detector, segmenter, ViT, VLM: it's all the same conceptual DNA, scaled up.",
         ],
       },
     ],
