@@ -32,7 +32,7 @@ export default function Home() {
 
   return (
     <main className="w-full max-w-5xl mx-auto px-6 md:px-10 py-16 md:py-24">
-      <div className="flex flex-col-reverse gap-10 md:flex-row md:items-start md:justify-between md:gap-12">
+      <div className="flex flex-col gap-10 md:flex-row-reverse md:items-start md:justify-between md:gap-12">
         <div className="max-w-xl">
           <h1 className="font-[family-name:var(--font-display)] text-5xl sm:text-6xl md:text-7xl font-black uppercase leading-[0.92] tracking-tight">
             {profile.name}
