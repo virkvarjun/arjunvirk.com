@@ -355,13 +355,13 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The neuron",
         paragraphs: [
-          "A neuron is the atomic unit of a network. It takes a vector input, computes a weighted sum, adds a bias, and applies a nonlinear activation. A weight is the strength of a connection between neurons; a bias is a learned offset that shifts the neuron's output.",
+          "A neuron is the atomic unit of the whole thing, and it's almost embarrassingly simple. It takes a vector of inputs, computes a weighted sum, adds a bias, and runs the result through a nonlinear activation. A weight is just the strength of a connection between two neurons; the bias is a learned offset that lets the neuron shift its output up or down.",
         ],
         equations: ["z = \\mathbf{w}^\\top \\mathbf{x} + b, \\qquad a = \\sigma(z)"],
       },
       {
         paragraphs: [
-          "The weights determine how much each input feature matters; the bias shifts the decision threshold (even with all inputs zero, $z = b$); and the activation $\\sigma$ introduces the nonlinearity. Without it, the entire network — no matter how many layers — would collapse into a single linear transformation.",
+          "Each piece earns its place. The weights say how much each input feature matters. The bias shifts the threshold — even if every input is zero, $z = b$, so the bias controls how easily the neuron fires. And the activation $\\sigma$ is what introduces the nonlinearity. Drop it and the whole network, however many layers deep, collapses back into a single linear transformation — you'd have gained nothing from the depth.",
         ],
       },
       {
@@ -381,7 +381,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Activation functions",
         paragraphs: [
-          "The nonlinearity is what gives neural networks their power — a chain of linear layers is equivalent to a single linear layer, because the composition of linear maps is linear. The common choices each have characteristic shapes and failure modes.",
+          "This is worth saying twice because it's the whole reason depth buys you anything: the nonlinearity is where a network's power comes from. Stack linear layers and you still just have a linear layer, because composing linear maps gives you another linear map. The common activations each have their own shape and their own way of misbehaving.",
         ],
         diagram: {
           id: "activation-functions",
@@ -426,7 +426,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Part 3: How the network learns",
         paragraphs: [
-          "To improve, the network needs a way to measure how wrong its predictions are. The loss function $L(\\hat{y}, y)$ takes a prediction and a true label and returns a scalar. Training searches for the parameters $\\theta$ that minimize the average loss over the training set:",
+          "Before a network can improve, it needs some way of knowing how wrong it currently is. That's the job of the loss function $L(\\hat{y}, y)$: hand it a prediction and the true label and it hands you back a single number. Training is then just the search for the parameters $\\theta$ that make the average loss over the training set as small as possible:",
         ],
         equations: [
           "\\mathcal{L}(\\theta) = \\frac{1}{N} \\sum_{i=1}^{N} L\\!\\left( f(\\mathbf{x}_i; \\theta),\\, \\mathbf{y}_i \\right)",
@@ -451,7 +451,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The learning rate $\\eta > 0$ controls the step size: too small and learning crawls; too large and the optimizer overshoots or diverges. Geometrically, you stand on the loss surface and repeatedly step downhill, perpendicular to the contours of equal cost.",
+          "The learning rate $\\eta > 0$ sets how big a step you take. Too small and training crawls; too large and you overshoot the minimum or fly off entirely. Picture yourself standing somewhere on the loss surface and repeatedly stepping straight downhill — perpendicular to the contours of equal cost. (The diagram below is interactive; drag the learning rate and watch the descent crawl, converge, or blow up.)",
         ],
         diagram: {
           id: "gradient-descent",
@@ -470,8 +470,8 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Part 4: Backpropagation",
         paragraphs: [
-          "How do we actually compute $\\nabla\\mathcal{L}$ for a network with millions or billions of parameters? Backpropagation computes the entire gradient in one backward pass through the network, in time roughly equal to one forward pass.",
-          "Think of the network as a graph where nodes are operations and edges carry tensors. The forward pass flows data forward to compute the loss; the backward pass flows derivatives backward, multiplying local Jacobians along each edge. Every modern framework (PyTorch, JAX, TensorFlow) implements this as automatic differentiation.",
+          "So how do you actually compute $\\nabla\\mathcal{L}$ when there are millions or billions of parameters to differentiate? This is what backpropagation is for. It computes the entire gradient in a single backward pass through the network, taking roughly as long as one forward pass — not one derivative per parameter, which would be hopeless.",
+          "The mental picture: the network is a graph, with operations at the nodes and tensors flowing along the edges. The forward pass pushes data forward to compute the loss; the backward pass pushes derivatives backward, multiplying a local Jacobian at each edge. Every modern framework — PyTorch, JAX, TensorFlow — does this automatically, which is what \"automatic differentiation\" means.",
         ],
         diagram: {
           id: "backprop-flow",
@@ -512,7 +512,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Optimizers",
         paragraphs: [
-          "Training navigates high-dimensional, non-convex loss surfaces, and the optimizer chooses how. The lineage runs from plain SGD to the adaptive methods that dominate today.",
+          "The loss surfaces you're navigating are high-dimensional and decidedly non-convex, and the optimizer is what decides how you move across them. There's a clear lineage here, running from plain SGD up to the adaptive methods everyone uses today.",
         ],
         list: [
           "SGD — sample a mini-batch (typical sizes 32–256), compute its gradient, step against it. Cheap and noisy; the noise often helps escape shallow minima and saddles.",
@@ -569,7 +569,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Normalization",
         paragraphs: [
-          "Normalization layers stabilize training by controlling the distribution of activations and gradients — arguably the biggest advance since backprop. The common idea: rescale activations to zero mean and unit variance, then learn a scale $\\gamma$ and shift $\\beta$ to undo it when useful.",
+          "Normalization layers keep training stable by controlling how activations and gradients are distributed, and they're arguably the biggest single advance since backprop itself. The shared idea is simple: rescale the activations to zero mean and unit variance, then give the network a learnable scale $\\gamma$ and shift $\\beta$ so it can partly undo that whenever it's useful.",
         ],
         equations: [
           "\\hat{x}_i = \\frac{x_i - \\mu_B}{\\sqrt{\\sigma_B^2 + \\epsilon}}, \\qquad y_i = \\gamma\\hat{x}_i + \\beta",
