@@ -64,6 +64,14 @@ export const workSection = {
   subtitle: "Writing, research, and projects.",
   projects: [
     {
+      title: "BigBrother: First Autonomous Interactive Agentic Browser",
+      category: "Project",
+      date: "May 2026",
+      description:
+        "Placeholder description. An autonomous agentic browser that interactively navigates and acts on the web on your behalf.",
+      href: "#",
+    },
+    {
       title: "Machine Learning Bible",
       category: "Writing",
       date: "Apr 2026",
@@ -72,7 +80,7 @@ export const workSection = {
       href: "#",
     },
     {
-      title: "PicoChem: Transformer from Scratch in numpy + CUDA",
+      title: "PicoChem: Transformer from Scratch in numpy + Custom CUDA Kernels",
       category: "Project",
       date: "Mar 2026",
       description:
@@ -96,7 +104,7 @@ export const workSection = {
       href: "#",
     },
     {
-      title: "Pan-Cancer Immunotherapy Quantification",
+      title: "SOTA Pan-Cancer Immunotherapy Quantification",
       category: "Research",
       date: "Dec 2025",
       description:
@@ -104,7 +112,7 @@ export const workSection = {
       href: "#",
     },
     {
-      title: "Thyroid Cancer Risk Stratification (UCLA)",
+      title: "Novel Thyroid Cancer Risk Stratification System (UCLA BAIR)",
       category: "Research",
       date: "Nov 2025",
       description:
@@ -120,7 +128,7 @@ export const workSection = {
       href: "#",
     },
     {
-      title: "Wisp: Custom MCP for Daily Notion",
+      title: "Wisp: Custom MCP for Daily Notion and Google Workspace",
       category: "Project",
       date: "Sep 2025",
       description:
