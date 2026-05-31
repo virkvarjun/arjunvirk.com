@@ -36,14 +36,14 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "Before deep learning ate everything, classical ML algorithms quietly powered most of what worked in production — and on tabular data they still do. Each carries its own inductive bias, failure modes, and ideal use case.",
-          "This chapter walks through the canonical algorithms — what they optimize, the math behind them, and when to reach for each — closing with a quick guide for picking one.",
+          "Before deep learning ate everything, classical ML algorithms quietly powered most of what actually worked in production — and on tabular data, they still do. Each one comes with its own assumptions about the world, its own ways of failing, and its own sweet spot.",
+          "We'll go through the canonical ones here: what each is really optimizing, the bit of math that makes it tick, and when you'd reach for it. At the end there's a quick cheat sheet for picking one.",
         ],
       },
       {
         heading: "Linear Regression",
         paragraphs: [
-          "The simplest supervised algorithm. Linear regression fits a straight line (a hyperplane in higher dimensions) through the data by choosing the weights that minimize squared error:",
+          "The simplest supervised algorithm there is. Linear regression fits a straight line — a hyperplane once you have more than one feature — through the data by picking the weights that make the squared error as small as possible:",
         ],
         equations: ["\\hat{y} = w_1 x_1 + w_2 x_2 + \\cdots + w_n x_n + b"],
       },
@@ -68,13 +68,13 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "It is trained with binary cross-entropy loss. The decision boundary is linear, but the output is a calibrated probability. Logistic regression is the workhorse of binary classification in industry: fast, interpretable (each weight is that feature's log-odds contribution), and a strong baseline for any classification problem.",
+          "You train it with binary cross-entropy loss. The decision boundary is still a straight line, but now the output is a calibrated probability rather than a hard label. This is the workhorse of binary classification in industry — it's fast, you can actually read what it learned (each weight is that feature's contribution to the log-odds), and it's a strong baseline for basically any classification problem you'll meet.",
         ],
       },
       {
         heading: "K-Nearest Neighbours (KNN)",
         paragraphs: [
-          "A non-parametric method for both classification and regression. To predict, it looks at the $k$ closest training examples and either takes a majority vote (classification) or averages them (regression). There is no real training phase — it simply stores the dataset and does all the work at prediction time.",
+          "A non-parametric method that works for both classification and regression. To make a prediction it looks at the $k$ closest training examples and either takes a majority vote (classification) or averages their values (regression). There's no real training phase at all — KNN just memorizes the dataset and does all of its work at prediction time.",
         ],
         diagram: {
           id: "knn",
@@ -141,7 +141,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "Decision trees are highly interpretable — you can literally read off the rules — and they handle numerical and categorical features without preprocessing. Their weakness is that a single deep tree easily overfits, memorizing training quirks. The fix is to combine many trees, which leads to ensemble methods.",
+          "Trees are about as interpretable as models get — you can literally read the decision rules off the diagram — and they happily take numerical and categorical features without any preprocessing. The catch is that a single deep tree overfits easily, memorizing the quirks of your training set. The fix is to stop relying on one tree and combine many of them, which is where ensemble methods come in.",
         ],
       },
       {
@@ -155,8 +155,8 @@ export const mlGuideChapters: Chapter[] = [
         heading: "Ensembles: Boosting",
         paragraphs: [
           "Boosting trains models sequentially, each one trying to fix the errors of the ensemble so far; predictions are a weighted combination. Unlike bagging — which trains models in parallel and averages — boosting is intrinsically sequential and reduces bias more than variance.",
-          "Modern gradient-boosting libraries (XGBoost, LightGBM, CatBoost) are devastatingly effective on tabular data, winning an enormous share of Kaggle competitions and serving as the production default at countless companies. Working with structured data and unsure what to try? Start with gradient boosting.",
-          "Variance, here, is the error caused by a model's sensitivity to small fluctuations in the training data — usually from a model complex enough to fit random noise rather than the underlying pattern.",
+          "The modern gradient-boosting libraries — XGBoost, LightGBM, CatBoost — are devastatingly good on tabular data. They've won an enormous share of Kaggle competitions and are the production default at countless companies. If you're working with structured data and aren't sure what to try, start here.",
+          "One term worth pinning down: variance is the error that comes from a model being too sensitive to small wiggles in the training data — usually because it's complex enough to fit the random noise instead of the underlying pattern.",
         ],
       },
       {
@@ -216,7 +216,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The classical algorithms haven't been replaced — they've been joined. For most tabular business data, gradient boosting still beats neural networks. Deep learning's dominance is concentrated in the domains where representation learning matters most.",
+          "The thing to take away: these classical algorithms haven't been replaced, they've been joined. For most tabular business data, gradient boosting still beats neural networks outright. Deep learning's dominance is concentrated in the places where the model has to learn its own representations — images, audio, language — which is exactly where we head next.",
         ],
       },
     ],
