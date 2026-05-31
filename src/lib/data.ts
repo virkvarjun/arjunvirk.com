@@ -23,8 +23,8 @@ export const landing = {
   bullets: [
     "Software Engineering @ UWaterloo",
     "Robotics Research Engineer @ BracketBot Founding Team",
-    "Computational Oncology Researcher @ Top Global AI Cancer Lab UCLA BAIR",
-    "Prev. Data Infrastructure and Transformer Research Engineer @ Triage Technologies",
+    "Computational Oncology Researcher @ UCLA BAIR",
+    "Prev. Data and Transformer Researcher @ Triage Technologies",
     "Named Top ML Researcher in Canada (0.1%)",
     "ML Agents and Research Consulting Business",
   ],
