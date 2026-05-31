@@ -133,6 +133,32 @@ export function plotCurve(
   return pts.join(" ");
 }
 
+/**
+ * Wrapper for an interactive diagram, which renders its own SVG plus HTML
+ * controls (sliders, buttons) — so, unlike DiagramFrame, it does not provide
+ * the <svg> element itself.
+ */
+export function InteractiveFrame({
+  children,
+  caption,
+}: {
+  children: ReactNode;
+  caption?: string;
+}) {
+  return (
+    <figure className="my-7">
+      <div className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
+        {children}
+      </div>
+      {caption && (
+        <figcaption className="mt-2 text-xs text-[var(--muted)]">
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 /** Figure wrapper: a bordered card holding an SVG, with an optional caption. */
 export function DiagramFrame({
   children,

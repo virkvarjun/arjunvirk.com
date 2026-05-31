@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
-import { DiagramFrame } from "./frame";
+import { DiagramFrame, InteractiveFrame } from "./frame";
+import { GradientDescentInteractive } from "./interactive/gradient-descent";
 import {
   LinearRegression,
   KNN,
@@ -12,7 +13,6 @@ import {
 import {
   MLPNetwork,
   ActivationFunctions,
-  GradientDescent,
   BackpropFlow,
   TrainValLoss,
 } from "./ch1";
@@ -62,7 +62,7 @@ import {
   LethalTrifecta,
 } from "./ch6";
 
-type Entry = { Comp: ComponentType; viewBox?: string };
+type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
 // Maps the `diagram.id` referenced in chapters.ts to a rendered component.
 const registry: Record<string, Entry> = {
@@ -76,7 +76,7 @@ const registry: Record<string, Entry> = {
   // chapter 1
   "mlp-network": { Comp: MLPNetwork, viewBox: "0 0 400 224" },
   "activation-functions": { Comp: ActivationFunctions, viewBox: "0 0 400 220" },
-  "gradient-descent": { Comp: GradientDescent },
+  "gradient-descent": { Comp: GradientDescentInteractive, interactive: true },
   "backprop-flow": { Comp: BackpropFlow, viewBox: "0 0 470 150" },
   "train-val-loss": { Comp: TrainValLoss },
   // chapter 2
@@ -126,7 +126,14 @@ export function Diagram({ id, caption }: { id: string; caption?: string }) {
   if (!entry) {
     return null;
   }
-  const { Comp, viewBox } = entry;
+  const { Comp, viewBox, interactive } = entry;
+  if (interactive) {
+    return (
+      <InteractiveFrame caption={caption}>
+        <Comp />
+      </InteractiveFrame>
+    );
+  }
   return (
     <DiagramFrame caption={caption} viewBox={viewBox}>
       <Comp />
