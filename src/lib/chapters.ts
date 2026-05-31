@@ -1088,6 +1088,13 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        heading: "Seq2Seq and Bahdanau attention",
+        paragraphs: [
+          "The bridge from RNNs to attention runs through Seq2Seq, a model Ilya Sutskever built from two LSTMs: an encoder that reads the input sentence and produces a single final hidden state $h_{\\text{enc}}$, and a decoder LSTM initialized with that state that generates the output one token at a time. \"I like cats\" goes in, the encoder compresses the whole sentence into $h_{\\text{enc}}$, and the decoder unrolls \"J'aime les chats\" from it. It worked well for translation, but every drop of information had to flow through that one fixed-size vector — for a paragraph, the model forgot the beginning of the input by the time it generated the end.",
+          "Bahdanau attention (2014) was bolted on as the fix. The decoder's current hidden state $s_{i-1}$ acts as a query, each encoder hidden state $h_j$ as a key and value; you score how relevant each $h_j$ is to $s_{i-1}$, softmax the scores into weights $\\alpha_{ij}$ that sum to 1, and form a context vector $c_i = \\sum_j \\alpha_{ij}\\,h_j$ to generate the next token. This is exactly self-attention, generalized: instead of the decoder attending to the encoder, every token attends to every other. One detail to flag — Bahdanau computed the compatibility score with a small feedforward network, not the dot product the transformer would later use. But this was the birth of attention.",
+        ],
+      },
+      {
         heading: "The transformer, end to end",
         paragraphs: [
           "At the highest level a transformer takes a sequence in and produces a sequence out. Internally it splits into an encoder that processes the input in parallel and a decoder that generates the output one token at a time — in the original paper, stacks of six identical layers each. The decoder generates autoregressively: each step looks at what it has already produced and, via cross-attention, at the full encoder output.",
@@ -1126,6 +1133,7 @@ export const mlGuideChapters: Chapter[] = [
         heading: "Multi-head attention",
         paragraphs: [
           "A single attention pattern can only capture one kind of relationship at a time. Multi-head attention gets around that by running $h$ of them in parallel (the original paper used $h = 8$), each with its own $W_Q, W_K, W_V$ working on a smaller $d/h$-dimensional slice. You concatenate the heads' outputs and push them through a final projection $W_O$. What's nice is that the heads end up specializing on their own — some learn grammar, some coreference, some positional patterns — and nobody assigns those roles by hand; training does it.",
+          "Why eight, though? It's a hyperparameter balancing two failure modes: too few heads and each must learn too many relationships at once, losing specialization; too many and each head's dimension gets too small to represent anything meaningful (while you pay more in compute). With $d = 512$ and $h = 8$, each head gets 64 dimensions — diverse enough to learn multiple patterns, large enough to keep useful capacity. Modern large models often use far more heads (32, 64, even 128), with proportionally smaller per-head dimensions.",
         ],
         equations: [
           "\\text{MultiHead}(Q,K,V) = \\text{Concat}(\\text{head}_1, \\dots, \\text{head}_h)\\,W_O",
@@ -1151,7 +1159,7 @@ export const mlGuideChapters: Chapter[] = [
         heading: "Cross-attention and the feed-forward network",
         paragraphs: [
           "After masked self-attention, the decoder still needs the input. Cross-attention is the bridge: the query comes from the decoder, the keys and values from the encoder output — so the decoder asks \"given what I've written, which input tokens are relevant?\" (Decoder-only models like GPT have no cross-attention, since there's no separate encoder.)",
-          "Once attention has gathered context, the feed-forward network processes it, applied independently to each position. It's a two-layer MLP that expands to a larger dimension (the original used $d_{\\text{model}} = 512 \\to d_{\\text{ff}} = 2048$), applies a nonlinearity, and contracts back. The FFN holds most of a transformer's parameters — which is exactly why Mixture of Experts targets it.",
+          "Once attention has gathered context, the feed-forward network processes it, applied independently to each position. It's a two-layer MLP that expands to a larger dimension (the original used $d_{\\text{model}} = 512 \\to d_{\\text{ff}} = 2048$, a 4× expansion), applies a nonlinearity, and contracts back. Here's why it matters that the FFN holds most of a transformer's parameters: with $d_{\\text{model}} = 512$ and $d_{\\text{ff}} = 2048$, each FFN layer has roughly $4 \\times 512 \\times 2048 \\approx 4$ million parameters, while multi-head attention at the same $d_{\\text{model}}$ has only about $4 \\times 512^2 \\approx 1$ million. In large LLMs the FFN is where most of the model's \"knowledge\" lives — which is exactly why Mixture of Experts targets it.",
         ],
         equations: [
           "\\text{FFN}(x) = \\max(0,\\ x W_1 + b_1)\\,W_2 + b_2",
@@ -1160,7 +1168,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Layer norm and residual connections",
         paragraphs: [
-          "Two pieces hold deep stacks together. Layer normalization rescales each token's activations to zero mean and unit variance across its features, then learns a scale $\\gamma$ and shift $\\beta$ — stabilizing training without depending on batch size (unlike batch norm), which is why transformers use it.",
+          "Two pieces hold deep stacks together. Layer normalization rescales each token's activations to zero mean and unit variance across its features, then learns a scale $\\gamma$ and shift $\\beta$. The contrast with batch norm — which computes its statistics across a batch of examples rather than across one example's features — is exactly why transformers prefer layer norm, for three reasons: it doesn't depend on batch size (transformers train at wildly varying batch sizes), it works fine with variable-length sequences, and it's compatible with autoregressive generation, where you process one token at a time at inference. (LLaMA and many recent LLMs go a step further with RMSNorm, dropping the mean subtraction entirely.)",
         ],
         equations: [
           "\\text{LayerNorm}(x) = \\gamma\\,\\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} + \\beta",
@@ -1199,6 +1207,18 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        heading: "What encoders are still for",
+        paragraphs: [
+          "In the GPT era encoders aren't obsolete, just specialized into the parts of the pipeline where bidirectional representation beats generation. Embedding models — OpenAI's text-embedding-3, Cohere Embed, BGE, Voyage, sentence-transformers — are encoders: text in, vector out, powering semantic search, RAG retrieval, clustering. Reranking uses a cross-encoder that takes the query and a candidate document jointly and outputs one relevance score — slower than a vector lookup but more accurate, run after the initial retrieval. And classification and structured tasks — sentiment, intent detection, named-entity recognition, content moderation — are often faster, cheaper, and more accurate with a fine-tuned encoder than with an LLM. (The vision side of multimodal models, typically a ViT, is an encoder too.)",
+        ],
+      },
+      {
+        heading: "RAG and tool use",
+        paragraphs: [
+          "Even the best LLM has three hard limits: it doesn't know facts from after its training cutoff, it can't see your private data, and it can confabulate plausible-sounding nonsense. Both fixes augment the model with external systems. Retrieval-augmented generation (RAG) retrieves relevant documents — via those encoder embedding models — and feeds them into the prompt so the model answers from real, current, private sources instead of parametric memory. Tool use lets the model call external functions (search, code execution, databases, APIs) and condition on the results. Either way, the model stops being a closed box and starts grounding its output in something verifiable.",
+        ],
+      },
+      {
         heading: "How modern models diverge",
         paragraphs: [
           "The 2017 recipe is still the skeleton; modern LLMs swap individual pieces. Positional encodings moved to RoPE (rotate Q and K by an angle that depends on position, so the dot product naturally depends on the relative offset $m-n$) and ALiBi (bias attention scores by distance) — both extrapolate to longer contexts better than sinusoids. RMSNorm replaces LayerNorm (drop the mean subtraction, ~10–15% cheaper), and SwiGLU — a gated activation — replaces ReLU in the FFN:",
@@ -1220,6 +1240,12 @@ export const mlGuideChapters: Chapter[] = [
         },
       },
       {
+        heading: "What sliding window sacrifices",
+        paragraphs: [
+          "Windowed attention isn't free context. A token at position 50,000 can't directly attend to one at position 100 — the information has to ripple up through layers — and that produces real failure modes: needle-in-a-haystack retrieval at long distance (the answer at position 1,000 and the question at 50,000 can get lost as information propagates through $L$ layers without being overwritten), multi-hop reasoning whose reference chains span the whole document, and long-range copying of a specific phrase from far back. The usual mitigations are periodic full-attention layers and attention sinks — always attending to the first few tokens, which empirically stabilizes long-context behavior.",
+        ],
+      },
+      {
         paragraphs: [
           "Inference splits into two phases with different bottlenecks: prefill (process the whole prompt in parallel, compute-bound) and decode (generate one token at a time, memory-bandwidth-bound — it reads the entire cache and weights per token). Grouped-Query Attention shrinks the cache by sharing K and V across groups of query heads — Multi-Query is the extreme of one shared KV — recovering most of the memory with little quality loss.",
         ],
@@ -1232,6 +1258,27 @@ export const mlGuideChapters: Chapter[] = [
       {
         paragraphs: [
           "Flash Attention is worth dwelling on because of what it represents. It's a re-implementation of attention that is mathematically identical to the original but never actually materializes the full $n \\times n$ score matrix — it works through attention in tiles small enough to fit in fast on-chip SRAM, using an online softmax, and the result is a 2–4× speedup with memory that grows linearly instead of quadratically. That's a pattern you'll see again and again in modern ML: some of the biggest wins don't come from new math at all, but from implementing the existing math more cleverly.",
+        ],
+      },
+      {
+        heading: "Quantization",
+        paragraphs: [
+          "Quantization maps high-precision numbers down to fewer bits. The ladder runs FP32 → FP16/BF16 (already standard, 2× memory and bandwidth savings at minimal quality cost), FP8 (newer, another 2× on top, common in training on H100s and beyond), INT8 (common for inference — weights, sometimes activations), and INT4/NF4 (aggressive, for running large models on consumer hardware, with some quality loss on harder tasks). Per-group or per-channel schemes quantize different slices of the weights with different scales for better precision than naive uniform quantization.",
+          "There are two main approaches: post-training quantization (PTQ) trains in high precision and quantizes after — cheap but lossy, with tools like GPTQ and AWQ — while quantization-aware training (QAT) simulates quantization during training so the model learns to be robust to it, costing more but giving better quality. Quantization is what lets a 70B-parameter model run on a single workstation GPU: at 4 bits, 70B params = 35 GB, which fits in a 48 GB card. Without it, frontier models would be inaccessible to anyone outside a major data center.",
+        ],
+      },
+      {
+        heading: "Speculative decoding",
+        paragraphs: [
+          "Decode is bottlenecked by memory bandwidth: each step reads the full KV cache and model weights for one token's worth of compute. Speculative decoding exploits a clever asymmetry — a small, fast \"draft\" model proposes $k$ tokens cheaply, and the big model verifies all $k$ in a single parallel forward pass (the same work it would have done for one token anyway). You compare the proposals against the big model's predictions and accept the longest matching prefix, then continue from the big model's correction.",
+          "When the draft agrees with the big model most of the time — which holds for easy tokens like punctuation, common words, and predictable completions — you get a 2–3× speedup with no quality loss, since the big model still has the final say. It's now standard in production inference. Variants include Medusa (multiple prediction heads on the same model), EAGLE (improved drafting via feature reuse), and lookahead decoding (parallel verification of multiple candidate sequences).",
+        ],
+      },
+      {
+        heading: "Inference engines and long context",
+        paragraphs: [
+          "Production serving doesn't run raw PyTorch — it runs specialized inference engines: vLLM (PagedAttention, high-throughput dynamic batching), TensorRT-LLM (NVIDIA's optimized engine), SGLang (flexible structured generation with constraint enforcement), and llama.cpp (quantized models on CPUs and consumer GPUs). Through continuous batching, paged KV cache, fused kernels, and quantization, these typically hit 5–10× the throughput of naive PyTorch.",
+          "Stretching context from a few hundred tokens to 200k, 1M, even 10M took innovations across the whole stack. Positional encodings: RoPE plus scaling tricks — NTK-aware scaling, YaRN, position interpolation — let a model trained at 8k handle 128k or more (ALiBi extrapolates natively). KV cache compression: at 1M tokens the cache alone can run to hundreds of GB, so quantization and eviction strategies (drop old or low-attention tokens) become essential. Training data: a model trained only on 4k examples won't use 1M tokens well even if it technically can, so long-context training curates long documents and uses progressive length training. And evaluation: \"needle in a haystack\" checks retrieval, while harder suites like RULER and LongBench probe whether a model actually reasons over long context. The honest caveat is that many models claim 1M but really only use the first 32k (and the last few thousand) well — improving fast, but still a real consideration when you design systems.",
         ],
       },
       {
@@ -1263,9 +1310,45 @@ export const mlGuideChapters: Chapter[] = [
         },
       },
       {
+        paragraphs: [
+          "A few variants are worth naming: QLoRA combines LoRA with quantization (a 4-bit frozen base plus trainable adapters) so you can fine-tune large models on a single consumer GPU, and DoRA decomposes each weight into a magnitude and a direction and applies the low-rank update to the direction, recovering a bit more of FullFT's quality. The adapter is permanently bound to its exact base model — a LoRA trained on Llama-3.1-8B works only with Llama-3.1-8B, since $B$ and $A$ take their shapes from that base's matrices — which is precisely what makes multi-tenant serving (many adapters over one frozen base, as in vLLM and SGLang) coherent.",
+        ],
+      },
+      {
+        heading: "LoRA Without Regret",
+        paragraphs: [
+          "Thinking Machines' empirical study (\"LoRA Without Regret\") condenses into two conditions for matching full fine-tuning (FullFT). First, apply LoRA to all layers — especially the MLP/MoE layers that hold most of the parameters. Attention-only LoRA underperforms even at matched parameter counts: on Llama-3.1-8B, attention-only at rank 256 (0.25B params) loses to MLP-only at rank 128 (0.24B params), so the gap isn't about parameter count, and applying LoRA to attention adds nothing beyond applying it to the MLPs. Second, stay out of the capacity-constrained regime — keep trainable parameters above the dataset's information content. LoRA doesn't hit a hard loss floor when starved; instead lower-rank adapters \"fall off\" the optimal loss curve once they run out of capacity.",
+          "On the practical knobs: the optimal LoRA learning rate is consistently about 10× higher than FullFT's (their multi-model fit landed on 9.8×), which makes transferring a known FullFT learning rate nearly mechanical — and for very short runs under ~100 steps the multiplier rises toward 15×, converging back to 10× for longer runs. The optimal learning rate is roughly independent of rank (thanks to the $1/r$ scaling in $W' = W + \\frac{\\alpha}{r}BA$, it shifts by less than 2× between rank 4 and 512, though rank 1 wants a touch lower). They used $\\alpha = 32$ with the standard Hugging Face peft initialization (uniform $A$ scaled by $1/\\sqrt{d_{\\text{in}}}$, zero-initialized $B$, same learning rate for both) and couldn't beat it. One caution: LoRA is less tolerant of large batch sizes than FullFT, a penalty that grows with batch size and isn't fixed by raising the rank — it's an optimization-dynamics effect of the $BA$ product, not a capacity one.",
+          "The standout result is for reinforcement learning: LoRA fully matches FullFT for policy-gradient RL even at rank 1. The argument is information-theoretic — policy gradients learn from the advantage function, which carries only $O(1)$ bits per episode, roughly 1000× less information per token than supervised learning. In their MATH example, ~10,000 problems at 32 samples each is about 320,000 bits to absorb, while a rank-1 LoRA on Llama-3.1-8B already has 3M parameters — nearly 10× that. RL also gave LoRA a wider band of well-performing learning rates.",
+        ],
+      },
+      {
         heading: "Beyond transformers: GANs and VAEs",
         paragraphs: [
-          "Two generative architectures round out the picture. A GAN pits a generator (noise → fake data) against a discriminator (real vs fake) in a minimax game; at the optimum the generator's distribution equals the data distribution and the discriminator is reduced to a coin flip. GANs produce sharp samples but are notoriously unstable (mode collapse, vanishing gradients). A VAE instead maps each input to a distribution — a mean $\\mu$ and spread $\\sigma$ — and samples $z = \\mu + \\sigma\\,\\varepsilon$, training with a reconstruction term plus a KL term that packs the latent clouds together so the space is smooth and samplable. VAEs are stable and give a clean latent space, at the cost of slightly blurry samples.",
+          "Two generative architectures round out the picture. A GAN pits a generator (noise $z$ → fake data) against a discriminator (real vs fake) in a minimax game over a single shared value function — D wants to push it up, G wants to push it down:",
+        ],
+        equations: [
+          "\\min_G \\max_D V(D,G) = \\mathbb{E}_{x \\sim p_{\\text{data}}}\\big[\\log D(x)\\big] + \\mathbb{E}_{z \\sim p_z}\\big[\\log\\big(1 - D(G(z))\\big)\\big]",
+        ],
+      },
+      {
+        paragraphs: [
+          "Early on, when G is bad, D rejects its fakes with total confidence and $\\log(1 - D(G(z)))$ flattens out, leaving G almost no gradient — the saturation problem. The standard fix is the non-saturating loss: train G to maximize $\\log D(G(z))$ instead, same goal (fool D) but with strong gradients exactly when G is struggling. The reason the game converges to reality is Goodfellow's 2014 proof. Hold G fixed and the optimal discriminator is $D^*(x) = \\frac{p_{\\text{data}}(x)}{p_{\\text{data}}(x) + p_g(x)}$ — the ideal detective's confidence at a point is just the fraction of stuff there that's genuinely real. Substitute $D^*$ back in and G's objective reduces to minimizing the Jensen–Shannon divergence between $p_g$ and $p_{\\text{data}}$, which bottoms out at exactly one place: $p_g = p_{\\text{data}}$, where $D^*(x) = \\tfrac{1}{2}$ everywhere — the coin flip. The perfectly played game recovers the true data distribution. In practice GANs are notoriously unstable (mode collapse, vanishing gradients from a too-strong discriminator), which is what Wasserstein GANs, spectral normalization, and gradient penalties exist to tame.",
+        ],
+      },
+      {
+        heading: "Autoencoders",
+        paragraphs: [
+          "Before VAEs, the plain autoencoder. It's a network trained to copy its input to its output through a bottleneck: an encoder $f$ compresses input $x$ into a latent code $z = f(x)$ much smaller than $x$, and a decoder $g$ reconstructs $\\hat{x} = g(z)$. The bottleneck is the whole point — if $z$ were as big as $x$ the network could copy numbers through and learn nothing, so forcing $z$ small makes it keep only the essential structure. Training just minimizes the reconstruction error, with no label at all — the input is its own target, which is why this is called self-supervised learning:",
+        ],
+        equations: [
+          "\\mathcal{L}(\\theta, \\phi) = \\frac{1}{N} \\sum_{i=1}^{N} \\big\\lVert\\, x_i - g_\\theta\\big(f_\\phi(x_i)\\big) \\big\\rVert^2",
+        ],
+      },
+      {
+        paragraphs: [
+          "Autoencoders are good for dimensionality reduction (a nonlinear cousin of PCA), denoising (feed in corrupted $x$, train it to output clean $x$), and anomaly detection (things it can't reconstruct well are unusual). But here's the catch that motivates everything next: a plain autoencoder learns a code $z$ yet learns nothing about how $z$ is distributed. The latent space is full of holes — pick a random $z$ and decode it and you usually get garbage, because the decoder only ever saw the specific scattered points the encoder happened to produce. So a vanilla autoencoder cannot generate new data reliably. Fixing exactly this is the job of the VAE.",
+          "A VAE keeps the encoder–decoder shape but reframes it probabilistically: instead of mapping $x$ to a single point, the encoder maps $x$ to a distribution over $z$ — a Gaussian with a mean $\\mu$ and a spread $\\sigma$ — and you sample $z = \\mu + \\sigma\\,\\varepsilon$ and decode it. Training balances two pulls: a reconstruction term that wants each image precisely pinned so it rebuilds perfectly (which would recreate the scattered-dots problem), and a KL term that punishes each cloud for drifting off-center or shrinking to a sharp point, constantly nudging everything back toward a standard cloud at the center of the map. The compromise — clouds distinct enough to rebuild their own images but overlapping and centered enough to leave no gaps — fills the latent space in smoothly, so you can throw away the encoder and generate by decoding random points from the center. The one cost of all that softness is slightly blurry samples, which is the main reason sharper methods like GANs and diffusion exist.",
         ],
       },
       {
