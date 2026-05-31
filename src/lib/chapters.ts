@@ -845,21 +845,21 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "Every modern frontier model is the product of a hardware stack working in concert — trillions of parameters, thousands of chips, all coordinating across high-speed interconnects to multiply matrices very, very fast. This chapter starts at the CPU, builds up through GPUs and TPUs, and ends with how a single model is split across an entire data center.",
+          "Behind every frontier model is a hardware stack working in concert — trillions of parameters, thousands of chips, all coordinating across high-speed interconnects to do one thing: multiply matrices very, very fast. It's easy to treat all of this as a black box, but a surprising amount of why models are slow, expensive, or memory-starved lives down here. So we'll start at the CPU, build up through GPUs and TPUs, and end with how a single model gets split across an entire data center.",
         ],
       },
       {
         heading: "Three kinds of compute: the CPU",
         paragraphs: [
-          "A CPU reads instructions and data from memory, computes, and writes results back — largely sequentially. Memory access is far slower than arithmetic, a gap so fundamental it has a name: the von Neumann bottleneck. The processor spends more time waiting for data than computing.",
-          "CPUs fight this with elaborate machinery — deep instruction pipelines, branch predictors, multiple cache levels (L1/L2/L3), out-of-order execution — all to keep a small number of cores fed. The result is flexibility: a CPU can run a database, an OS, a game, or a neural network. But each core is large and complex, so a chip holds only a few dozen. For highly parallel, arithmetic-heavy work like neural networks, most of that flexibility is wasted.",
+          "Start with the chip you already know. A CPU reads instructions and data from memory, computes, and writes the results back — largely one thing after another. The catch is that memory access is far slower than arithmetic, and that gap is so fundamental it has a name: the von Neumann bottleneck. More often than not, the processor is sitting around waiting for data rather than actually computing.",
+          "CPUs fight this with a lot of clever machinery — deep instruction pipelines, branch predictors, several cache levels (L1/L2/L3), out-of-order execution — all of it in service of keeping a small number of cores fed. What you get in return is flexibility: one CPU can run a database, an operating system, a game, or a neural network. But that flexibility isn't free. Each core is large and complicated, so a chip only fits a few dozen of them. And for the kind of work neural networks do — massively parallel, arithmetic-heavy — most of that cleverness just goes to waste.",
         ],
       },
       {
         heading: "The GPU",
         paragraphs: [
-          "A GPU takes the opposite bet: strip out most of the control logic and caches, and replace one big core with thousands of small arithmetic units (ALUs) — 2,500 to 5,000+. This is perfect for workloads where the same operation runs over millions of independent data points. A multiplication of two 4096×4096 matrices is 16 million independent multiply-accumulates; a GPU eats this for breakfast.",
-          "It is still a general-purpose processor, though — every ALU reads operands from registers or shared memory. The von Neumann bottleneck is reduced by the massively parallel memory system, not eliminated.",
+          "A GPU makes the opposite bet. Strip out most of the control logic and the big caches, and trade that one heavyweight core for thousands of small arithmetic units (ALUs) — somewhere from 2,500 to 5,000 and up. That's a terrible design for running an operating system and a perfect one for any workload where the same operation runs over millions of independent data points. Multiplying two 4096×4096 matrices is 16 million independent multiply-accumulates; a GPU eats that for breakfast.",
+          "It's worth being honest that this is still a general-purpose processor — every ALU is reading operands from registers or shared memory. The massively parallel memory system softens the von Neumann bottleneck; it doesn't make it disappear.",
         ],
         diagram: {
           id: "cpu-vs-gpu",
@@ -877,8 +877,8 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Threads, warps, and SIMT",
         paragraphs: [
-          "GPU code is written as a kernel — a function describing what one thread does. Launching a kernel starts millions of threads, organized into blocks, which are organized into a grid. Threads in a block share fast on-chip memory and can synchronize; blocks are independent and may run in any order.",
-          "In hardware, threads execute in warps of 32. A warp runs in SIMT mode — Single Instruction, Multiple Threads — so all 32 share one instruction fetch and decode, just on different data. The consequence: branching is expensive. If half a warp takes the if and half the else, the warp runs both paths sequentially with the inactive threads masked off. This is warp divergence, and avoiding it is a major theme of GPU optimization. Neural networks barely branch, which is part of why they map so well to GPUs.",
+          "Here's how you actually program one. GPU code is written as a kernel — a function that describes what a single thread does. When you launch a kernel you spin up millions of threads, organized into blocks, which are themselves organized into a grid. Threads inside a block share fast on-chip memory and can synchronize with each other; blocks are independent and may run in any order the hardware likes.",
+          "Down at the hardware level, threads execute in warps of 32. A warp runs in SIMT mode — Single Instruction, Multiple Threads — meaning all 32 threads share one instruction fetch and decode and just operate on different data. One consequence is worth burning into memory: branching is expensive. If half a warp takes the if and half takes the else, the warp runs both paths one after the other, masking off the threads that shouldn't be active for each. That's warp divergence, and dodging it is a recurring theme in GPU optimization. Neural networks happen to barely branch at all, which is a big part of why they map onto GPUs so beautifully.",
         ],
       },
       {
@@ -910,8 +910,8 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "TPUs and the systolic array",
         paragraphs: [
-          "Google decided even GPUs weren't specialized enough and built the TPU (Tensor Processing Unit) from scratch for neural networks. Confusingly, Google also calls its compute unit a TensorCore — different from NVIDIA's. Each has three pieces: a Matrix Multiplication Unit (MXU, a systolic array — 256×256 multiply-accumulators in v6e/v7), a vector unit (activations, softmax, norms), and a scalar unit (control flow, addressing).",
-          "The systolic array is the TPU's defining feature. Values of A flow in from the left moving right; values of B flow in from the top moving down; each cell multiplies what it sees, adds to a running total, and passes both operands to its neighbors. The critical property: data is loaded once and reused many times as it walks across the array — no memory access happens during the computation. It is a very large, very specialized GEMM engine wired directly in silicon.",
+          "Google looked at GPUs and decided even they weren't specialized enough, so they built the TPU (Tensor Processing Unit) from scratch with neural networks as the only customer. Confusingly, Google also named its compute unit a TensorCore — not the same thing as NVIDIA's. Each one has three pieces: a Matrix Multiplication Unit (the MXU, a systolic array — 256×256 multiply-accumulators in v6e/v7), a vector unit for activations, softmax, and norms, and a scalar unit for control flow and addressing.",
+          "The systolic array is the TPU's defining trick, and it's genuinely elegant once you picture it. Values of A flow in from the left and move right; values of B flow in from the top and move down; each cell multiplies whatever two numbers happen to be passing through it, adds the result to a running total, and hands both operands along to its neighbors. The payoff is in one property: data gets loaded once and then reused over and over as it walks across the array — no memory access happens at all during the computation itself. It's really just a very large, very specialized GEMM engine wired straight into silicon.",
         ],
         diagram: {
           id: "systolic-array",
@@ -963,7 +963,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         paragraphs: [
           "Arithmetic intensity — the ratio of operations to bytes moved — decides which side you're on. Large matmuls have high intensity (each loaded value is reused many times), so they are compute-bound and benefit from peak FLOPs. Element-wise operations have low intensity and are memory-bound — which is exactly why operator fusion matters, combining many small ops into one kernel to reuse loaded values. As a rule, inference for a small batch is memory-bandwidth bound (you reload all the weights per token), while training is more compute-bound.",
-          "The arc, in one breath: CPUs are universal but slow at parallel math; GPUs trade some flexibility for thousands of cores and happen to be perfect for matrix multiplication; CUDA made GPUs programmable and built a software moat almost as valuable as the silicon; and TPUs go further with purpose-built systolic arrays networked into data-center-scale pods. When a training run is mysteriously slow, the answer is almost always somewhere in this hierarchy — a memory bottleneck, an interconnect bottleneck, a precision issue, or kernel-launch overhead.",
+          "Here's the whole arc in one breath. CPUs are universal but slow at parallel math. GPUs give up some of that flexibility for thousands of cores and turn out to be perfect for matrix multiplication. CUDA made GPUs programmable and, in doing so, built a software moat that's nearly as valuable as the silicon underneath it. And TPUs push further still, with purpose-built systolic arrays networked into pods the size of data centers. So the next time a training run is mysteriously slow, trust that the answer is almost always hiding somewhere in this hierarchy — a memory bottleneck, an interconnect bottleneck, a precision issue, or plain old kernel-launch overhead.",
         ],
       },
     ],
