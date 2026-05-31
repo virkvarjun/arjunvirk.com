@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { DiagramFrame, InteractiveFrame } from "./frame";
 import { GradientDescentInteractive } from "./interactive/gradient-descent";
+import { ConvolutionInteractive } from "./interactive/convolution";
 import {
   LinearRegression,
   KNN,
@@ -43,7 +44,6 @@ import {
 } from "./ch4";
 import {
   ImageTensor,
-  Convolution,
   CnnStack,
   ReceptiveField,
   YoloGrid,
@@ -103,7 +103,7 @@ const registry: Record<string, Entry> = {
   lora: { Comp: LoRA, viewBox: "0 0 400 185" },
   // chapter 5
   "image-tensor": { Comp: ImageTensor, viewBox: "0 0 400 235" },
-  convolution: { Comp: Convolution, viewBox: "0 0 420 180" },
+  convolution: { Comp: ConvolutionInteractive, interactive: true },
   "cnn-stack": { Comp: CnnStack, viewBox: "0 0 420 200" },
   "receptive-field": { Comp: ReceptiveField, viewBox: "0 0 430 170" },
   "yolo-grid": { Comp: YoloGrid, viewBox: "0 0 400 262" },
