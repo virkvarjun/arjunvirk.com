@@ -1766,6 +1766,13 @@ export const mlGuideChapters: Chapter[] = [
         },
       },
       {
+        heading: "Levels 3 and 4, made concrete",
+        paragraphs: [
+          "A classic Level-3 setup makes the \"fixed structure\" idea concrete: a Zapier or n8n flow triggers when a new email lands in a support inbox, hands it to Claude to classify (bug report / billing question / feature request), routes it to the right Slack channel, and calls Claude again to draft a first-pass reply. The structure is fixed and human-designed; the AI is a smart component, not the driver.",
+          "Level 4 is where the structure goes away. A good example: an agent that researches a topic, builds a landing page, and deploys it — all from a single instruction. That's a genuine Level-4 task because there's no fixed sequence: the agent has to figure out what \"research\" means here, what to put on the page, how to deploy it, and what to do when something fails along the way. A workflow can't do this, because you can't enumerate the steps in advance.",
+        ],
+      },
+      {
         heading: "A Level-4 agent in practice",
         paragraphs: [
           "Take an open-source personal agent that runs on your machine, connects through the messaging apps you already use, and acts on your behalf — shell, browser, email, calendar. Most personal agents converge on the same five subsystems, and it's worth seeing them because the pattern recurs everywhere:",
@@ -1784,12 +1791,52 @@ export const mlGuideChapters: Chapter[] = [
           "In traditional software, configuration lives in JSON or a database. Agents flipped this: because the agent is a language model, its \"configuration\" is mostly plain English in Markdown files it reads natively. The popular conventions:",
         ],
         list: [
-          "AGENTS.md — who the agents are, what each is responsible for, and how messages route between them. The same convention Claude Code and Cursor use; it's becoming a de facto standard.",
+          "AGENTS.md — who the agents are, what each is responsible for, and how messages route between them. The same convention Claude Code and several other tools use; it's becoming a de facto standard.",
           "SOUL.md — personality, defaults, and hard rules. The hard-rules section does real safety work: the model reads it every turn, so a constraint stays in front of it even if a later prompt injection suggests otherwise.",
-          "TOOLS.md — the available actions, described not just as \"what does this do\" but \"when to use it and what the constraints are\" — operational policy in language the model attends to.",
+          "TOOLS.md — the available actions, described not just as \"what does this do\" but \"when to use it and what the constraints are\" — operational policy in language the model attends to. The tools are also registered programmatically with the model's tool-use API, so each one has a structured JSON schema; TOOLS.md is the narrative version of that, explaining the intent and policy the schema can't capture.",
           "MEMORY.md — long-term facts the agent has learned. You can audit, version, and delete a memory by editing one file — far easier than surgically removing an embedding from a vector DB. The cost is scale: past thousands of facts you need real retrieval.",
           "HEARTBEAT.md — a recurring checklist. Every interval the agent reads it and decides whether anything needs action, which is what makes it autonomous — \"it did something while I slept.\"",
-          "SKILL.md — reusable, just-in-time expertise: a folder with instructions plus supporting files, loaded into context only when a task matches its triggers.",
+          "SKILL.md — reusable, just-in-time expertise: a folder with a SKILL.md (YAML frontmatter plus natural-language instructions) and supporting files, loaded into context only when a task matches its triggers. The format is portable — compatible with Claude Code and Cursor conventions. If a skill doesn't exist, you can describe the task to your agent and have it draft one; the agent can also search ClawHub, the community skill registry, and install new skills at runtime.",
+        ],
+      },
+      {
+        heading: "The heartbeat: acting on a clock",
+        paragraphs: [
+          "A regular tool-using assistant only acts when you message it. A Level-4 personal agent acts on a clock. The gateway runs as a background daemon (systemd on Linux, a LaunchAgent on macOS) with a configurable heartbeat — every 30 minutes by default, or every hour when you're on Anthropic OAuth. On each heartbeat the agent reads the checklist in HEARTBEAT.md, decides whether any item needs action right now, and either messages you or responds with the literal sentinel HEARTBEAT_OK — a string the gateway watches for and silently drops. Anything other than HEARTBEAT_OK gets delivered to you, and that's how the agent surfaces things proactively.",
+          "The heartbeat is what produces the agent stories that go viral. AJ Stuyvenberg tasked his agent with buying a 2026 Hyundai Palisade: it scraped local dealer inventories, filled out contact forms with his phone and email, then spent several days playing dealers against each other — forwarding competing PDF quotes and asking each to beat the other's price — and landed about $4,200 below sticker, with Stuyvenberg showing up only to sign the paperwork. That negotiation unfolded across days, while he did other things, because the agent kept waking up and checking whether the next move was ready. The same capability has a dark mirror: another developer's agent filed a legal rebuttal to an insurance denial without being asked — it decided autonomously that the situation called for action.",
+        ],
+      },
+      {
+        heading: "How Level-4 agents compare",
+        paragraphs: [
+          "Not every Level-4 agent makes the same architectural choices. Lining up a file-based personal agent like OpenClaw against Claude Code, ChatGPT Agent, and Manus makes the tradeoffs visible:",
+        ],
+        definitions: [
+          {
+            term: "Open source",
+            definition: "OpenClaw — Yes (MIT). Claude Code — No. ChatGPT Agent — No. Manus — No.",
+          },
+          {
+            term: "Where it runs",
+            definition: "OpenClaw — your machine. Claude Code — your machine. ChatGPT Agent — OpenAI cloud. Manus — Manus cloud.",
+          },
+          {
+            term: "Where you talk to it",
+            definition: "OpenClaw — messaging apps. Claude Code — terminal, IDE. ChatGPT Agent — the ChatGPT app. Manus — a web dashboard.",
+          },
+          {
+            term: "Who owns state",
+            definition: "OpenClaw — you (files on disk). Claude Code — your Anthropic account. ChatGPT Agent — your OpenAI account. Manus — your Manus account.",
+          },
+          {
+            term: "Autonomy mode",
+            definition: "OpenClaw — heartbeat daemon. Claude Code — on-demand only. ChatGPT Agent — per-task. Manus — per-task.",
+          },
+        ],
+      },
+      {
+        paragraphs: [
+          "The architectural axis that matters most is where the agent lives and who owns the memory. Hosted agents (ChatGPT Agent, Manus) are easier to start with, but you're trusting a third party with everything the agent learns about you. Local agents (OpenClaw, Claude Code) put that on your own hardware — the cost being that you become the sysadmin.",
         ],
       },
       {
@@ -1806,7 +1853,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The N×M problem and MCP",
         paragraphs: [
-          "Before any standard existed, every AI app had to build its own integration for every system it touched — 5 apps times 10 systems meant 50 bespoke connectors, and the math only gets uglier from there. The Model Context Protocol (MCP), an open standard Anthropic introduced in late 2024, is the \"USB-C for AI\" that fixes this — one connector spec, so any compliant client just works with any compliant server. It's a JSON-RPC protocol with three roles (a host the user interacts with, a client managing one connection, and a server exposing capabilities) and three primitives (tools the model can call, resources it can read, and prompts the user can invoke). Build a server once and every MCP client gets it for free.",
+          "Before any standard existed, every AI app had to build its own integration for every system it touched — 5 apps times 10 systems meant 50 bespoke connectors, and the math only gets uglier from there. The Model Context Protocol (MCP), an open standard Anthropic introduced in late 2024, is the \"USB-C for AI\" that fixes this — one connector spec, so any compliant client just works with any compliant server. It's a JSON-RPC 2.0 protocol with three roles: a host the user interacts with (Claude Desktop, an IDE, your custom agent), a client living inside the host that manages a single connection, and a server — a separate process that exposes capabilities over the protocol. One host can run many clients, each connected to a different server. Servers expose three primitives: tools the model can call (create_issue, run_query), resources it can read into context (a file, a database row, a webpage), and prompts the user can invoke (/summarize-pr). Most agent work happens through tools — but resources are the underused power feature. Build a server once and every MCP client gets it for free.",
         ],
         diagram: {
           id: "mcp-nxm",
@@ -1815,9 +1862,15 @@ export const mlGuideChapters: Chapter[] = [
         },
       },
       {
+        heading: "MCP transports",
+        paragraphs: [
+          "There are two transport types you'll run into. stdio is for local servers: the host spawns the server as a subprocess and the two speak JSON-RPC over stdin/stdout — the default for something like a filesystem server running on your laptop. HTTP with Server-Sent Events is for remote servers, useful for SaaS integrations where the server runs somewhere else and the host connects over the network, often with OAuth for authentication. Either way the protocol is what's standardized; the SDK is just a convenience wrapper over JSON-RPC, so a server you write doesn't have to know anything about a specific client — any MCP client can use it identically.",
+        ],
+      },
+      {
         heading: "Beyond a single loop",
         paragraphs: [
-          "A single agent loop eventually slams into a wall. Long tasks fill up the context window, the model starts losing the thread, and tool-call accuracy quietly degrades. Production agents fight this on several fronts: compaction (summarize the old turns), sub-agents for isolation (spin up a fresh context for some focused piece of work and return only a summary — far and away the most powerful technique for long horizons), external memory (persist state to disk between turns), and just-in-time retrieval (hand the agent search and read tools instead of dumping everything in up front).",
+          "A single agent loop eventually slams into a wall. Long tasks fill up the context window, the model starts losing the thread, and tool-call accuracy quietly degrades. There's even a rough threshold: once you cross 50–80% context-window utilization, performance degrades noticeably — longer time-to-first-token, worse instruction following, hallucinated tool calls. Production agents fight this on several fronts: compaction (summarize the old turns and replace them with the summary — Claude Code does this automatically around the 95% mark, and the art is deciding what to preserve verbatim, like file paths and exact errors, versus what to compress), sub-agents for isolation (spin up a fresh context for some focused piece of work and return only a summary — far and away the most powerful technique for long horizons), external memory (persist state to disk between turns), and just-in-time retrieval (hand the agent search and read tools instead of dumping everything in up front — which is exactly why MCP resources matter: they're the model's filing cabinet, not its desk).",
         ],
         diagram: {
           id: "agent-patterns",
