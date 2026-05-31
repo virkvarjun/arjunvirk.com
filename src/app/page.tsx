@@ -1,7 +1,7 @@
 "use client";
 
 import { Mail } from "lucide-react";
-import { landing, profile } from "@/lib/data";
+import { landing, profile, workSection } from "@/lib/data";
 
 function GithubIcon({ size = 20 }: { size?: number }) {
   return (
@@ -90,6 +90,41 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <section className="mt-16 sm:mt-20 md:mt-28">
+        <h2 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl font-normal tracking-tight">
+          {workSection.heading}
+        </h2>
+        <p className="mt-1.5 text-sm text-[var(--muted)]">
+          {workSection.subtitle}
+        </p>
+
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+          {workSection.projects.map((project) => (
+            <article key={project.title} className="flex flex-col">
+              <a
+                href={project.href}
+                className="block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)] transition-opacity hover:opacity-80"
+                aria-label={project.title}
+              />
+              <h3 className="mt-3 text-sm leading-snug">
+                <a
+                  href={project.href}
+                  className="font-semibold underline-offset-2 hover:underline"
+                >
+                  {project.title}
+                </a>
+              </h3>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {project.date}, {project.category}
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
+                {project.description}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }
