@@ -24,7 +24,7 @@ export const landing = {
     "Software Engineering @ UWaterloo",
     "Robotics Research Engineer @ BracketBot Founding Team",
     "Computational Oncology Researcher @ UCLA BAIR",
-    "Prev. Data and Transformer Researcher @ Triage Technologies",
+    "Prev. Data and Transformer Researcher @ Triage Technologies ($50M)",
     "Named Top ML Researcher in Canada (0.1%)",
     "ML Agents and Research Consulting Business",
   ],
@@ -68,7 +68,7 @@ export const workSection = {
       category: "Writing",
       date: "May 2026",
       description:
-        "Placeholder description. A living reference covering core machine learning concepts from first principles.",
+        "A 200-page handwritten guide breaking down the math, intuition, and architectures behind modern machine learning and deep learning systems.",
       href: "#",
     },
     {
@@ -76,7 +76,7 @@ export const workSection = {
       category: "Research",
       date: "Apr 2026",
       description:
-        "Placeholder description. A minimal transformer implemented from the ground up in numpy with custom CUDA kernels.",
+        "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
       href: "#",
     },
     {
@@ -84,7 +84,7 @@ export const workSection = {
       category: "Research",
       date: "May 2026",
       description:
-        "Placeholder description. Exploring low-rank adaptation for vision-language-action models on real robots.",
+        "Developing novel LoRA and DoRA adapter architectures for efficient VLA fine-tuning, robotic manipulation, and continual learning under Isaac Bautista at BracketBot.",
       href: "#",
     },
     {
@@ -92,7 +92,7 @@ export const workSection = {
       category: "Research",
       date: "Mar 2026",
       description:
-        "Placeholder description. An action-chunking policy that reasons about and recovers from its own failures.",
+        "Built a failure-aware action chunking Transformer that detects trajectory failures with minimal pretraining and autonomously recovers through a self-correction algorithm.",
       href: "#",
     },
     {
@@ -100,7 +100,7 @@ export const workSection = {
       category: "Research",
       date: "Apr 2024",
       description:
-        "Placeholder description. Quantifying immunotherapy response signals across cancer types from multi-omic data.",
+        "Developed RL PPO system to predict immunotherapy efficacy and recommend ICI inhibitors across cancer types from 15% to 80%. Silver Medal at Canada’s National Science Fair.",
       href: "#",
     },
     {
@@ -108,7 +108,7 @@ export const workSection = {
       category: "Research",
       date: "Jun 2025",
       description:
-        "Placeholder description. Modeling patient risk to stratify thyroid cancer outcomes from clinical features.",
+        "Worked with Dr. William Speier and Ashwath Radhachandran, PhD, on JEPA and ViT-based models to improve thyroid cancer risk stratification beyond ACR TI-RADS.",
       href: "#",
     },
     {
@@ -116,7 +116,7 @@ export const workSection = {
       category: "Engineering",
       date: "Jun 2024",
       description:
-        "Placeholder description. Investigating how explanation-guided fine-tuning improves model reasoning.",
+        "Worked under Mat Kallada from Mila to organize medical sequence data pipelines and research explanation-guided tuning for medical vision-language transformers.",
       href: "#",
     },
     {
@@ -124,7 +124,7 @@ export const workSection = {
       category: "Engineering",
       date: "Jan 2026",
       description:
-        "Placeholder description. An autonomous agentic browser that interactively navigates and acts on the web on your behalf.",
+        "Built an autonomous agentic browser extension that completes web tasks from natural-language prompts. Awarded $200 in prizes.",
       href: "#",
     },
     {
@@ -132,7 +132,7 @@ export const workSection = {
       category: "Engineering",
       date: "Nov 2026",
       description:
-        "Placeholder description. A custom MCP server that automates daily Notion workflows from natural language.",
+        "Led the implementation of a custom MCP server that exposes Notion and Google Workspace as structured, machine-readable tools instead of unstructured text context.",
       href: "#",
     },
     {
@@ -140,7 +140,7 @@ export const workSection = {
       category: "Engineering",
       date: "Jul 2022",
       description:
-        "Placeholder description. A choreographed humanoid robot routine that took first place provincially.",
+        "Designed the CAD, wiring schematics, and C++ control system for a music-synced humanoid robot that performed a choreographed dance routine. Awarded $200 in prizes.",
       href: "#",
     },
     {
@@ -156,7 +156,15 @@ export const workSection = {
       category: "Leadership",
       date: "Jun 2024",
       description:
-        "Placeholder description. Led a hackathon initiative reaching 700K people and securing $13K in funding.",
+        "Led a 13-person team to reach 700K+ students, secure $13K in funding, recruit judges from Amazon, Elegoo, and Dell, and scale Hack49 into a global student hackathon.",
+      href: "#",
+    },
+    {
+      title: "Robot See, Robot Do",
+      category: "Writing",
+      date: "2025",
+      description:
+        "Wrote a viral technical article explaining the math behind imitation learning, Action Chunking Transformers, and DAgger for robotics learning.",
       href: "#",
     },
   ] as WorkProject[],
