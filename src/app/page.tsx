@@ -113,6 +113,11 @@ export default function Home() {
                 src={project.image}
                 alt={project.title}
                 className="h-full w-full object-cover"
+                style={
+                  project.imagePosition
+                    ? { objectPosition: project.imagePosition }
+                    : undefined
+                }
               />
             ) : null;
             return (

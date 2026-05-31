@@ -58,6 +58,7 @@ export type WorkProject = {
   description: string;
   href: string;
   image?: string;
+  imagePosition?: string;
 };
 
 export const workSection = {
@@ -72,6 +73,7 @@ export const workSection = {
         "A 200-page handwritten guide breaking down the math, intuition, and architectures behind modern machine learning and deep learning systems.",
       href: "#",
       image: "/projects/ml-bible.png",
+      imagePosition: "30% center",
     },
     {
       title: "PicoChem: Transformer from Scratch in numpy + Custom CUDA Kernels",
