@@ -250,8 +250,9 @@ export type WritingCategory = {
 export const writing: WritingCategory[] = [
   {
     key: "ml-guide",
-    title: "ML Guide",
-    description: "Notes and walkthroughs on machine learning concepts.",
+    title: "ML Bible",
+    description:
+      "A from-scratch guide to machine learning — classical algorithms, neural networks, transformers, vision, and agents.",
     chapters: mlGuideChapters,
   },
   {

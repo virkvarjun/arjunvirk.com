@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { writing } from "@/lib/data";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 export default function WritingSection() {
   return (
@@ -17,23 +17,18 @@ export default function WritingSection() {
           </div>
 
           {category.chapters && category.chapters.length > 0 ? (
-            <ul className="space-y-1.5">
-              {category.chapters.map((chapter) => (
-                <li key={chapter.slug}>
-                  <Link
-                    href={`/writing/${category.key}/${chapter.slug}`}
-                    className="group flex items-baseline gap-3 text-sm hover:opacity-80 transition-opacity"
-                  >
-                    <span className="text-xs font-mono text-[var(--muted)] w-16 shrink-0">
-                      Chapter {chapter.number}
-                    </span>
-                    <span className="font-medium group-hover:underline underline-offset-2">
-                      {chapter.title}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <Link
+              href={`/writing/${category.key}`}
+              className="group inline-flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+            >
+              <span className="group-hover:underline underline-offset-2">
+                Table of contents
+              </span>
+              <span className="font-mono text-xs text-[var(--muted)]">
+                {category.chapters.length} chapters
+              </span>
+              <ArrowRight size={13} className="text-[var(--muted)]" />
+            </Link>
           ) : category.link ? (
             <Link
               href={category.link.href}
