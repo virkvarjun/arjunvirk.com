@@ -973,21 +973,241 @@ export const mlGuideChapters: Chapter[] = [
     number: "4",
     title: "Transformers",
     summary:
-      "Attention Is All You Need was published in 2017 and we're still living in its world.",
+      "Attention Is All You Need was published in 2017, and we're still living in its world.",
     sections: [
       {
         paragraphs: [
-          "Self-attention, multi-head attention, positional encodings (sinusoidal, learned, RoPE, ALiBi), causal masking, the residual stream — a vocabulary that has taken over the field.",
+          "In 2017, eight researchers at Google published \"Attention Is All You Need,\" and machine learning was never the same. The Transformer they introduced underlies GPT, Claude, Gemini, LLaMA, and essentially every modern foundation model. To get there, it helps to see what came before and why each predecessor fell short.",
         ],
-        image: {
-          label: "attention pattern",
-          caption: "Fig 3.1 — Multi-head attention pattern from a small toy transformer.",
+      },
+      {
+        heading: "Before transformers: RNNs",
+        paragraphs: [
+          "A feedforward network has a fixed input size and no notion of order, which makes it a dead end for sequences. Recurrent neural networks (RNNs) fixed this by feeding their own output back as input: a hidden state $\\mathbf{h}$ carries a running summary across timesteps, and the same weights are reused at every step, so the network handles arbitrary-length sequences.",
+        ],
+        equations: [
+          "\\mathbf{h}_t = \\tanh(W_x \\mathbf{x}_t + W_h \\mathbf{h}_{t-1} + \\mathbf{b})",
+        ],
+        diagram: {
+          id: "rnn-unroll",
+          caption:
+            "Fig 4.1 — An RNN unrolled over time. The hidden state threads context forward; the same weights apply at every step.",
         },
       },
       {
-        heading: "Building one from scratch",
         paragraphs: [
-          "We'll build a transformer from scratch, then take it apart and look at what each piece actually does. The exercise is short — under 200 lines of PyTorch — and surprisingly clarifying.",
+          "RNNs gave networks memory, but it didn't last. Backpropagation through time multiplies the recurrent matrix once per step, so the gradient either vanishes (shrinks to nothing, the default with tanh) or explodes (blows up to NaN). In practice RNNs reliably learned dependencies of only 5–10 tokens, and the whole history had to be squeezed into one fixed-size hidden vector.",
+        ],
+      },
+      {
+        heading: "LSTMs and the memory highway",
+        paragraphs: [
+          "The LSTM (1997) was built to fix vanishing gradients. It adds a separate cell state $C_t$ — a memory highway that information can flow along with minimal interference — controlled by learnable gates: a forget gate decides what to erase, an input gate what to write, an output gate what to read. The critical line is the cell-state update, which is a gated add rather than a repeated matrix multiply, so gradients flow back across many steps:",
+        ],
+        equations: [
+          "C_t = f_t \\odot C_{t-1} + i_t \\odot \\tilde{C}_t",
+        ],
+        diagram: {
+          id: "lstm-cell",
+          caption:
+            "Fig 4.2 — An LSTM cell. When the forget gate is open and the input gate closed, information from far back flows through the cell state unchanged.",
+        },
+      },
+      {
+        paragraphs: [
+          "The GRU (2014) is a simpler cousin that merges cell and hidden state and uses two gates instead of three. But two problems remained: training is inherently sequential (you can't parallelize across time, so GPUs sit idle), and long-range dependencies still degraded. In encoder–decoder setups for translation, the encoder also had to compress the entire source sentence into one fixed vector — an information bottleneck that hurt badly on long inputs.",
+        ],
+      },
+      {
+        heading: "Attention is born",
+        paragraphs: [
+          "Attention (Bahdanau, 2014) demolished the bottleneck. Instead of forcing the decoder to rely on one summary vector, it let the decoder look back at every encoder hidden state and decide which were relevant right now: score each, softmax the scores into weights that sum to 1, and take a weighted sum — a context vector. Translation quality jumped, especially on long sentences. The deeper lesson: direct token-to-token interaction, mediated by learned attention weights, beats threading everything through a recurrent state. The natural question Vaswani and coauthors asked: what if we keep only the attention and throw out the recurrence entirely?",
+        ],
+      },
+      {
+        heading: "The transformer, end to end",
+        paragraphs: [
+          "At the highest level a transformer takes a sequence in and produces a sequence out. Internally it splits into an encoder that processes the input in parallel and a decoder that generates the output one token at a time — in the original paper, stacks of six identical layers each. The decoder generates autoregressively: each step looks at what it has already produced and, via cross-attention, at the full encoder output.",
+          "Modern LLMs like GPT are decoder-only — they keep the decoder stack and drop the encoder, since pure text generation needs no separate input stream. BERT is encoder-only, producing representations without generating. Inside the blocks, five mechanisms work together: attention (in a few variants), feed-forward networks, layer normalization, positional encoding, and residual connections.",
+        ],
+      },
+      {
+        heading: "Tokenization and embeddings",
+        paragraphs: [
+          "Computers work in numbers, humans in words, so text is first split into tokens — usually subword pieces, a balance between whole words and characters. Each token maps to an ID, and each ID indexes a row of a learned embedding matrix $W_{\\text{emb}} \\in \\mathbb{R}^{|V| \\times d}$ (vocabulary size by embedding dimension). The result is a sequence of dense vectors where semantically similar tokens sit close together — the actual input the transformer operates on.",
+        ],
+      },
+      {
+        heading: "Self-attention: Q, K, V",
+        paragraphs: [
+          "Self-attention lets each token gather context from every other token. Each token produces three vectors from its embedding via learned matrices: a query (what it's looking for), a key (what it offers), and a value (the content it contributes). The analogy is a search engine: your query is matched against keys, and the best matches return their values.",
+        ],
+        equations: [
+          "Q = X W_Q, \\quad K = X W_K, \\quad V = X W_V",
+        ],
+        diagram: {
+          id: "attention-qkv",
+          caption:
+            "Fig 4.3 — Scaled dot-product attention: score queries against keys, scale, softmax into weights, then take a weighted sum of values.",
+        },
+      },
+      {
+        paragraphs: [
+          "Measure how well each query matches each key with a dot product, arranged into an $n \\times n$ score matrix. Two fixes make it usable: divide by $\\sqrt{d_k}$ so the scores don't grow with dimension (which would saturate the softmax and kill gradients), and softmax each row into a probability distribution. Multiplying those weights by the value matrix gives a new representation for each token that blends its own meaning with its context — the entire mechanism in one line:",
+        ],
+        equations: [
+          "\\text{Attention}(Q, K, V) = \\text{softmax}\\!\\left( \\frac{Q K^\\top}{\\sqrt{d_k}} \\right) V",
+        ],
+      },
+      {
+        heading: "Multi-head attention",
+        paragraphs: [
+          "One attention pattern captures one kind of relationship. Multi-head attention runs $h$ of them in parallel (the original paper used $h = 8$), each with its own $W_Q, W_K, W_V$ operating on a smaller $d/h$-dimensional slice. The heads' outputs are concatenated and passed through a final projection $W_O$. Different heads specialize — some learn grammar, some coreference, some positional patterns — and the model decides what each learns through training.",
+        ],
+        equations: [
+          "\\text{MultiHead}(Q,K,V) = \\text{Concat}(\\text{head}_1, \\dots, \\text{head}_h)\\,W_O",
+        ],
+        diagram: {
+          id: "multi-head",
+          caption:
+            "Fig 4.4 — Multi-head attention. h heads each attend in a smaller subspace; their outputs are concatenated and mixed by Wₒ.",
+        },
+      },
+      {
+        heading: "Masked self-attention",
+        paragraphs: [
+          "In the decoder, the first attention layer is masked. During generation a token must not see the future, or training would be trivial — the model would just copy the next token and never learn to generate. A look-ahead mask sets every score above the diagonal to $-\\infty$ before the softmax, which turns those weights into exactly zero. This preserves the autoregressive property: the model writes strictly left to right.",
+        ],
+        diagram: {
+          id: "causal-mask",
+          caption:
+            "Fig 4.5 — The causal mask. Positions above the diagonal are set to −∞ (→ 0 after softmax), so each token attends only to itself and earlier tokens.",
+        },
+      },
+      {
+        heading: "Cross-attention and the feed-forward network",
+        paragraphs: [
+          "After masked self-attention, the decoder still needs the input. Cross-attention is the bridge: the query comes from the decoder, the keys and values from the encoder output — so the decoder asks \"given what I've written, which input tokens are relevant?\" (Decoder-only models like GPT have no cross-attention, since there's no separate encoder.)",
+          "Once attention has gathered context, the feed-forward network processes it, applied independently to each position. It's a two-layer MLP that expands to a larger dimension (the original used $d_{\\text{model}} = 512 \\to d_{\\text{ff}} = 2048$), applies a nonlinearity, and contracts back. The FFN holds most of a transformer's parameters — which is exactly why Mixture of Experts targets it.",
+        ],
+        equations: [
+          "\\text{FFN}(x) = \\max(0,\\ x W_1 + b_1)\\,W_2 + b_2",
+        ],
+      },
+      {
+        heading: "Layer norm and residual connections",
+        paragraphs: [
+          "Two pieces hold deep stacks together. Layer normalization rescales each token's activations to zero mean and unit variance across its features, then learns a scale $\\gamma$ and shift $\\beta$ — stabilizing training without depending on batch size (unlike batch norm), which is why transformers use it.",
+        ],
+        equations: [
+          "\\text{LayerNorm}(x) = \\gamma\\,\\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} + \\beta",
+        ],
+      },
+      {
+        paragraphs: [
+          "Residual connections (from ResNet) are why deep transformers train at all: a direct path bypasses each sublayer, so gradients flow straight back and each layer only has to learn a delta. Every sublayer is wrapped this way. (Modern models often use pre-norm — normalize before the sublayer — which is more stable for very deep networks.)",
+        ],
+        equations: ["\\text{output} = \\text{LayerNorm}(x + \\text{Sublayer}(x))"],
+        diagram: {
+          id: "transformer-block",
+          caption:
+            "Fig 4.6 — One encoder layer: multi-head attention and a feed-forward network, each wrapped in a residual connection and layer norm. Every layer has the same shape in and out, so you can stack as many as you want.",
+        },
+      },
+      {
+        heading: "Positional encoding",
+        paragraphs: [
+          "Self-attention treats its input as a set, not a sequence — \"I like cats\" and \"cats like I\" would look identical. Positional encodings fix this by injecting position into the embeddings before the first layer. The original transformer added sinusoids of different frequencies, giving each position a unique fingerprint and letting the model express relative offsets as linear functions:",
+        ],
+        equations: [
+          "\\text{PE}_{(pos,\\,2i)} = \\sin\\!\\left(\\frac{pos}{10000^{2i/d}}\\right), \\quad \\text{PE}_{(pos,\\,2i+1)} = \\cos\\!\\left(\\frac{pos}{10000^{2i/d}}\\right)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Putting it together, one encoder layer takes embeddings-plus-positions of shape $(n, d)$, runs multi-head attention, adds and norms, runs the FFN, adds and norms, and outputs the same shape — so layers stack indefinitely. After the final layer, a linear projection maps each vector to vocabulary-size logits, and a softmax gives the next-token distribution. Train with cross-entropy against the true next token; at inference, sample (or take the argmax) and feed it back in.",
+        ],
+      },
+      {
+        heading: "Decoder-only, encoder-only, encoder–decoder",
+        paragraphs: [
+          "When the task is pure text generation, the input and output are the same sequence shifted by one, so you don't need two stacks. This realization gave us decoder-only models (GPT, LLaMA, Claude): a tall stack of masked-self-attention + FFN layers. Next-token prediction over a huge corpus turns out to be an extraordinarily general training signal — to predict the next token of code, a sonnet, or a proof, the model must understand programming, meter, and algebra.",
+          "Encoder-only models (BERT) go the other way: bidirectional self-attention produces rich representations but doesn't generate. They're trained with masked language modeling — hide ~15% of tokens and predict them from both sides — and power embeddings, retrieval/reranking, and classification. Encoder–decoder models (T5, BART) keep both stacks and shine when input and output are clearly distinct sequences, like translation and summarization.",
+        ],
+      },
+      {
+        heading: "How modern models diverge",
+        paragraphs: [
+          "The 2017 recipe is still the skeleton; modern LLMs swap individual pieces. Positional encodings moved to RoPE (rotate Q and K by an angle that depends on position, so the dot product naturally depends on the relative offset $m-n$) and ALiBi (bias attention scores by distance) — both extrapolate to longer contexts better than sinusoids. RMSNorm replaces LayerNorm (drop the mean subtraction, ~10–15% cheaper), and SwiGLU — a gated activation — replaces ReLU in the FFN:",
+        ],
+        equations: [
+          "\\text{RMSNorm}(x) = \\gamma\\,\\frac{x}{\\sqrt{\\frac{1}{d}\\sum_i x_i^2 + \\epsilon}}, \\qquad \\text{SwiGLU}(x) = \\big(\\text{Swish}(xW_1)\\big) \\odot (xW_2)",
+        ],
+      },
+      {
+        heading: "Attention efficiency and the KV cache",
+        paragraphs: [
+          "Full attention costs $O(n^2)$ in sequence length — fine at 1,000 tokens, ruinous at a million. Sparse and sliding-window attention (each token attends only to a local window of $w$ tokens, as in Mistral) cut this to $O(n \\cdot w)$; stacking layers grows the effective receptive field to $L \\cdot w$, so information still propagates globally. Patterns like Longformer (local + a few global tokens) and BigBird (local + global + random) recover near-full expressivity at far lower cost.",
+          "The single most important inference optimization is the KV cache. Generating autoregressively, the keys and values of past tokens never change, so you compute them once and cache them — turning each step from $O(n^2)$ into $O(n)$. The cache is two big tensors that grow by one row per generated token, and managing it (it can reach tens of GB per user at long context) drives most production-serving work: quantized KV, PagedAttention, prefix caching.",
+        ],
+        diagram: {
+          id: "kv-cache",
+          caption:
+            "Fig 4.7 — The KV cache. Past keys and values are stored and reused; only the new token's K, V are computed each step.",
+        },
+      },
+      {
+        paragraphs: [
+          "Inference splits into two phases with different bottlenecks: prefill (process the whole prompt in parallel, compute-bound) and decode (generate one token at a time, memory-bandwidth-bound — it reads the entire cache and weights per token). Grouped-Query Attention shrinks the cache by sharing K and V across groups of query heads — Multi-Query is the extreme of one shared KV — recovering most of the memory with little quality loss.",
+        ],
+        diagram: {
+          id: "grouped-query",
+          caption:
+            "Fig 4.8 — Multi-head, grouped-query, and multi-query attention trade KV-cache size against quality by sharing key/value heads.",
+        },
+      },
+      {
+        paragraphs: [
+          "Flash Attention is a re-implementation of attention that's mathematically identical but never materializes the full $n \\times n$ score matrix — it processes attention in tiles that fit in fast on-chip SRAM with an online softmax, giving 2–4× speedups and linear (not quadratic) memory. It's a recurring theme in modern ML: many of the biggest wins come from better implementations of existing math, not new algorithms.",
+        ],
+      },
+      {
+        heading: "Mixture of Experts",
+        paragraphs: [
+          "Most parameters live in the FFN, so what if you had many FFNs but ran only a few per token? Mixture of Experts replaces each FFN with $N$ experts and a router that sends each token to its top-$k$ (usually 1 or 2). You get the capacity of all $N$ but the compute of $k$ — Mixtral 8×7B has ~47B total parameters but activates only ~13B per token. The costs are real: all experts must be held in memory, load balancing needs auxiliary losses, and routing complicates batching.",
+        ],
+        diagram: {
+          id: "moe",
+          caption:
+            "Fig 4.9 — Mixture of Experts. A router picks the top-k experts per token; the rest sit idle. Huge parameter count, small compute per token.",
+        },
+      },
+      {
+        heading: "Training and fine-tuning",
+        paragraphs: [
+          "A modern assistant is trained in stages: pretraining (next-token prediction over trillions of tokens — the bulk of the compute), supervised fine-tuning (curated instruction–response pairs), and preference alignment (RLHF, or DPO which skips the reward model). Constitutional AI / RLAIF replace much of the human feedback with AI critique against a set of principles. Scaling laws (Kaplan, Chinchilla) make all of this predictable: for a given compute budget, optimal model and dataset size grow together.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Full fine-tuning of a large model is expensive, so LoRA freezes the base weights and learns a low-rank update $\\frac{\\alpha}{r} B A$ added to each weight matrix. Because the fine-tuning update has low intrinsic rank, two skinny matrices capture most of it — a rank-16 adapter on an 8B model is a few million parameters (~13 MB) versus 16 GB for a full copy. Adapters are cheap to store, swap, and serve many-at-once, and they're permanently bound to their base model.",
+        ],
+        equations: ["W' = W + \\tfrac{\\alpha}{r}\\,B A, \\qquad r \\ll d"],
+        diagram: {
+          id: "lora",
+          caption:
+            "Fig 4.10 — LoRA. The base weight W stays frozen; only the low-rank matrices B and A are trained, then added back at inference.",
+        },
+      },
+      {
+        heading: "Beyond transformers: GANs and VAEs",
+        paragraphs: [
+          "Two generative architectures round out the picture. A GAN pits a generator (noise → fake data) against a discriminator (real vs fake) in a minimax game; at the optimum the generator's distribution equals the data distribution and the discriminator is reduced to a coin flip. GANs produce sharp samples but are notoriously unstable (mode collapse, vanishing gradients). A VAE instead maps each input to a distribution — a mean $\\mu$ and spread $\\sigma$ — and samples $z = \\mu + \\sigma\\,\\varepsilon$, training with a reconstruction term plus a KL term that packs the latent clouds together so the space is smooth and samplable. VAEs are stable and give a clean latent space, at the cost of slightly blurry samples.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Every modern variant — RoPE, GQA, Flash Attention, MoE, million-token context — is an optimization of one specific piece of the 2017 design, not a replacement. Once you understand the original architecture, every new paper reads as \"here is the one part we improved.\"",
         ],
       },
     ],
