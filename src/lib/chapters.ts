@@ -977,13 +977,13 @@ export const mlGuideChapters: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "In 2017, eight researchers at Google published \"Attention Is All You Need,\" and machine learning was never the same. The Transformer they introduced underlies GPT, Claude, Gemini, LLaMA, and essentially every modern foundation model. To get there, it helps to see what came before and why each predecessor fell short.",
+          "In 2017, eight researchers at Google published a paper with the slightly cocky title \"Attention Is All You Need,\" and machine learning genuinely has not been the same since. The Transformer they introduced is the thing underneath GPT, Claude, Gemini, LLaMA — essentially every modern foundation model. But to really appreciate why it works, you have to see what came before it and exactly where each predecessor hit a wall.",
         ],
       },
       {
         heading: "Before transformers: RNNs",
         paragraphs: [
-          "A feedforward network has a fixed input size and no notion of order, which makes it a dead end for sequences. Recurrent neural networks (RNNs) fixed this by feeding their own output back as input: a hidden state $\\mathbf{h}$ carries a running summary across timesteps, and the same weights are reused at every step, so the network handles arbitrary-length sequences.",
+          "Start with the problem. A feedforward network has a fixed input size and no notion of order at all, which makes it a dead end the moment you care about sequences. Recurrent neural networks (RNNs) got around this by feeding their own output back in as input: a hidden state $\\mathbf{h}$ carries a running summary forward across timesteps, and the same weights are reused at every step, so suddenly the network can handle sequences of any length.",
         ],
         equations: [
           "\\mathbf{h}_t = \\tanh(W_x \\mathbf{x}_t + W_h \\mathbf{h}_{t-1} + \\mathbf{b})",
@@ -996,7 +996,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "RNNs gave networks memory, but it didn't last. Backpropagation through time multiplies the recurrent matrix once per step, so the gradient either vanishes (shrinks to nothing, the default with tanh) or explodes (blows up to NaN). In practice RNNs reliably learned dependencies of only 5–10 tokens, and the whole history had to be squeezed into one fixed-size hidden vector.",
+          "RNNs gave networks a memory — it just turned out to be a very short one. Backpropagation through time multiplies by the recurrent matrix once per step, so the gradient either vanishes (shrinks to nothing, which is the default with tanh) or explodes (blows up to NaN). In practice that meant an RNN reliably learned dependencies of only 5–10 tokens, and on top of that, the entire history had to be crammed into one fixed-size hidden vector.",
         ],
       },
       {
@@ -1021,7 +1021,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Attention is born",
         paragraphs: [
-          "Attention (Bahdanau, 2014) demolished the bottleneck. Instead of forcing the decoder to rely on one summary vector, it let the decoder look back at every encoder hidden state and decide which were relevant right now: score each, softmax the scores into weights that sum to 1, and take a weighted sum — a context vector. Translation quality jumped, especially on long sentences. The deeper lesson: direct token-to-token interaction, mediated by learned attention weights, beats threading everything through a recurrent state. The natural question Vaswani and coauthors asked: what if we keep only the attention and throw out the recurrence entirely?",
+          "Attention (Bahdanau, 2014) is what finally demolished that bottleneck. Rather than forcing the decoder to lean on one summary vector, it let the decoder look back at every encoder hidden state and decide which ones mattered right now: score each one, softmax the scores into weights that sum to 1, and take a weighted sum — a context vector. Translation quality jumped, especially on long sentences. And the deeper lesson is the one to hold onto: direct token-to-token interaction, mediated by learned attention weights, beats threading everything through a single recurrent state. Which sets up the question Vaswani and his coauthors actually asked — what if we keep only the attention and throw out the recurrence entirely?",
         ],
       },
       {
@@ -1040,7 +1040,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Self-attention: Q, K, V",
         paragraphs: [
-          "Self-attention lets each token gather context from every other token. Each token produces three vectors from its embedding via learned matrices: a query (what it's looking for), a key (what it offers), and a value (the content it contributes). The analogy is a search engine: your query is matched against keys, and the best matches return their values.",
+          "Now the heart of it. Self-attention lets each token gather context from every other token. From its embedding, each token produces three vectors through learned matrices: a query (what it's looking for), a key (what it offers to others), and a value (the content it actually contributes). The cleanest analogy is a search engine — your query gets matched against a bunch of keys, and the best-matching ones hand back their values.",
         ],
         equations: [
           "Q = X W_Q, \\quad K = X W_K, \\quad V = X W_V",
@@ -1062,7 +1062,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Multi-head attention",
         paragraphs: [
-          "One attention pattern captures one kind of relationship. Multi-head attention runs $h$ of them in parallel (the original paper used $h = 8$), each with its own $W_Q, W_K, W_V$ operating on a smaller $d/h$-dimensional slice. The heads' outputs are concatenated and passed through a final projection $W_O$. Different heads specialize — some learn grammar, some coreference, some positional patterns — and the model decides what each learns through training.",
+          "A single attention pattern can only capture one kind of relationship at a time. Multi-head attention gets around that by running $h$ of them in parallel (the original paper used $h = 8$), each with its own $W_Q, W_K, W_V$ working on a smaller $d/h$-dimensional slice. You concatenate the heads' outputs and push them through a final projection $W_O$. What's nice is that the heads end up specializing on their own — some learn grammar, some coreference, some positional patterns — and nobody assigns those roles by hand; training does it.",
         ],
         equations: [
           "\\text{MultiHead}(Q,K,V) = \\text{Concat}(\\text{head}_1, \\dots, \\text{head}_h)\\,W_O",
@@ -1076,7 +1076,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "Masked self-attention",
         paragraphs: [
-          "In the decoder, the first attention layer is masked. During generation a token must not see the future, or training would be trivial — the model would just copy the next token and never learn to generate. A look-ahead mask sets every score above the diagonal to $-\\infty$ before the softmax, which turns those weights into exactly zero. This preserves the autoregressive property: the model writes strictly left to right.",
+          "In the decoder, the first attention layer comes with a catch — it's masked. The reason is simple: during generation a token must not be allowed to see the future, because if it could, training would be trivial and pointless. The model would just peek at the next token, copy it, and never actually learn to generate anything. A look-ahead mask handles this by setting every score above the diagonal to $-\\infty$ before the softmax, which makes those weights come out as exactly zero. That keeps the autoregressive property intact: the model writes strictly left to right.",
         ],
         diagram: {
           id: "causal-mask",
@@ -1168,13 +1168,13 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "Flash Attention is a re-implementation of attention that's mathematically identical but never materializes the full $n \\times n$ score matrix — it processes attention in tiles that fit in fast on-chip SRAM with an online softmax, giving 2–4× speedups and linear (not quadratic) memory. It's a recurring theme in modern ML: many of the biggest wins come from better implementations of existing math, not new algorithms.",
+          "Flash Attention is worth dwelling on because of what it represents. It's a re-implementation of attention that is mathematically identical to the original but never actually materializes the full $n \\times n$ score matrix — it works through attention in tiles small enough to fit in fast on-chip SRAM, using an online softmax, and the result is a 2–4× speedup with memory that grows linearly instead of quadratically. That's a pattern you'll see again and again in modern ML: some of the biggest wins don't come from new math at all, but from implementing the existing math more cleverly.",
         ],
       },
       {
         heading: "Mixture of Experts",
         paragraphs: [
-          "Most parameters live in the FFN, so what if you had many FFNs but ran only a few per token? Mixture of Experts replaces each FFN with $N$ experts and a router that sends each token to its top-$k$ (usually 1 or 2). You get the capacity of all $N$ but the compute of $k$ — Mixtral 8×7B has ~47B total parameters but activates only ~13B per token. The costs are real: all experts must be held in memory, load balancing needs auxiliary losses, and routing complicates batching.",
+          "Here's a tempting idea. Most of the parameters live in the FFN — so what if you had many FFNs lying around but only ran a few of them per token? That's Mixture of Experts: replace each FFN with $N$ experts plus a router that sends each token to its top-$k$ (usually just 1 or 2). You end up with the capacity of all $N$ experts but the compute cost of only $k$ — Mixtral 8×7B has roughly 47B total parameters yet activates only ~13B per token. It isn't free, though: every expert has to sit in memory, load balancing needs auxiliary losses to keep the router honest, and routing makes batching genuinely messier.",
         ],
         diagram: {
           id: "moe",
@@ -1207,7 +1207,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "Every modern variant — RoPE, GQA, Flash Attention, MoE, million-token context — is an optimization of one specific piece of the 2017 design, not a replacement. Once you understand the original architecture, every new paper reads as \"here is the one part we improved.\"",
+          "And that's the takeaway worth leaving with. Every modern variant — RoPE, GQA, Flash Attention, MoE, million-token context — is an optimization of one specific piece of the 2017 design, not a replacement for it. Once the original architecture is solid in your head, every new paper starts to read the same way: \"here is the one part we improved.\"",
         ],
       },
     ],
