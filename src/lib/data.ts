@@ -64,25 +64,17 @@ export const workSection = {
   subtitle: "Writing, research, and projects.",
   projects: [
     {
-      title: "BigBrother: First Autonomous Interactive Agentic Browser",
-      category: "Project",
-      date: "May 2026",
-      description:
-        "Placeholder description. An autonomous agentic browser that interactively navigates and acts on the web on your behalf.",
-      href: "#",
-    },
-    {
       title: "Machine Learning Bible",
       category: "Writing",
-      date: "Apr 2026",
+      date: "May 2026",
       description:
         "Placeholder description. A living reference covering core machine learning concepts from first principles.",
       href: "#",
     },
     {
       title: "PicoChem: Transformer from Scratch in numpy + Custom CUDA Kernels",
-      category: "Project",
-      date: "Mar 2026",
+      category: "Research",
+      date: "Apr 2026",
       description:
         "Placeholder description. A minimal transformer implemented from the ground up in numpy with custom CUDA kernels.",
       href: "#",
@@ -90,7 +82,7 @@ export const workSection = {
     {
       title: "LoRA VLA Research @ BracketBot",
       category: "Research",
-      date: "Feb 2026",
+      date: "May 2026",
       description:
         "Placeholder description. Exploring low-rank adaptation for vision-language-action models on real robots.",
       href: "#",
@@ -98,7 +90,7 @@ export const workSection = {
     {
       title: "Failure-Aware ACT (FAACT)",
       category: "Research",
-      date: "Jan 2026",
+      date: "Mar 2026",
       description:
         "Placeholder description. An action-chunking policy that reasons about and recovers from its own failures.",
       href: "#",
@@ -106,7 +98,7 @@ export const workSection = {
     {
       title: "SOTA Pan-Cancer Immunotherapy Quantification",
       category: "Research",
-      date: "Dec 2025",
+      date: "Apr 2024",
       description:
         "Placeholder description. Quantifying immunotherapy response signals across cancer types from multi-omic data.",
       href: "#",
@@ -114,31 +106,39 @@ export const workSection = {
     {
       title: "Novel Thyroid Cancer Risk Stratification System (UCLA BAIR)",
       category: "Research",
-      date: "Nov 2025",
+      date: "Jun 2025",
       description:
         "Placeholder description. Modeling patient risk to stratify thyroid cancer outcomes from clinical features.",
       href: "#",
     },
     {
       title: "Explanation Tuning Research (Triage)",
-      category: "Research",
-      date: "Oct 2025",
+      category: "Engineering",
+      date: "Jun 2024",
       description:
         "Placeholder description. Investigating how explanation-guided fine-tuning improves model reasoning.",
       href: "#",
     },
     {
+      title: "BigBrother: First Autonomous Interactive Agentic Browser",
+      category: "Engineering",
+      date: "Jan 2026",
+      description:
+        "Placeholder description. An autonomous agentic browser that interactively navigates and acts on the web on your behalf.",
+      href: "#",
+    },
+    {
       title: "Wisp: Custom MCP for Daily Notion and Google Workspace",
-      category: "Project",
-      date: "Sep 2025",
+      category: "Engineering",
+      date: "Nov 2026",
       description:
         "Placeholder description. A custom MCP server that automates daily Notion workflows from natural language.",
       href: "#",
     },
     {
       title: "Dancing Humanoid (1st Place Provincially)",
-      category: "Project",
-      date: "Aug 2025",
+      category: "Engineering",
+      date: "Jul 2022",
       description:
         "Placeholder description. A choreographed humanoid robot routine that took first place provincially.",
       href: "#",

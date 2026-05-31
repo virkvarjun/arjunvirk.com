@@ -42,7 +42,7 @@ export default function Home() {
             ))}
           </ul>
 
-          <nav className="mt-7 sm:mt-9 flex items-center gap-5 text-[var(--muted)]">
+          <nav className="mt-6 sm:mt-7 flex items-center gap-3.5 text-[var(--muted)]">
             <a
               href={profile.socials.twitter}
               target="_blank"
@@ -81,7 +81,7 @@ export default function Home() {
         </div>
 
         <div className="shrink-0 self-center md:self-auto">
-          <div className="relative h-52 w-40 sm:h-64 sm:w-52 overflow-hidden rounded-2xl bg-[var(--card)] ring-1 ring-[var(--border)]">
+          <div className="relative h-52 w-48 sm:h-64 sm:w-64 overflow-hidden rounded-2xl bg-[var(--card)] ring-1 ring-[var(--border)]">
             <img
               src="/arjun_photo.png"
               alt={profile.name}
@@ -91,7 +91,7 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="mt-16 sm:mt-20 md:mt-28">
+      <section className="mt-10 sm:mt-12 md:mt-16">
         <h2 className="font-[family-name:var(--font-display)] text-xl sm:text-2xl font-normal tracking-tight">
           {workSection.heading}
         </h2>
