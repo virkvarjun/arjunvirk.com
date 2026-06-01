@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import katex from "katex";
 
 // KaTeX renders to a static HTML string, so these render fine in Server
@@ -43,11 +44,35 @@ export function MathText({ children }: { children: string }) {
         part.math ? (
           <InlineMath key={i}>{part.text}</InlineMath>
         ) : (
-          <span key={i}>{part.text}</span>
+          <Emphasis key={i} text={part.text} />
         ),
       )}
     </>
   );
+}
+
+/**
+ * Renders the Markdown emphasis used in the prose — `**bold**` and `*italic*`
+ * — within a span of non-math text. Bold is matched before italic so the
+ * double-asterisk form wins.
+ */
+function Emphasis({ text }: { text: string }) {
+  const nodes: ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      nodes.push(<strong key={key++}>{m[1]}</strong>);
+    } else {
+      nodes.push(<em key={key++}>{m[2]}</em>);
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return <>{nodes}</>;
 }
 
 type Part = { text: string; math: boolean };

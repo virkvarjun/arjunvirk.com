@@ -135,6 +135,25 @@ export default async function ChapterPage({
                   ))}
                 </dl>
               )}
+              {section.quiz && (
+                <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+                    Check your understanding
+                  </p>
+                  <p className="mt-1.5 text-sm leading-relaxed">
+                    <MathText>{section.quiz.question}</MathText>
+                  </p>
+                  <details className="group mt-2">
+                    <summary className="cursor-pointer list-none text-xs font-medium text-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
+                      <span className="group-open:hidden">Show answer ▸</span>
+                      <span className="hidden group-open:inline">Hide answer ▾</span>
+                    </summary>
+                    <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+                      <MathText>{section.quiz.answer}</MathText>
+                    </p>
+                  </details>
+                </div>
+              )}
               {section.diagram && (
                 <Diagram
                   id={section.diagram.id}

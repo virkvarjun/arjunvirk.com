@@ -12,6 +12,8 @@ export type ChapterSection = {
   equations?: string[];
   // A bulleted list of points.
   list?: string[];
+  // A "check your understanding" prompt with a collapsible answer.
+  quiz?: { question: string; answer: string };
   // A custom diagram, referenced by id from the diagram registry
   // (src/components/diagrams). Replaces the old text-only `image`.
   diagram?: { id: string; caption?: string };
@@ -32,463 +34,769 @@ export const mlGuideChapters: Chapter[] = [
     number: "1",
     title: "Neural Networks",
     summary:
-      "The vocabulary and ground rules of machine learning — the terms every later chapter assumes you already know.",
+      "From a single neuron up through backpropagation, optimizers, and the practical craft of training a neural network.",
     sections: [
       {
-        heading: "Part 1: Preliminary Definitions",
-        definitions: [
-          {
-            term: "Model",
-            definition:
-              "A function with learnable parameters that maps inputs to outputs. Formally, f(x, θ) where x is the input and θ are the parameters learned during training.",
-          },
-          {
-            term: "Label",
-            definition:
-              "The output a supervised model is trained to predict, typically denoted y — e.g. the house price in a price-prediction model.",
-          },
-          {
-            term: "Features",
-            definition:
-              "The input variables that describe each example, typically denoted x — e.g. square footage in a house-price model.",
-          },
-          {
-            term: "Supervised Learning",
-            definition:
-              "A training regime where every example carries a label, and the model learns to map inputs to those labels.",
-          },
-          {
-            term: "Unsupervised Learning",
-            definition:
-              "A training regime with no labels. The model must discover structure — clusters, manifolds, latent factors — on its own.",
-          },
-          {
-            term: "Semi-Supervised Learning",
-            definition:
-              "Training on a small pool of labeled data alongside a much larger pool of unlabeled data. Useful when labels are expensive to obtain (e.g. medical imaging).",
-          },
-          {
-            term: "Self-Supervised Learning",
-            definition:
-              "The model generates its own labels from the structure of the input, then trains on them in a supervised fashion. Next-token prediction (Chapter 3) is the canonical example.",
-          },
-          {
-            term: "Classification",
-            definition:
-              "A supervised task where the label is a discrete category. The model assigns each input to one of a finite set of classes — spam detection is the textbook example.",
-          },
-          {
-            term: "Regression",
-            definition:
-              "A supervised task where the label is a continuous numerical value. The model predicts a real number rather than a category — e.g. a house price.",
-          },
-          {
-            term: "Train / Validation / Test Split",
-            definition:
-              "A partition of the dataset. Train fits parameters, validation tunes hyperparameters, test is held out and used only for final performance estimates.",
-          },
-          {
-            term: "Cross-Validation",
-            definition:
-              "Estimating model performance by repeatedly training and evaluating on different splits of the data. Especially useful when data is limited.",
-          },
-          {
-            term: "Parameters",
-            definition:
-              "The internal variables learned from data during training. In linear regression y = wx + b, the weight w and bias b are parameters.",
-          },
-          {
-            term: "Hyperparameters",
-            definition:
-              "Configuration values set before training that are not learned from data — learning rate, batch size, model depth, and so on.",
-          },
-          {
-            term: "Underfitting",
-            definition:
-              "When a model is too simple or under-trained to capture the underlying structure in the data, resulting in poor performance on both training and unseen examples.",
-          },
-          {
-            term: "Overfitting",
-            definition:
-              "When a model memorizes the noise and idiosyncrasies of the training data instead of learning generalizable patterns. Train accuracy is high; test accuracy isn't.",
-          },
-          {
-            term: "Generalization",
-            definition:
-              "The ability of a model to perform well on new, unseen data drawn from the same distribution as the training data. The ultimate goal of machine learning.",
-          },
-          {
-            term: "Tensor",
-            definition:
-              "A multi-dimensional array of numbers — the fundamental data structure of modern ML. Its rank is the number of dimensions. Tensors map cleanly onto GPU and TPU hardware.",
-          },
-          {
-            term: "Matrix",
-            definition:
-              "A two-dimensional, rectangular array of numbers — a rank-2 tensor.",
-          },
-          {
-            term: "Pre-Training",
-            definition:
-              "The initial training phase where a model learns broad, general representations from large quantities of (typically unlabeled) data. Expensive, done once per model family.",
-          },
-          {
-            term: "Post-Training",
-            definition:
-              "Everything that follows pre-training to specialize a model: supervised fine-tuning, RLHF, alignment, evaluation. Cheap relative to pre-training, but where most of the product polish happens.",
-          },
-        ],
-      },
-      {
-        heading: "Part 2: Neural Networks",
+        heading: "1. What Machine Learning Is Doing",
         paragraphs: [
-          "A neural network is a parameterized function that maps inputs to outputs through many small operations — linear transformations followed by nonlinear functions, stacked in layers. Formally, it composes $L$ layers:",
-        ],
-        equations: [
-          "f(x;\\theta) = f_L \\circ f_{L-1} \\circ \\cdots \\circ f_2 \\circ f_1(x)",
+          "Start with the big picture. Normally, to make a computer do something, you write down the rules yourself. \"If the email contains the word *lottery*, mark it as spam.\" The computer follows your rules to the letter. That approach works fine until the rules get too tangled to write down, and for a surprising number of useful problems, they are impossible to write down at all.",
         ],
       },
       {
         paragraphs: [
-          "This works because of the universal approximation theorem: a network with even a single hidden layer of sufficient width can approximate any continuous function. Depth doesn't add expressive power here — it adds efficiency, letting the network represent the same functions with far fewer neurons.",
+          "Try to write the rules that separate a cat from a dog in a photo. Not a loose description, but real instructions a computer could follow, stated in terms of the millions of pixel values it actually receives. You can't do it. Nobody can. You know a cat when you see one, but that knowledge lives in your head as intuition, and intuition doesn't come with instructions attached.",
         ],
-        diagram: {
-          id: "mlp-network",
-          caption:
-            "Fig 1.1 — A feedforward network. Information flows input → hidden layers → output; every edge is a weight, every node adds a bias and a nonlinearity.",
+      },
+      {
+        paragraphs: [
+          "Machine learning turns the problem around. Instead of writing the rules, you write a program that figures out the rules from examples. You show it thousands of photos already labeled \"cat\" or \"dog,\" and it works out the pattern on its own. You never have to say what makes a cat a cat. You just need examples and a procedure for turning examples into a rule.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That is the whole enterprise. Everything in this chapter exists to do that one thing well: take a pile of examples and squeeze a rule out of them.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So what is the rule, in practice? It's always a **function**, which is just a machine that takes something in and gives something out. You hand it an input, it hands you back an output. We write it $f(x)$, read as \"the output of the function $f$ on input $x$.\" Feed in the pixels of a photo, get back \"cat.\" Feed in the square footage of a house, get back a predicted price.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The part that makes this *learning* rather than just *a function* is that ours has adjustable knobs inside it. Picture a machine with a few million little dials on the side. Set the dials one way and it maps cat photos to \"dog.\" Set them another way and it gets the answer right. Learning is the process of finding the dial settings that make the function behave. We call those dials the **parameters** and bundle them under one symbol, the Greek letter theta, $\\theta$. So a more honest way to write the function is $f(x; \\theta)$: the output depends both on the input $x$ and on the current setting $\\theta$ of all the knobs. The semicolon just separates \"the thing we're classifying\" from \"the thing we're tuning.\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "Training means finding a good setting of $\\theta$. Hold on to that sentence, because the rest of this chapter is in service of it.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why can't we just write explicit rules for a task like recognizing cats in photos, the way we would for sorting numbers?",
+          answer: "Because the rule lives in our intuition, not as something we can state in terms of raw pixel values. For most perception and language tasks, no human can actually write the rule down, so instead we let the model learn it from labeled examples.",
         },
       },
       {
-        heading: "The neuron",
+        heading: "2. Preliminary Definitions",
         paragraphs: [
-          "A neuron is the atomic unit of the whole thing, and it's almost embarrassingly simple. It takes a vector of inputs, computes a weighted sum, adds a bias, and runs the result through a nonlinear activation. A weight is just the strength of a connection between two neurons; the bias is a learned offset that lets the neuron shift its output up or down.",
+          "Here is the working vocabulary. Skim it now to get the shape of each term, and it will settle in as we start using them.",
         ],
-        equations: ["z = \\mathbf{w}^\\top \\mathbf{x} + b, \\qquad a = \\sigma(z)"],
-      },
-      {
-        paragraphs: [
-          "Each piece earns its place. The weights say how much each input feature matters. The bias shifts the threshold — even if every input is zero, $z = b$, so the bias controls how easily the neuron fires. And the activation $\\sigma$ is what introduces the nonlinearity. Drop it and the whole network, however many layers deep, collapses back into a single linear transformation — you'd have gained nothing from the depth.",
-        ],
-      },
-      {
-        heading: "A layer",
-        paragraphs: [
-          "A layer is a group of neurons that all receive the same input and operate in parallel. A fully connected (dense) layer of $m$ neurons over an $n$-dimensional input has a weight matrix $W \\in \\mathbb{R}^{m \\times n}$ (row $i$ is neuron $i$'s weights), a bias vector $\\mathbf{b} \\in \\mathbb{R}^m$, and an output $\\mathbf{a} \\in \\mathbb{R}^m$:",
-        ],
-        equations: [
-          "\\mathbf{z} = W\\mathbf{x} + \\mathbf{b}, \\qquad \\mathbf{a} = \\sigma(\\mathbf{z})",
-        ],
-      },
-      {
-        paragraphs: [
-          "Here $\\sigma$ is applied element-wise. Stacking layers means feeding one layer's output as the next layer's input, so a network's parameters are $\\theta = \\{W^{(1)}, \\mathbf{b}^{(1)}, \\dots, W^{(L)}, \\mathbf{b}^{(L)}\\}$. The first layer is the input layer, the last is the output layer, and everything between is hidden.",
-        ],
-      },
-      {
-        heading: "Activation functions",
-        paragraphs: [
-          "This is worth saying twice because it's the whole reason depth buys you anything: the nonlinearity is where a network's power comes from. Stack linear layers and you still just have a linear layer, because composing linear maps gives you another linear map. The common activations each have their own shape and their own way of misbehaving.",
-        ],
-        diagram: {
-          id: "activation-functions",
-          caption:
-            "Fig 1.2 — The workhorse activations. Sigmoid and tanh saturate (flat tails → vanishing gradients); ReLU and GELU stay responsive for positive inputs.",
-        },
       },
       {
         definitions: [
-          {
-            term: "Sigmoid",
-            definition:
-              "$\\sigma(z) = \\frac{1}{1 + e^{-z}}$. Squashes inputs to $(0, 1)$. Historically popular, now mostly used for binary outputs. Suffers from vanishing gradients: for large $|z|$ the derivative is nearly zero, so learning stalls.",
-          },
-          {
-            term: "Tanh",
-            definition:
-              "$\\tanh(z) = \\frac{e^{z} - e^{-z}}{e^{z} + e^{-z}}$. Squashes to $(-1, 1)$. Zero-centered, which helps optimization, but still saturates.",
-          },
-          {
-            term: "ReLU",
-            definition:
-              "$\\mathrm{ReLU}(z) = \\max(0, z)$. Cheap, and the default for hidden layers since 2012. Derivative is 1 for positive inputs and 0 for negative — no vanishing gradient for active neurons. The downside is the dying-ReLU problem: a neuron stuck negative produces zero gradient and stops learning.",
-          },
-          {
-            term: "Leaky ReLU",
-            definition:
-              "$\\max(\\alpha z, z)$ with small $\\alpha$ (e.g. 0.01). Fixes dying ReLU by letting a small gradient flow for negative inputs.",
-          },
-          {
-            term: "GELU",
-            definition:
-              "$z \\cdot \\Phi(z)$, where $\\Phi$ is the standard normal CDF. Smooth, with a soft transition; used in transformers (BERT, GPT).",
-          },
-          {
-            term: "Softmax",
-            definition:
-              "$\\mathrm{softmax}(\\mathbf{z})_i = \\frac{e^{z_i}}{\\sum_{j=1}^{K} e^{z_j}}$. Converts a vector of reals into a probability distribution (positive, sums to 1) — used in the output layer for multi-class classification.",
-          },
+          { term: "Model", definition: "A function, with \"learnable\" values, that maps inputs to outputs. Formally, a model is a function $f(x, \\theta)$ where $x$ is the input and $\\theta$ are the learnable parameters set during training." },
+          { term: "Label", definition: "The output or target variable the model is trying to predict, typically denoted $y$. For example, the house price in a model that predicts house prices." },
+          { term: "Features", definition: "The input variables that describe each example, typically denoted $x$ or $X$. For example, square footage in a house price model." },
+          { term: "Supervised Learning", definition: "A method of training where a model is trained on input-output pairs, with each training example having a label." },
+          { term: "Unsupervised Learning", definition: "A method of training where the model is only given inputs and no labels, and must discover the structure in the data on its own. The goal here is to get the model to discover hidden patterns by itself." },
+          { term: "Semi-Supervised", definition: "The model trains on a small amount of labeled data and a lot of unlabeled data. This is particularly useful when labels are \"expensive,\" for example medical imaging." },
+          { term: "Self-Supervised Learning", definition: "The model generates its own labels from the structure of the input data, then trains in a supervised manner on those auto-generated labels. For example, next-token prediction (Chapter 3) is a form of SSL." },
+          { term: "Classification", definition: "A supervised learning task where the output (label) is a discrete category, assigning each input to one of a finite set of classes. For instance, spam detection is a classification task (just as in the name)." },
+          { term: "Regression", definition: "A supervised learning task where the output is a continuous numerical value. The model predicts a real number rather than a category. For example, predicting house prices." },
+          { term: "Train/Validation/Test Split", definition: "When working with a model, we split our dataset into subsets. The training set is used to fit model parameters. The validation set is used to tune hyperparameters. The test set is used only for estimating model performance (e.g. accuracy)." },
+          { term: "Cross-Validation", definition: "A method for estimating model performance, used especially for scenarios with limited data." },
+          { term: "Parameters", definition: "The internal variables of a model learned from data during training. In a linear regression model, given by $y = wx + b$, the weights $w$ and the bias $b$ are parameters." },
+          { term: "Hyperparameters", definition: "Configuration values set before training begins that are not learned from data. For example, the learning rate (we'll explore this in a bit)." },
+          { term: "Underfitting", definition: "When a model is too simple or undertrained to capture the underlying structure in the data, resulting in poor performance on both the training data and unseen data." },
+          { term: "Overfitting", definition: "When a model memorizes idiosyncrasies and noise of the training data rather than learning generalizable patterns. This results in very high accuracy on training data but poor performance on unseen data." },
+          { term: "Generalization", definition: "The ability of a model to perform well on new, unseen data drawn from the same distribution as the training data. It is the ultimate goal of machine learning." },
+          { term: "Tensor", definition: "A multi-dimensional array of numbers, and the fundamental data structure of modern ML. A tensor's rank describes how many dimensions it has. These allow operations to run efficiently on GPUs and TPUs." },
+          { term: "Matrix", definition: "A two-dimensional, rectangular array." },
+          { term: "Pre-Training", definition: "The first and most expensive training phase, where a model learns broad, general-purpose patterns from a large body of data before it is adapted to any specific task." },
+          { term: "Post-Training", definition: "Everything done after pre-training to adapt the model to do something useful, such as fine-tuning on curated examples or learning from human feedback." },
         ],
       },
       {
-        heading: "Part 3: How the network learns",
-        paragraphs: [
-          "Before a network can improve, it needs some way of knowing how wrong it currently is. That's the job of the loss function $L(\\hat{y}, y)$: hand it a prediction and the true label and it hands you back a single number. Training is then just the search for the parameters $\\theta$ that make the average loss over the training set as small as possible:",
-        ],
-        equations: [
-          "\\mathcal{L}(\\theta) = \\frac{1}{N} \\sum_{i=1}^{N} L\\!\\left( f(\\mathbf{x}_i; \\theta),\\, \\mathbf{y}_i \\right)",
-        ],
-      },
-      {
-        paragraphs: [
-          "Two losses cover most cases. Mean squared error for regression penalizes large errors heavily because of the square; cross-entropy for classification is equivalent to maximizing the log-likelihood of the correct label under the model's predicted distribution:",
-        ],
-        equations: [
-          "L_{\\text{MSE}}(\\hat{y}, y) = (\\hat{y} - y)^2 \\qquad L_{\\text{CE}} = -\\sum_{k=1}^{K} y_k \\log p_k",
-        ],
-      },
-      {
-        heading: "Gradient descent",
-        paragraphs: [
-          "Once we have a loss, we minimize it. The gradient $\\nabla\\mathcal{L}(\\theta)$ points in the direction of steepest increase, so we step the opposite way:",
-        ],
-        equations: [
-          "\\theta_{t+1} = \\theta_t - \\eta\\,\\nabla\\mathcal{L}(\\theta_t)",
-        ],
-      },
-      {
-        paragraphs: [
-          "The learning rate $\\eta > 0$ sets how big a step you take. Too small and training crawls; too large and you overshoot the minimum or fly off entirely. Picture yourself standing somewhere on the loss surface and repeatedly stepping straight downhill — perpendicular to the contours of equal cost. (The diagram below is interactive; drag the learning rate and watch the descent crawl, converge, or blow up.)",
-        ],
-        diagram: {
-          id: "gradient-descent",
-          caption:
-            "Fig 1.3 — Gradient descent on a loss surface (contours). Each step moves against the gradient toward the minimum.",
+        quiz: {
+          question: "What's the difference between a parameter and a hyperparameter?",
+          answer: "A parameter is learned from the data during training, like the weights and bias. A hyperparameter is something you set by hand before training starts and training never changes it, like the learning rate or the number of layers.",
         },
       },
       {
+        heading: "3. Building a Neuron",
         paragraphs: [
-          "Plain descent oscillates in narrow ravines. Momentum accumulates an exponentially-decaying average of past gradients — a velocity vector — and steps in that direction, like a heavy ball rolling downhill that builds speed in consistent directions and damps oscillations:",
-        ],
-        equations: [
-          "\\mathbf{v}_{t+1} = \\beta\\mathbf{v}_t + \\nabla\\mathcal{L}(\\theta_t), \\qquad \\theta_{t+1} = \\theta_t - \\eta\\,\\mathbf{v}_{t+1}",
+          "At a high level, a neuron is a tiny decision-maker: it looks at some inputs, decides how much each one matters, and produces a single number. That's all it is. Let's build one from scratch and motivate every piece as we add it.",
         ],
       },
       {
-        heading: "Part 4: Backpropagation",
         paragraphs: [
-          "So how do you actually compute $\\nabla\\mathcal{L}$ when there are millions or billions of parameters to differentiate? This is what backpropagation is for. It computes the entire gradient in a single backward pass through the network, taking roughly as long as one forward pass — not one derivative per parameter, which would be hopeless.",
-          "The mental picture: the network is a graph, with operations at the nodes and tensors flowing along the edges. The forward pass pushes data forward to compute the loss; the backward pass pushes derivatives backward, multiplying a local Jacobian at each edge. Every modern framework — PyTorch, JAX, TensorFlow — does this automatically, which is what \"automatic differentiation\" means.",
+          "Suppose you want to predict one number from a handful of input numbers. Say you're guessing whether a loan should be approved, with inputs like income, credit score, and existing debt. The natural first idea is that some inputs matter more than others, so you give each one an importance and add them up. High income should push toward approval, high debt should push against it. So you assign each input a **weight**, a number saying how much that input counts and in which direction. A large positive weight means \"this input is strong evidence for yes,\" a large negative weight means \"strong evidence for no,\" and a weight near zero means \"ignore this one.\"",
         ],
-        diagram: {
-          id: "backprop-flow",
-          caption:
-            "Fig 1.4 — Forward, activations flow left → right to the loss; backward, the error signal δ flows right → left, and every weight's gradient is read off locally.",
+      },
+      {
+        paragraphs: [
+          "Then you combine them the obvious way: multiply each input by its weight and add up the results.",
+        ],
+      },
+      {
+        equations: [
+          "z = w_1 x_1 + w_2 x_2 + \\cdots + w_n x_n + b",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's read every symbol, because this small formula is the atom of everything that follows. The $x_1, x_2, \\ldots, x_n$ are your $n$ input numbers (the features). The $w_1, \\ldots, w_n$ are their weights, one per input. You multiply each input by its weight and add up the products. The $b$ on the end is the **bias**, and $z$ is the result, which we'll call the **pre-activation** for a reason that will be clear in a minute.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The bias earns its place because, without it, when all your inputs happen to be zero the output is forced to be zero too, and that's an arbitrary limitation. The bias is a constant offset that lets the neuron shift its whole output up or down regardless of the inputs. You can think of it as the neuron's default leaning, where it sits before it has looked at any evidence. In the line $y = wx + b$ you saw in school, $w$ is the slope and $b$ is where the line crosses the axis. Same $b$, same job.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That sum-of-products has a compact name and notation. If you gather the weights into a vector $\\mathbf{w}$ (bold, to signal it's a whole list of numbers rather than one number) and the inputs into a vector $\\mathbf{x}$, then \"multiply matching entries and add them all up\" is the **dot product**, written $\\mathbf{w}^\\top \\mathbf{x}$. The small $\\top$ means \"transpose,\" which here is just bookkeeping that lines the shapes up so the multiplication is defined; you can read $\\mathbf{w}^\\top \\mathbf{x}$ as \"the dot product of $\\mathbf{w}$ and $\\mathbf{x}$.\" So the whole formula shortens to:",
+        ],
+      },
+      {
+        equations: [
+          "z = \\mathbf{w}^\\top \\mathbf{x} + b",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is identical to the long version; we've only stopped writing out the sum. Get comfortable with it, because from here on, whenever you see a weight vector dotted with an input vector, your mind should translate it straight back to \"weighted sum of the inputs.\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "So now we have something that takes inputs, weighs them, sums them, and adds an offset. Is that a neuron? Almost. There is one missing ingredient, and it turns out to be the ingredient that everything depends on. It gets its own section.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What does the bias let a neuron do that the weighted sum alone cannot?",
+          answer: "It shifts the neuron's output up or down independent of the inputs, so the output isn't forced to zero when all inputs are zero. It sets the neuron's default leaning, or threshold for activating.",
         },
       },
       {
+        heading: "4. Nonlinearity: Why a Network Needs a Bend",
         paragraphs: [
-          "Concretely, set $\\mathbf{a}^{(0)} = \\mathbf{x}$ and for each layer compute $\\mathbf{z}^{(\\ell)} = W^{(\\ell)}\\mathbf{a}^{(\\ell-1)} + \\mathbf{b}^{(\\ell)}$ and $\\mathbf{a}^{(\\ell)} = \\sigma(\\mathbf{z}^{(\\ell)})$, caching each. Define the error signal at a layer as $\\boldsymbol{\\delta}^{(\\ell)} = \\partial L / \\partial \\mathbf{z}^{(\\ell)}$. For a softmax output with cross-entropy loss, the output error simplifies beautifully:",
+          "High-level idea first: a plain weighted sum can only draw straight lines, and the world is not made of straight lines. So we add a gentle bend to each neuron, and that single change is what lets a deep stack of them represent genuinely complicated patterns. Now let's see why, by trying to build something out of just weighted sums and watching it fall short.",
         ],
-        equations: ["\\boldsymbol{\\delta}^{(L)} = \\hat{\\mathbf{y}} - \\mathbf{y}"],
       },
       {
-        paragraphs: ["Then propagate the error backward through the layers:"],
+        paragraphs: [
+          "What we want from depth is layering: early units detect simple things, later units combine them into complex things, the way you might first notice edges, then shapes, then faces. So stack two weighted-sum units. The first takes input $x$ and produces an intermediate value. The second takes that value and produces the output. Each is just \"multiply by a weight, add a bias.\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "Watch what happens. The first unit gives $w_1 x + b_1$. Feed that into the second: $w_2 (w_1 x + b_1) + b_2$. Multiply it out: $w_2 w_1 x + w_2 b_1 + b_2$. Look at that result. The thing multiplying $x$ is just a single number ($w_2 w_1$), and the rest is just another number ($w_2 b_1 + b_2$). So the whole two-layer contraption is exactly the same as one weighted-sum unit with weight $w_2 w_1$ and bias $w_2 b_1 + b_2$. We stacked two and got nothing more than one.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is not a quirk of two layers. Stack a hundred and they still collapse into a single weighted sum, because a chain of straight-line operations is itself a straight line. The formal way to say it is that the composition of linear functions is linear, where \"linear\" means straight-line, no curves. A weighted sum can only ever split the world with a straight cut. It can never bend. And almost nothing worth predicting is separable by a straight cut.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So we give it a bend. After the weighted sum produces $z$, we pass $z$ through one more step: a curved, **nonlinear** function written $\\sigma$ (the Greek letter sigma), called the **activation function**. The neuron's output is then:",
+        ],
+      },
+      {
         equations: [
-          "\\boldsymbol{\\delta}^{(\\ell)} = \\left( W^{(\\ell+1)\\top}\\,\\boldsymbol{\\delta}^{(\\ell+1)} \\right) \\odot \\sigma'(\\mathbf{z}^{(\\ell)})",
+          "a = \\sigma(z)",
         ],
       },
       {
         paragraphs: [
-          "and read off every parameter gradient as a cheap local product of the error signal and the layer's input activation:",
+          "Here $z$ is the weighted sum, $\\sigma$ is some fixed curve we apply to it, and $a$ is the neuron's final output, called the **activation**. That's the full neuron, start to finish: take inputs, weigh and sum them into $z$, then bend $z$ through $\\sigma$ to get $a$. The weighted sum decides which inputs matter and the bias sets the threshold, but it's the bend that gives the network the ability to represent curves, corners, and the complicated shapes real patterns demand. Now when you stack neurons, each bend stays a bend, and the stack can express things a single unit never could. That is why depth buys you anything. Take the bends out and the whole tower collapses back into one straight line.",
         ],
+      },
+      {
+        paragraphs: [
+          "So which curve do we use for $\\sigma$? A few have been popular, and going through them in order is really a tour of the field correcting its own mistakes.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The old favorite is the **sigmoid**, $\\sigma(z) = \\frac{1}{1 + e^{-z}}$. The symbol $e$ is a fixed number, about $2.718$, that shows up everywhere in math because it makes calculus clean; $e^{-z}$ means $e$ raised to the power $-z$. When $z$ is a large positive number, $e^{-z}$ is nearly zero, so the fraction is nearly $1$. When $z$ is a large negative number, $e^{-z}$ is huge, so the fraction is nearly $0$. In between it slides smoothly from $0$ up to $1$ in a soft S-shape. That's its appeal: it squashes any input, however large, into the range between $0$ and $1$, which is exactly what you want if you're going to read the output as a probability. The sigmoid ruled the early decades and still earns its keep at the very end of a network when you want a single yes/no probability.",
+        ],
+      },
+      {
+        paragraphs: [
+          "But the sigmoid has a quiet flaw that nearly stalled deep learning for good, and it's worth seeing now because it returns in the training sections. Look at the flat parts of the S. When $z$ is very positive or very negative, the curve is almost horizontal, so nudging $z$ barely changes the output. Training, as we'll see, depends on those nudges carrying a signal. When the curve goes flat, the signal dies. Stack many sigmoid layers and the signal, passing through one flat region after another, fades to nothing before it reaches the early layers, and they stop learning. This is the **vanishing gradient problem**, which we'll name properly once we have gradients in hand. Its cousin **tanh** (hyperbolic tangent) is the same S-shape squashed into the range $-1$ to $1$ instead of $0$ to $1$. Being centered on zero helps training a little, but it has the same flat-tails problem.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The fix, and a big reason deep learning took off after 2012, is simple. It's called **ReLU**, the Rectified Linear Unit, and it's just $\\sigma(z) = \\max(0, z)$: if the input is positive, pass it through unchanged; if it's negative, output zero. A flat line for negatives, a 45-degree ramp for positives, with a sharp corner at zero. It looks too crude to work, yet it's the default for almost every hidden layer built today. The reason is the flat-tail problem in reverse: on the positive side ReLU has no flat region, so the learning signal passes through undamped no matter how many layers you stack. It's also very cheap to compute, which matters when you do it billions of times.",
+        ],
+      },
+      {
+        paragraphs: [
+          "ReLU isn't perfect. A neuron can get pushed into the negative region and stay there, where its output is always zero and, since the curve is flat there too, no learning signal ever reaches it to revive it. The neuron is effectively dead. This is the **dying ReLU problem**. The patch is **Leaky ReLU**, $\\max(\\alpha z, z)$ with a small $\\alpha$ like $0.01$, which gives the negative side a gentle slope instead of a flat zero, so a stuck neuron always has a thread of signal to climb back out on. The smooth, modern relative used in transformers like GPT is **GELU**, the Gaussian Error Linear Unit, which behaves like ReLU but rounds the sharp corner into a soft transition.",
+        ],
+      },
+      {
+        paragraphs: [
+          "GELU is worth a short detour because it leans on a concept you'll meet again: the **Gaussian**, also called the normal distribution, the famous bell curve. The idea: take a quantity that's the sum of many small random influences, like a person's height or the noise in a measurement, and it tends to pile up symmetrically around an average, common near the middle and rare at the extremes. Plot how often each value occurs and you get the bell shape. GELU uses the bell curve's running total, the probability that a standard bell-curve draw lands below your value $z$, as a soft, smoothly increasing gate on the input. You don't need to compute it by hand; just picture a smoothed-out ReLU and you have the intuition.",
+        ],
+      },
+      {
+        paragraphs: [
+          "There's one more activation that lives in a special place, the output. When you classify among several classes, you don't want one number, you want a full set of probabilities, one per class, all positive and summing to exactly $1$ (because the answer is *some* class, with total certainty $1$ split across the options). The function that turns a raw vector of scores into exactly such a distribution is **softmax**:",
+        ],
+      },
+      {
         equations: [
-          "\\frac{\\partial L}{\\partial W^{(\\ell)}} = \\boldsymbol{\\delta}^{(\\ell)}\\,(\\mathbf{a}^{(\\ell-1)})^\\top, \\qquad \\frac{\\partial L}{\\partial \\mathbf{b}^{(\\ell)}} = \\boldsymbol{\\delta}^{(\\ell)}",
+          "\\text{softmax}(\\mathbf{z})_i = \\frac{e^{z_i}}{\\sum_{j=1}^{K} e^{z_j}}",
         ],
       },
       {
         paragraphs: [
-          "These are the four equations of backpropagation — Chapter 2 derives each of them from first principles. A few failure modes recur often enough to name:",
-        ],
-        list: [
-          "Vanishing gradients — when $\\sigma'$ is small (a saturated sigmoid), $\\delta$ shrinks exponentially as it propagates backward and early layers barely learn. Mitigated by ReLU, careful initialization, normalization, and residual connections.",
-          "Exploding gradients — the opposite: gradients grow exponentially and parameters blow up to NaN. Mitigated by gradient clipping (capping the gradient norm) and good initialization.",
-          "Initialization matters — starting all weights at zero is fatal: every neuron in a layer computes the same thing and receives the same gradient, so they never differentiate. Random initialization with carefully chosen variance is the standard.",
+          "Take it piece by piece. You have $K$ classes and a raw score $z_i$ for each. The $\\sum_{j=1}^{K}$ means \"add up the following over every class $j$ from $1$ to $K$.\" So for class $i$, you exponentiate its score, $e^{z_i}$, and divide by the sum of the exponentiated scores of all classes. Exponentiating makes every number positive (no negative probabilities) and exaggerates differences (so the network can express confidence), and dividing by the total forces the whole set to sum to $1$. Out comes a clean probability distribution. Softmax sits at the end of nearly every classifier.",
         ],
       },
       {
-        heading: "Optimizers",
-        paragraphs: [
-          "The loss surfaces you're navigating are high-dimensional and decidedly non-convex, and the optimizer is what decides how you move across them. There's a clear lineage here, running from plain SGD up to the adaptive methods everyone uses today.",
-        ],
-        list: [
-          "SGD — sample a mini-batch (typical sizes 32–256), compute its gradient, step against it. Cheap and noisy; the noise often helps escape shallow minima and saddles.",
-          "Momentum — a velocity vector averages out oscillations and helps push through flat regions (typically $\\beta = 0.9$).",
-          "Nesterov (NAG) — look ahead with the momentum step first, compute the gradient there, then correct. Slightly faster convergence.",
-          "AdaGrad — give each parameter its own learning rate, scaled by $1/\\sqrt{\\text{accumulated squared gradients}}$. Parameters that have seen large gradients get smaller updates; rarely-updated ones get larger updates, which makes it genuinely useful for sparse features (think NLP with rare words). The catch is that the accumulated sum $G_t$ only ever grows, so the effective rate monotonically decays toward zero and learning eventually stalls.",
-          "RMSProp — fixes AdaGrad's vanishing rate by using an exponentially-decaying average of squared gradients instead of an ever-growing sum (typically $\\beta = 0.9$). Works well in practice, especially for RNNs. A fun bit of ML history: Geoff Hinton proposed it in a Coursera lecture and never formally published it.",
-        ],
-      },
-      {
-        paragraphs: [
-          "It's worth seeing the two adaptive updates written out, because the difference between them is exactly the difference between a sum and a decaying average. AdaGrad accumulates $G_t = G_{t-1} + g_t^2$ and divides by its square root; RMSProp swaps that growing sum for an exponential moving average $v_t$:",
-        ],
-        equations: [
-          "\\theta_{t+1} = \\theta_t - \\frac{\\eta}{\\sqrt{G_t + \\epsilon}}\\,g_t \\qquad\\text{(AdaGrad)}",
-          "v_t = \\beta v_{t-1} + (1-\\beta)\\,g_t^2, \\qquad \\theta_{t+1} = \\theta_t - \\frac{\\eta}{\\sqrt{v_t + \\epsilon}}\\,g_t \\qquad\\text{(RMSProp)}",
-        ],
-      },
-      {
-        paragraphs: [
-          "Adam (Adaptive Moment Estimation) combines momentum (first moment) with RMSProp's adaptive scaling (second moment), with bias correction for the zero-initialized averages. It is the de facto default:",
-        ],
-        equations: [
-          "\\begin{aligned} m_t &= \\beta_1 m_{t-1} + (1-\\beta_1)\\,g_t \\\\ v_t &= \\beta_2 v_{t-1} + (1-\\beta_2)\\,g_t^2 \\\\ \\hat{m}_t &= \\frac{m_t}{1-\\beta_1^t}, \\quad \\hat{v}_t = \\frac{v_t}{1-\\beta_2^t} \\\\ \\theta_{t+1} &= \\theta_t - \\eta\\,\\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon} \\end{aligned}",
-        ],
-      },
-      {
-        paragraphs: [
-          "Typical values are $\\beta_1 = 0.9$, $\\beta_2 = 0.999$, $\\epsilon = 10^{-8}$, and the bias-correction terms (dividing by $1 - \\beta^t$) compensate for $m$ and $v$ being initialized to zero, which would otherwise bias them toward zero early in training. Adam works out of the box on a huge range of problems and needs less learning-rate tuning — but it has a real weakness: it can generalize worse than SGD on some tasks (notably vision). AdamW is a small but important fix: in plain Adam, L2 weight decay gets scaled by the adaptive rate (wrong — small for high-gradient parameters, large for low-gradient ones); AdamW decouples it, applying the decay directly. AdamW is the actual default for transformers and LLMs:",
-        ],
-        equations: [
-          "\\theta_{t+1} = \\theta_t - \\eta\\left( \\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon} + \\lambda\\theta_t \\right)",
-        ],
-      },
-      {
-        heading: "Learning-rate schedules",
-        paragraphs: [
-          "The learning rate is arguably the single most important hyperparameter, and a fixed value is rarely optimal — you want big steps early and small steps near a minimum.",
-        ],
-        list: [
-          "Step decay — drop $\\eta$ by a factor every $N$ epochs.",
-          "Exponential decay — $\\eta_t = \\eta_0\\,\\gamma^t$ for $\\gamma < 1$.",
-          "Cosine annealing — $\\eta$ follows a cosine curve from $\\eta_{\\max}$ down to $\\eta_{\\min}$ over the run (see the formula below). Very popular for transformers.",
-          "Warmup — start tiny and linearly ramp up over the first few thousand steps. Critical for transformers, where large initial Adam steps destabilize the variance estimates.",
-          "Warmup + cosine decay — the standard combo for modern large-model training.",
-        ],
-      },
-      {
-        paragraphs: [
-          "Cosine annealing is worth writing out, since it's the schedule you'll meet most often. Over a run of length $T$, the rate sweeps smoothly from $\\eta_{\\max}$ to $\\eta_{\\min}$ along half a cosine wave:",
-        ],
-        equations: [
-          "\\eta_t = \\eta_{\\min} + \\tfrac{1}{2}(\\eta_{\\max} - \\eta_{\\min})\\left(1 + \\cos\\tfrac{t\\pi}{T}\\right)",
-        ],
-      },
-      {
-        heading: "Hyperparameter tuning",
-        paragraphs: [
-          "Everything above — learning rate, batch size, $\\beta$ values, weight decay, depth — has to be chosen, and there's a whole toolkit for choosing well.",
-        ],
-        list: [
-          "Grid search — try every combination on a predefined grid. Exhaustive, but the cost explodes with the number of hyperparameters.",
-          "Random search — sample combinations at random. Counterintuitively, it beats grid search in high dimensions, because it explores more distinct values of each individual hyperparameter rather than wasting trials on a coarse lattice.",
-          "Bayesian optimization — build a probabilistic model of the objective and use it to pick the next promising point (e.g. with Optuna).",
-          "Population-based training — evolve a population of models, periodically copying the winners' weights and perturbing their hyperparameters mid-training.",
-        ],
-      },
-      {
-        heading: "Regularization",
-        paragraphs: [
-          "Regularization is anything that narrows the generalization gap — making test performance closer to training performance — usually by discouraging the model from fitting noise.",
-        ],
-        list: [
-          "L2 (weight decay) — add $\\lambda\\lVert\\theta\\rVert^2$ to the loss. Penalizes large weights; equivalent to a Gaussian prior.",
-          "L1 — add $\\lambda\\lVert\\theta\\rVert_1$. Encourages sparse weights (many exactly zero); useful for feature selection.",
-          "Dropout — randomly zero a fraction of activations during training ($p = 0.1$–$0.5$). At test time you use all the activations, scaled appropriately, so the expected signal matches. This forces the network into redundant, robust representations, because it can't lean on any single neuron.",
-          "Early stopping — halt when validation loss stops improving.",
-          "Data augmentation — apply label-preserving transforms (crops, flips, color jitter; back-translation for text) to enlarge the dataset and bake in invariances.",
-          "Label smoothing — replace one-hot targets with soft ones to curb overconfidence and improve calibration.",
-          "Mixup / CutMix — train on linear combinations of pairs of examples and labels. Strong regularizers for vision.",
-          "Stochastic depth / DropPath — randomly drop entire layers during training (not just individual activations). Used in very deep networks like deep ResNets and modern vision transformers.",
-        ],
-      },
-      {
-        heading: "Normalization",
-        paragraphs: [
-          "Normalization layers keep training stable by controlling how activations and gradients are distributed, and they're arguably the biggest single advance since backprop itself. The shared idea is simple: rescale the activations to zero mean and unit variance, then give the network a learnable scale $\\gamma$ and shift $\\beta$ so it can partly undo that whenever it's useful.",
-        ],
-        equations: [
-          "\\hat{x}_i = \\frac{x_i - \\mu_B}{\\sqrt{\\sigma_B^2 + \\epsilon}}, \\qquad y_i = \\gamma\\hat{x}_i + \\beta",
-        ],
-      },
-      {
-        list: [
-          "Batch Norm — normalize across the batch dimension. Dramatically accelerates CNN training, but needs reasonable batch sizes and behaves differently at train vs test time.",
-          "Layer Norm — normalize across features instead of the batch. No batch-size dependence; standard in transformers.",
-          "RMSNorm — a cheaper LayerNorm that drops the mean subtraction and only divides by the root-mean-square. Used in LLaMA and many modern LLMs.",
-          "Group Norm — normalize within groups of channels; useful for small batches.",
-          "Instance Norm — normalize per-sample, per-channel; used in style transfer.",
-        ],
-      },
-      {
-        heading: "Initialization",
-        paragraphs: [
-          "How you initialize weights matters enormously — bad initialization causes vanishing or exploding activations before training even begins.",
-        ],
-        list: [
-          "Zero — fatal. All neurons compute the same thing and receive the same gradient, so symmetry is never broken.",
-          "Random Gaussian (small variance) — better, but too small and activations shrink through layers; too large and they explode.",
-          "Xavier / Glorot — variance $2/(n_{\\text{in}} + n_{\\text{out}})$. Derived for tanh and unit-variance signals.",
-          "He — variance $2/n_{\\text{in}}$. Designed for ReLU (which halves the variance by zeroing negatives). The standard for ReLU networks.",
-          "Orthogonal — initialize weight matrices to be orthogonal, preserving gradient norms; helps very deep or recurrent networks.",
-        ],
-      },
-      {
-        heading: "Architectural ideas that scale",
-        paragraphs: [
-          "A handful of structural ideas, layered on top of the basics, are what make very large networks trainable and efficient.",
-        ],
-        list: [
-          "Residual / skip connections — compute $\\mathbf{a}^{(\\ell)} = f(\\mathbf{a}^{(\\ell-1)}) + \\mathbf{a}^{(\\ell-1)}$. The identity shortcut lets gradients flow straight back, making networks with hundreds of layers trainable. This single idea (ResNet, 2015) underlies every modern deep architecture, transformers included.",
-          "Gating — learnable multiplicative gates that control information flow (LSTM / GRU gates, GLU in transformers).",
-          "Attention — let the network weight all parts of the input by learned relevance; the core of the transformer (Chapter 4).",
-          "Mixture of Experts (MoE) — replace a dense layer with many experts and a router that sends each token to a few. Grows parameters without proportional compute.",
-          "Mixed precision — compute in 16-bit (bf16) for speed and memory while keeping a master copy in fp32. Roughly 2× faster with no quality loss.",
-          "Batch size — larger batches give better gradient estimates and parallelize better on GPUs, but they typically need the learning rate scaled up (often linearly with batch size — the \"linear scaling rule\" — paired with warmup) and can hurt generalization. Typical sizes run from 32 to a few hundred for SGD, far larger for big distributed runs.",
-          "Gradient accumulation — run several mini-batches and sum their gradients before stepping, simulating a larger batch when memory is tight.",
-        ],
-      },
-      {
-        heading: "Scaling across devices",
-        paragraphs: [
-          "Once a model or its data no longer fits on a single accelerator, you split the work — and there are a few distinct ways to do it, often combined.",
-        ],
-        list: [
-          "Data parallelism — replicate the whole model on each device, split the batch across them, and average the gradients before stepping.",
-          "Tensor / model parallelism — split individual layers across devices, so one matrix multiply is shared.",
-          "Pipeline parallelism — split the network depth-wise across devices and pipeline mini-batches through the stages.",
-          "ZeRO / FSDP — shard the optimizer states, gradients, and parameters across devices to save memory rather than replicating them.",
-        ],
-      },
-      {
-        paragraphs: [
-          "Two more tools earn their keep on long runs. Gradient checkpointing trades compute for memory: instead of caching every activation on the forward pass, you recompute them during the backward pass — essential for very large models. And checkpointing-and-resumption means periodically saving the model and optimizer state to disk, because a run that takes weeks cannot afford to lose progress to a single crash.",
-        ],
-      },
-      {
-        heading: "Reading the loss curves",
-        paragraphs: [
-          "A trained intuition for what training curves mean is one of the most valuable skills in deep learning.",
-        ],
-        diagram: {
-          id: "train-val-loss",
-          caption:
-            "Fig 1.5 — The classic overfitting signature: training loss keeps falling while validation loss turns back up. The early-stopping point is the validation minimum.",
+        quiz: {
+          question: "If you stack two linear layers with no activation between them, what do you end up with, and why does that matter?",
+          answer: "You end up with something equivalent to a single linear layer, a plain straight-line function, so the extra depth bought you nothing. The nonlinear activation between layers is what lets a deep stack represent curved, complicated patterns instead of one straight cut.",
         },
       },
       {
-        list: [
-          "Loss not decreasing at all — learning rate too low, dead activations, a bug in the loss, misaligned labels, or gradients not flowing.",
-          "Loss explodes to NaN — learning rate too high, exploding gradients, or numerical instability like $\\log(0)$. Clip gradients and lower the rate.",
-          "Train loss falls but validation loss rises — classic overfitting. Add regularization, get more data, shrink the model, or stop earlier.",
-          "Both plateau high — underfitting. Bigger model, better features, more training, less regularization.",
-          "Loss oscillates wildly — learning rate too high or batch size too small.",
-          "Loss decreases then suddenly spikes — often a single bad batch or a moment of numerical instability. Inspect the outlier examples in that batch.",
+        heading: "5. From One Neuron to a Network",
+        paragraphs: [
+          "The high-level picture: one neuron makes one bent cut through the data, which isn't much. Put many neurons side by side into a **layer**, then stack layers, and you get a function flexible enough to describe almost anything.",
         ],
       },
       {
         paragraphs: [
-          "Sanity checks worth doing first: can the model overfit a single batch (if not, something is fundamentally broken)? Does the initial loss match the value for random predictions ($\\log K$ for $K$-class cross-entropy)? Are gradient magnitudes reasonable across all layers?",
+          "A layer is a row of neurons that all look at the same input at the same time and each produce their own output. If $n$ inputs come in and you want $m$ neurons in the layer, each neuron has its own weight vector of length $n$ and its own bias. Rather than track $m$ separate weight vectors, we stack them as the rows of a single grid of numbers, a **matrix**, written $W$. So $W$ has $m$ rows (one per neuron) and $n$ columns (one per input), summarized as $W \\in \\mathbb{R}^{m \\times n}$. (The symbol $\\mathbb{R}$ means \"the real numbers,\" ordinary numbers; $\\mathbb{R}^{m \\times n}$ means \"an $m$-by-$n$ grid of ordinary numbers.\") The biases of all $m$ neurons stack into one vector $\\mathbf{b}$, and the whole layer computes:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathbf{z} = W \\mathbf{x} + \\mathbf{b}, \\qquad \\mathbf{a} = \\sigma(\\mathbf{z})",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is the single-neuron equation from before, done $m$ times in parallel and packed into matrix form. The matrix-vector product $W\\mathbf{x}$ means \"take the dot product of each row of $W$ with $\\mathbf{x}$,\" which produces every neuron's weighted sum in one operation. Add the bias vector, apply $\\sigma$ to every entry (that's what \"element-wise\" means, one bend per neuron), and you have the layer's output vector $\\mathbf{a}$, one number per neuron. The reason for all the matrix machinery, instead of looping over neurons one at a time, is the tensor point from the definitions: a matrix-vector product is exactly the operation a GPU runs fastest, so writing it this way is what makes the whole thing practical to run.",
+        ],
+      },
+      {
+        paragraphs: [
+          "To build a deep network you feed the output of one layer in as the input to the next. The first layer reads the raw features, the last layer produces the final answer, and the layers between are called **hidden** layers, because you never directly observe what they compute; they're the network's private scratch space for inventing intermediate features. A network with $L$ layers strung together is the composition:",
+        ],
+      },
+      {
+        equations: [
+          "f(x; \\theta) = f_L \\circ f_{L-1} \\circ \\cdots \\circ f_2 \\circ f_1(x)",
+        ],
+      },
+      {
+        paragraphs: [
+          "The small circle $\\circ$ means \"compose,\" that is, \"feed the output of the right-hand function into the left-hand one.\" Read right to left: $f_1$ runs on the input $x$, its output feeds $f_2$, and so on up to $f_L$, whose output is the prediction. The full bundle of parameters $\\theta$ is every weight matrix and every bias vector across all the layers: $\\theta = \\{W^{(1)}, \\mathbf{b}^{(1)}, \\ldots, W^{(L)}, \\mathbf{b}^{(L)}\\}$. The superscripts in parentheses are just layer labels, \"the weights of layer 1,\" not exponents.",
+        ],
+      },
+      {
+        paragraphs: [
+          "It's fair to ask how much this stacking actually buys us. Are there shapes a neural network *cannot* represent? The reassuring answer is a result called the **universal approximation theorem**, which says a network with even a single hidden layer, given enough neurons, can approximate essentially any continuous function to any accuracy you like. So expressiveness is not the bottleneck. Then why bother with depth, if one wide layer can in principle do anything? Because \"in principle\" hides a hard \"in practice.\" A shallow network might need an enormous number of neurons to capture a pattern a deep network captures with few. Depth lets the network reuse its intermediate features, building complex ideas out of simpler ones layer by layer, and that reuse is the difference between a model that's merely possible and one you can actually train. Depth buys efficiency, not new powers.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So we now have our function with knobs: a deep stack of weighted sums and bends, with millions of weights and biases waiting to be set. But notice what we *don't* have yet. A freshly built network has random knobs, so it's useless; it maps cat photos to nonsense. Nothing so far makes it *learn*. Learning, concretely, means adjusting those knobs until the network's outputs fit the data, and we don't yet have any procedure for doing the adjusting.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That procedure is what the next three sections build, in order, each one needed by the next. First we need a way to measure how wrong the network currently is, because you can't improve what you can't measure; that's the **loss** (section 6). Once we can score wrongness, we need a rule for which way to turn each knob to make that score smaller; that's **gradient descent** (section 7), the actual learning mechanism. And gradient descent turns out to need one ingredient it can't easily get, the slope of the loss with respect to every knob at once; computing that efficiently for millions of knobs is what **backpropagation** does (section 8). Loss tells us how wrong, gradient descent tells us which way to move, backprop makes the move computable. Keep that chain in mind as we go.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What does each row of a layer's weight matrix $W$ represent?",
+          answer: "One neuron's weights. Multiplying W by the input vector takes the dot product of each row with the input, which computes every neuron's weighted sum at once.",
+        },
+      },
+      {
+        heading: "6. The Loss: Measuring How Wrong We Are",
+        paragraphs: [
+          "Before we can make the network better, we need a single number that says how bad it is right now. You can't improve what you can't measure. That number is the **loss**.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The loss function takes the network's prediction, written $\\hat{y}$ (the small hat means \"predicted,\" to set it apart from the true answer $y$), compares it to the true answer, and returns one number that's large when the prediction is far off and small when it's close. Training then has a clear target: turn the knobs to make that number as small as possible, averaged over all the training examples.",
+        ],
+      },
+      {
+        paragraphs: [
+          "For regression, where the answer is a number, the natural measure of wrongness is the gap between prediction and truth, squared:",
+        ],
+      },
+      {
+        equations: [
+          "L(\\hat{y}, y) = (\\hat{y} - y)^2",
+        ],
+      },
+      {
+        paragraphs: [
+          "The $(\\hat{y} - y)$ is the error, the difference between your guess and the truth. We square it for two reasons. First, squaring removes the sign, so being off by $+5$ or by $-5$ counts the same. Second, squaring punishes big misses far more than small ones (an error of $10$ contributes $100$, an error of $2$ contributes only $4$), which pushes the network away from catastrophic mistakes. Averaged over many examples, this is **mean squared error**, the standard loss for regression.",
+        ],
+      },
+      {
+        paragraphs: [
+          "For classification, where the network outputs a probability distribution from softmax, we want a loss that's happy when the model puts high probability on the correct class and unhappy when it confidently backs the wrong one. That loss is **cross-entropy**:",
+        ],
+      },
+      {
+        equations: [
+          "L = -\\sum_{k=1}^{K} y_k \\log \\hat{y}_k",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's how to read it. The true label $y$ is a **one-hot vector**: a list with a $1$ in the slot of the correct class and $0$ everywhere else (if the answer is \"class 3 of 5,\" then $y = [0, 0, 1, 0, 0]$). The prediction $\\hat{y}$ is the probability the model assigned to each class. The sum runs over all $K$ classes, but because $y_k$ is zero for every class except the correct one, every term drops out except the single term for the right answer. So the loss reduces to $-\\log(\\text{probability the model gave the correct class})$. Recall what a **logarithm** does: $\\log$ is the inverse of exponentiation, and the key fact is that the log of a number close to $1$ is close to $0$, while the log of a number close to $0$ falls toward negative infinity. So if the model gave the right answer probability $0.99$, then $-\\log(0.99)$ is a tiny loss, nearly zero, good. If it gave the right answer probability $0.01$, then $-\\log(0.01)$ is a large positive loss, a heavy penalty for being confidently wrong. Cross-entropy rewards the model for assigning high probability to the truth.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Whichever loss we use, the full training objective is to minimize its average over the entire training set:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}(\\theta) = \\frac{1}{N} \\sum_{i=1}^{N} L\\big(f(x_i; \\theta), y_i\\big)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Reading it: $N$ is the number of training examples, the sum runs over all of them, $f(x_i; \\theta)$ is the network's prediction on example $i$ given the current knobs $\\theta$, $y_i$ is that example's true answer, and the $\\frac{1}{N}$ averages the whole thing. The capital $\\mathcal{L}(\\theta)$ is the average loss as a function of the knobs. The job from section 1 is now precise: **find the $\\theta$ that makes $\\mathcal{L}(\\theta)$ as small as possible.**",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why does cross-entropy punish a confident wrong answer so heavily?",
+          answer: "The loss reduces to -log(probability assigned to the correct class). As that probability approaches zero, -log of it shoots toward infinity, so the more confident the model was in the wrong answer, the larger the penalty.",
+        },
+      },
+      {
+        heading: "7. Gradient Descent",
+        paragraphs: [
+          "This is the section where the network finally learns. We have a network full of random knobs and a loss that scores how wrong they are. What we're missing is the actual mechanism of learning: a rule that takes the current knobs and the current wrongness and produces *better* knobs. Gradient descent is that rule. It's how the network fits the data, by repeatedly nudging every knob in whatever direction lowers the loss a little, until the loss is small and the outputs match the answers.",
+        ],
+      },
+      {
+        heading: "The Cost Function, Seen as a Surface",
+        paragraphs: [
+          "We already met this number in the last section as the loss. (People say \"loss\" and \"cost\" almost interchangeably. Loss usually means the wrongness on one example, cost the average over the whole training set, but it's the same idea, and from here on we'll use the cost.) Here is the change in viewpoint that makes gradient descent click, and it's the one 3Blue1Brown leans on.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Stop thinking of the cost as a function of the *data*, and start thinking of it as a function of the *knobs*. The training data is fixed, baked in. What's free to vary is the millions of weights and biases. So the cost is really a function that takes in one complete setting of every weight and bias and returns a single number: how badly that setting does across the data. Write it $C(\\theta)$, where $\\theta$ is the whole bundle of weights and biases and $C$ is the cost. Training the network means hunting through the space of possible $\\theta$ for the setting that makes $C$ smallest.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Now try to picture that function, and do it by climbing the dimensions one at a time. Suppose the network had a single weight. Then $C$ depends on one number, and you can draw it as an ordinary curve: the weight along the horizontal axis, the cost along the vertical. Making the network better is just finding the bottom of the curve. Now suppose it had two weights. Then $C$ depends on two numbers, and you draw it as a surface: a landscape floating above a flat plane of the two weights, where the height at each point is the cost there, full of hills and valleys. Making the network better is rolling a ball to the lowest point of that surface. A real network has not one or two weights but millions, so the true cost surface lives in a space with millions of directions, which nobody can draw or even imagine. And here is the leap worth making: you do not need to. The reasoning that works for the curve and the surface, find the downhill direction and step that way, works exactly the same with a million directions. Everything we figure out from the 2D and 3D pictures is literally what happens up in the enormous space; there are just more directions to choose a step in.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This reframing is what gradient descent acts on. The cost surface is the thing we want to get to the bottom of, and from here the section is really just answering one question: standing somewhere on that surface, which way is downhill, and how big a step do we take?",
+        ],
+      },
+      {
+        paragraphs: [
+          "The high-level idea is a hike in fog. You have a number, the cost, that depends on millions of knobs, and you want it small. So you imagine standing on the surface we just described, feel which way is downhill, take a step, and repeat. Let's make that precise.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That surface is the landscape. Every setting of the knobs $\\theta$ is a location on it, and the height there is the cost at that setting. Bad settings sit up on hills and ridges; good settings sit down in valleys. Training is the search for the lowest valley. You're standing somewhere on this landscape, in thick fog, and you want to get downhill. What do you do? You feel the slope under your feet and step in the steepest downhill direction. Then you feel the slope again and repeat. That's the whole method. The only thing we need to make it work is a way to feel the slope, and that's where calculus comes in.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The slope of a function is its **derivative**. For a function of one variable, the derivative at a point answers a single question: if I nudge the input a tiny bit, how much, and in which direction, does the output move? A positive derivative means the output rises as you move right; a negative one means it falls. The size of the derivative tells you how steep the slope is. That's all a derivative is, a rate of change, the steepness of the curve at a point.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Our loss doesn't depend on one knob, though, it depends on millions. So instead of a single slope we have a slope for each knob: if I nudge this particular weight a tiny bit and hold all the others fixed, how does the loss move? That per-knob slope is a **partial derivative** (partial because you vary one variable at a time and freeze the rest). Collect all those partial derivatives into one big vector, one slope per knob, and you have the **gradient**, written $\\nabla \\mathcal{L}(\\theta)$. The upside-down triangle $\\nabla$ is just the symbol for \"gradient of.\" The gradient is the many-dimensional version of a slope, and it has a useful property: it points in the direction of steepest increase of the loss, the most uphill direction. Its exact opposite, the negative gradient, points most steeply downhill, which is the way we want to walk.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So the update rule follows directly. Stand at your current knobs $\\theta_t$ (the subscript $t$ labels which step you're on), compute the gradient, and step in the downhill direction:",
+        ],
+      },
+      {
+        equations: [
+          "\\theta_{t+1} = \\theta_t - \\eta \\nabla \\mathcal{L}(\\theta_t)",
+        ],
+      },
+      {
+        paragraphs: [
+          "The new setting $\\theta_{t+1}$ is the old one minus a small multiple of the gradient. The minus sign turns \"uphill\" into \"downhill.\" And $\\eta$ (the Greek letter eta) is the **learning rate**, the size of the step you take. This is the single most important hyperparameter you'll tune. Too small and you inch down the mountain so slowly you may never arrive. Too large and you take giant reckless leaps, overshooting the valley floor, maybe bouncing out of the valley entirely or flying off to infinity. Getting $\\eta$ right, or scheduling how it changes over training, is much of the practical art. Repeat the step over and over and you descend toward a valley. The whole procedure is **gradient descent**, and it's the engine underneath essentially all of modern machine learning.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One honest caveat. The loss landscape of a real network is not a single smooth bowl with one obvious bottom. It's a crinkled, high-dimensional terrain with countless valleys, some deeper than others. Gradient descent only promises to bring you to *a* low point near where you started, not *the* lowest point anywhere. For years people assumed this would be fatal. In practice, in these huge spaces, the many valleys tend to be roughly as good as each other, and the method works remarkably well anyway. We'll mostly set the worry aside.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What happens if the learning rate is set too large?",
+          answer: "The steps overshoot the bottom of the valley, so instead of settling at a minimum the parameters bounce back and forth across it or diverge entirely toward infinity.",
+        },
+      },
+      {
+        heading: "8. Backpropagation",
+        paragraphs: [
+          "Gradient descent told us the rule for learning: nudge every knob opposite its slope. But it quietly assumed we already had those slopes, the gradient, the partial derivative of the loss with respect to every single knob. That assumption is the whole catch. A real network has millions or billions of knobs, and gradient descent is useless until we can actually produce that gradient. So gradient descent and backpropagation are two halves of one idea: gradient descent decides *which way* to move each knob, and backpropagation is what makes computing that direction, for all the knobs at once, fast enough to be possible. Without backprop, the learning rule from the last section stays a nice idea you can't run.",
+        ],
+      },
+      {
+        paragraphs: [
+          "At a high level, backpropagation is just careful bookkeeping with the chain rule. It computes the whole gradient in one sweep backward through the network, reusing shared work so nothing is recomputed.",
+        ],
+      },
+      {
+        paragraphs: [
+          "First, why the obvious approach fails. You could, for each weight, trace by hand how a nudge to it ripples forward through every later layer to finally move the loss, then write down that one partial derivative. But each such trace walks the whole depth of the network, and you'd repeat it for every one of billions of weights, redoing nearly all of the same intermediate work each time. The cost explodes with depth and width. It doesn't scale.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The escape rests on one idea from calculus, the **chain rule**, which is the rule for differentiating a function of a function. In plain terms: if a change in $x$ causes a change in $u$, and that change in $u$ causes a change in $y$, then the effect of $x$ on $y$ is the product of the two link-by-link effects. Sensitivities multiply along a chain. A neural network is one long chain (the input feeds layer 1, which feeds layer 2, on up to the loss), so the chain rule is exactly the right tool. It tells us we can find how the loss responds to an early weight by multiplying together the local sensitivities of each link along the way. What makes it fast is that those link sensitivities are shared across all the weights, so if we compute them in the right order and reuse them, we never redo work.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here is how it runs. Picture the network as a graph of operations with data flowing through it. First the **forward pass**: push the input through the network layer by layer, computing and remembering each layer's $\\mathbf{z}$ and $\\mathbf{a}$ along the way (we keep them because the backward pass will need them), until we reach the end and compute the loss. For each layer $\\ell$ from first to last:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathbf{z}^{(\\ell)} = W^{(\\ell)} \\mathbf{a}^{(\\ell-1)} + \\mathbf{b}^{(\\ell)}, \\qquad \\mathbf{a}^{(\\ell)} = \\sigma(\\mathbf{z}^{(\\ell)})",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is the layer equation from section 5 applied down the stack, with $\\mathbf{a}^{(0)}$ being the raw input $x$ and the final $\\mathbf{a}^{(L)}$ being the prediction $\\hat{y}$ (run through softmax if you're classifying). Then compute the loss.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Now the **backward pass**, where the real work happens. The quantity we send backward is the sensitivity of the loss to each layer's pre-activation $\\mathbf{z}^{(\\ell)}$. We name it $\\boldsymbol{\\delta}^{(\\ell)}$ (the Greek letter delta) and define it as exactly that:",
+        ],
+      },
+      {
+        equations: [
+          "\\boldsymbol{\\delta}^{(\\ell)} = \\frac{\\partial L}{\\partial \\mathbf{z}^{(\\ell)}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "In words, $\\boldsymbol{\\delta}^{(\\ell)}$ is the error signal at layer $\\ell$: how much the final loss would change if you jiggled that layer's pre-activations. The reason to track this quantity is that once you have it for a layer, the gradients of that layer's actual knobs follow with almost no extra work. So the plan is: get $\\boldsymbol{\\delta}$ at the last layer, then pass it backward layer by layer, reading off the weight and bias gradients at each stop.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Getting it started, at the output layer, is where an earlier design choice pays off. If you used softmax with cross-entropy (the standard classification pairing), the error signal at the final layer simplifies to something very clean:",
+        ],
+      },
+      {
+        equations: [
+          "\\boldsymbol{\\delta}^{(L)} = \\hat{\\mathbf{y}} - \\mathbf{y}",
+        ],
+      },
+      {
+        paragraphs: [
+          "Just the prediction minus the truth. This isn't luck; softmax and cross-entropy were chosen because they combine into this tidy form, which also avoids the vanishing-gradient trouble right where the network is most sensitive.",
+        ],
+      },
+      {
+        paragraphs: [
+          "To pass the error from one layer back to the previous one, we use this rule:",
+        ],
+      },
+      {
+        equations: [
+          "\\boldsymbol{\\delta}^{(\\ell)} = \\left( W^{(\\ell+1)\\top} \\boldsymbol{\\delta}^{(\\ell+1)} \\right) \\odot \\sigma'(\\mathbf{z}^{(\\ell)})",
+        ],
+      },
+      {
+        paragraphs: [
+          "It looks busy but it tells a two-step story. The piece $W^{(\\ell+1)\\top} \\boldsymbol{\\delta}^{(\\ell+1)}$ takes the error from the layer ahead and pushes it back through the weights that connected the two layers (the transpose $\\top$ reverses the direction of flow, sending the signal backward instead of forward). That spreads the blame for the error across the neurons of the current layer, in proportion to how much each contributed. Then the $\\odot \\, \\sigma'(\\mathbf{z}^{(\\ell)})$ part scales that blame by how sensitive each neuron's bend actually was. The $\\odot$ symbol means element-wise multiplication (multiply matching entries, no matrix product), and $\\sigma'$ is the derivative of the activation, the slope of the bend at that point. This is exactly where the vanishing gradient bites: if a neuron's activation was saturated, out on a flat tail of the sigmoid, then $\\sigma'$ there is nearly zero, so it multiplies the error signal down to almost nothing, and that neuron and everything behind it get almost no signal to learn from. Use ReLU, whose slope is a healthy $1$ on the positive side, and the signal survives the trip.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Finally, the payoff. Once you have $\\boldsymbol{\\delta}^{(\\ell)}$ for a layer, its parameter gradients are immediate:",
+        ],
+      },
+      {
+        equations: [
+          "\\frac{\\partial L}{\\partial W^{(\\ell)}} = \\boldsymbol{\\delta}^{(\\ell)} \\, \\mathbf{a}^{(\\ell-1)\\top}, \\qquad \\frac{\\partial L}{\\partial \\mathbf{b}^{(\\ell)}} = \\boldsymbol{\\delta}^{(\\ell)}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The bias gradient is just the error signal itself. The weight gradient is an outer product of the error signal with the input that came into the layer, which is a compact way of saying each individual weight's gradient is \"how wrong the neuron it feeds was\" times \"what input rode in on that weight.\" A weight gets a big correction when the neuron it serves was badly wrong and the input flowing through it was large. That single idea, blame times input, is the heart of the algorithm.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So one training step, in full: run the forward pass and store the intermediate values; compute the loss; compute $\\boldsymbol{\\delta}$ at the output; walk it backward layer by layer, reading off each layer's weight and bias gradients as you go; then hand all those gradients to gradient descent, which nudges every knob a little downhill. Repeat over many batches and the network learns. You'll rarely code this by hand, because every framework computes it automatically through **automatic differentiation**, where each basic operation knows its own local derivative and the framework chains them together for you. But knowing what's underneath is the difference between fixing a stuck network and staring at it.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why do we compute the error signal $\\boldsymbol{\\delta}$ for a layer before computing that layer's weight gradients?",
+          answer: "Because once you know delta for a layer, every weight and bias gradient in that layer follows immediately (the weight gradient is delta times the incoming activation), and the same delta is reused for all of them. Tracking delta is what lets backprop avoid recomputing shared work for each weight.",
+        },
+      },
+      {
+        heading: "9. Optimizers",
+        paragraphs: [
+          "This is the densest section in the chapter, so we'll take it slowly and build up one step at a time. The good news is that every optimizer here is a small patch on the one before it. If you understand plain gradient descent from the last section, you can understand all of these, because each one keeps that same core idea (step opposite the gradient) and only changes how the step is sized or smoothed.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Plain gradient descent, step opposite the gradient, works, but it's a little dumb, and seeing exactly how it's dumb motivates every improvement people have added. Each optimizer here fixes a specific weakness of the one before it, so read it as a sequence of repairs.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The starting point is **SGD**: sample a mini-batch (a small random handful of training examples, since using all of them every step is too slow), compute the gradient $g_t$ on it, and step against it. Its signature failure shows up in a **ravine**, a long narrow gully in the landscape, steep on the sides but only gently sloped along the floor toward the minimum. Plain SGD, following the steepest local direction, bounces back and forth between the steep walls while crawling along the gentle floor, wasting most of its motion rattling side to side. (Sampling a mini-batch each step rather than the full dataset also adds a little noise to the gradient, which is mostly fine and sometimes even helps, by jostling you out of shallow dead-end valleys. One full pass through the training data is called an **epoch**.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "The first repair is **momentum**, and the picture is exactly what the word suggests. Instead of each step depending only on the current gradient, give the optimizer inertia, like a heavy ball rolling downhill. The ball builds up speed in directions where the gradient consistently points, and the back-and-forth jitter across the ravine walls cancels out because it keeps reversing. We track a running velocity $v$ and step along it:",
+        ],
+      },
+      {
+        equations: [
+          "v_{t+1} = \\beta v_t + g_t, \\qquad \\theta_{t+1} = \\theta_t - \\eta v_{t+1}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The velocity $v_{t+1}$ blends the old velocity (scaled by $\\beta$, typically $0.9$, so about $90\\%$ of the previous momentum carries over) with the current gradient $g_t$. Then we step along that accumulated velocity rather than the raw gradient. Consistent directions build speed; oscillating ones average to nearly nothing. The ravine problem largely goes away.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A refinement called **Nesterov Accelerated Gradient (NAG)** adds a bit of foresight. Plain momentum measures the slope where it currently stands and then leaps. Nesterov first looks ahead to roughly where the momentum is about to carry it, measures the slope there, and uses that to correct the jump mid-flight, like a runner adjusting before the corner instead of after. On well-behaved problems it converges a little faster:",
+        ],
+      },
+      {
+        equations: [
+          "v_{t+1} = \\beta v_t + \\nabla \\mathcal{L}(\\theta_t - \\eta \\beta v_t), \\qquad \\theta_{t+1} = \\theta_t - \\eta v_{t+1}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The only change is where the gradient is evaluated: at the looked-ahead point $\\theta_t - \\eta \\beta v_t$ rather than at $\\theta_t$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The next family attacks a different weakness: one global learning rate for all knobs is crude, because some knobs need large updates and others tiny ones. **AdaGrad** gives every parameter its own learning rate by tracking how much gradient each one has accumulated and shrinking the step for the busy ones:",
+        ],
+      },
+      {
+        equations: [
+          "G_t = G_{t-1} + g_t^2, \\qquad \\theta_{t+1} = \\theta_t - \\frac{\\eta}{\\sqrt{G_t + \\epsilon}} g_t",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here $G_t$ is a running sum of the squared gradients for each parameter, and dividing the step by $\\sqrt{G_t}$ throttles parameters that have seen large gradients while keeping large steps for rarely-touched ones. (The $\\epsilon$ is a microscopic constant, around $10^{-8}$, parked in the denominator only to avoid dividing by zero; you'll see this guard everywhere.) This helps with rare, sparse features, like uncommon words in text. But AdaGrad dies slowly: $G_t$ only grows, so the effective learning rate $\\frac{\\eta}{\\sqrt{G_t}}$ marches toward zero, and eventually the model freezes and stops learning.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**RMSProp** fixes that death by replacing the ever-growing sum with a decaying average that gently forgets old gradients, so it can't blow up forever:",
+        ],
+      },
+      {
+        equations: [
+          "v_t = \\beta v_{t-1} + (1 - \\beta) g_t^2, \\qquad \\theta_{t+1} = \\theta_t - \\frac{\\eta}{\\sqrt{v_t + \\epsilon}} g_t",
+        ],
+      },
+      {
+        paragraphs: [
+          "Now $v_t$ is a weighted average leaning mostly on recent squared gradients (with $\\beta$ around $0.9$), so it stays responsive instead of grinding to a halt. (A small piece of history: RMSProp was never formally published. Geoff Hinton described it in an online lecture and it caught on anyway.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Combine the two good ideas, momentum's inertia and RMSProp's per-parameter scaling, and you get **Adam (Adaptive Moment Estimation)**, the default optimizer for almost everything today:",
+        ],
+      },
+      {
+        equations: [
+          "m_t = \\beta_1 m_{t-1} + (1 - \\beta_1) g_t",
+          "v_t = \\beta_2 v_{t-1} + (1 - \\beta_2) g_t^2",
+          "\\hat{m}_t = \\frac{m_t}{1 - \\beta_1^t}, \\qquad \\hat{v}_t = \\frac{v_t}{1 - \\beta_2^t}",
+          "\\theta_{t+1} = \\theta_t - \\frac{\\eta \\, \\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon}",
+        ],
+      },
+      {
+        paragraphs: [
+          "Two running averages: $m_t$ tracks the gradient itself (the momentum, the \"first moment\") and $v_t$ tracks the squared gradient (the scale, the \"second moment\"). The $\\hat{m}_t$ and $\\hat{v}_t$ are bias-corrected versions; the correction matters early in training because both averages start at zero and would otherwise be pulled toward zero for a while, and dividing by $1 - \\beta^t$ undoes that startup bias (note $\\beta^t$ shrinks to nothing as training proceeds, so the correction quietly switches itself off). The final step uses the momentum direction $\\hat{m}_t$ scaled per-parameter by $\\sqrt{\\hat{v}_t}$. Typical settings are $\\beta_1 = 0.9$, $\\beta_2 = 0.999$, $\\epsilon = 10^{-8}$, and they work across a wide range of problems with little tuning, which is why Adam is everywhere.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Adam has one subtle issue with weight decay (a regularization technique from the next section), where the decay gets unintentionally scaled by the per-parameter learning rate. The fix is **AdamW**, which separates the weight decay out and applies it cleanly:",
+        ],
+      },
+      {
+        equations: [
+          "\\theta_{t+1} = \\theta_t - \\eta \\left( \\frac{\\hat{m}_t}{\\sqrt{\\hat{v}_t} + \\epsilon} + \\lambda \\theta_t \\right)",
+        ],
+      },
+      {
+        paragraphs: [
+          "The extra $\\lambda \\theta_t$ shrinks every weight a little on each step, untouched by the adaptive scaling. AdamW is the standard for training large modern models.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One more lever, separate from the choice of optimizer: the learning rate doesn't have to stay fixed. You usually want bold steps early, when you're far from any good solution, and small steps later, when you're closing in on a valley floor and a big step would overshoot. A **learning rate schedule** varies $\\eta$ over training. You can drop it by a factor every so often (**step decay**), shrink it smoothly (**exponential decay**), or ease it down along a cosine curve from a high value to a low one (**cosine annealing**), a common choice for transformers:",
+        ],
+      },
+      {
+        equations: [
+          "\\eta_t = \\eta_{\\min} + \\tfrac{1}{2}(\\eta_{\\max} - \\eta_{\\min})\\left(1 + \\cos\\left(\\tfrac{t}{T}\\pi\\right)\\right)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here $t$ is the current step and $T$ is the total number of steps, so as $t$ runs from $0$ to $T$ the cosine sweeps the rate smoothly from $\\eta_{\\max}$ down to $\\eta_{\\min}$. There's also a counterintuitive move at the very start called **warmup**, where you ramp the rate up from nearly zero over the first few thousand steps before letting it decay, because the adaptive averages are unreliable at the very beginning and a big early step can throw them off. Warmup followed by cosine decay is a common recipe.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What problem does momentum solve compared to plain SGD?",
+          answer: "In a narrow ravine, plain SGD zig-zags across the steep walls and crawls along the floor. Momentum builds up velocity in the consistent downhill direction while the side-to-side oscillation cancels itself out, so it moves much faster toward the minimum.",
+        },
+      },
+      {
+        heading: "10. Regularization",
+        paragraphs: [
+          "The big idea: stop the model from memorizing. Recall the villain from the definitions, overfitting, where the model latches onto the noise in the training data and falls apart on anything new. Everything in this section works against it. The umbrella term is **regularization**: any technique that shrinks the gap between training performance and unseen-data performance, usually by discouraging the model from getting too complicated or too sure of itself.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The most direct approach is to penalize complexity. An overfit model often does its overfitting by cranking some weights to extreme values to thread the needle through every noisy point. So we add a term to the loss that grows whenever the weights get large, nudging the model to keep them modest. **L2 regularization** (also called **weight decay**) adds $\\lambda \\|\\theta\\|^2$ to the loss, where $\\|\\theta\\|^2$ is the sum of the squares of all the weights (a measure of their overall size) and $\\lambda$ is a hyperparameter setting how hard you push. The result is a preference for smaller, smoother solutions that don't lurch around to chase noise. A close relative, **L1 regularization**, adds $\\lambda \\|\\theta\\|_1$ (the sum of absolute values instead of squares), which tends to drive many weights to exactly zero, in effect letting the model ignore some features entirely.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A different and surprisingly effective idea is **dropout**. During training, on each step, you randomly switch off a fraction of the neurons (say $10\\%$ to $50\\%$), forcing the network to cope without them. Because any given neuron might vanish at any moment, the network can't build fragile arrangements that lean on one specific neuron being present; it has to spread its knowledge redundantly across many neurons, which is exactly the robustness that generalizes. At test time you switch all the neurons back on (with a small rescaling to keep the math consistent) and keep the benefit.",
+        ],
+      },
+      {
+        paragraphs: [
+          "There's also the simplest effective move, **early stopping**: watch the validation loss as you train, and the moment it stops improving and starts creeping back up, stop. That upward creep is overfitting beginning, so you quit while you're ahead. It costs nothing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "If you can't get more data, you can manufacture more with **data augmentation**: apply changes to your training examples that don't change the answer. Flip, rotate, crop, or recolor an image and it's still the same cat, but to the network it's a fresh example, and training on these variants teaches it to ignore irrelevant details. The text equivalent is swapping in synonyms or translating a sentence back and forth.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A few subtler regularizers round out the toolkit. **Label smoothing** softens the targets so the model aims for, say, $90\\%$ confidence on the right answer rather than a brittle $100\\%$, which keeps it from getting overconfident. **Mixup** and **CutMix** train on blended combinations of pairs of examples and their labels, a strong regularizer for images. And **stochastic depth** randomly drops entire layers during training in very deep networks, the dropout idea scaled up from neurons to whole layers.",
+        ],
+      },
+      {
+        quiz: {
+          question: "During training you notice the training loss is still falling while the validation loss has started rising. What's happening, and what can you do about it?",
+          answer: "That's overfitting, the model is memorizing the training set instead of learning a general pattern. You can add regularization (L2 or dropout), get more data, shrink the model, or stop training earlier (early stopping).",
+        },
+      },
+      {
+        heading: "11. Normalization and Initialization",
+        paragraphs: [
+          "Two practical concerns can sink a network before it learns anything, and both come down to keeping the numbers flowing through it in a sensible range. The high-level point: if activations or gradients drift too large or too small, training becomes unstable or stalls, so we manage their scale deliberately.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The first concern is **normalization**. As data passes through layer after layer, the scale of the numbers can drift, ballooning in some layers and shrinking in others, which makes training erratic and slow. Normalization layers fix this by rescaling the activations back to a steady distribution at each step, then letting the network learn to shift and scale them as it sees fit. The best-known is **batch normalization**, which for each feature normalizes across the current mini-batch to zero average and unit spread:",
+        ],
+      },
+      {
+        equations: [
+          "\\hat{x}_i = \\frac{x_i - \\mu_B}{\\sqrt{\\sigma_B^2 + \\epsilon}}, \\qquad y_i = \\gamma \\hat{x}_i + \\beta",
+        ],
+      },
+      {
+        paragraphs: [
+          "Reading it: $\\mu_B$ is the **mean** (the average) of that feature over the batch, and $\\sigma_B^2$ is its **variance** (a measure of how spread out the values are, the average squared distance from the mean). Subtracting the mean re-centers the values on zero, and dividing by the square root of the variance (the standard deviation) rescales them to a standard spread. The $\\gamma$ and $\\beta$ are learnable knobs that let the network stretch and shift the normalized result if a different scale serves it better, so we keep full expressiveness while gaining stability. Batch norm speeds up training of convolutional networks a lot, though it behaves differently during training (where it uses the live batch statistics) than at test time (where it uses running averages collected during training), and it needs a reasonably large batch to estimate those statistics well.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That batch-size dependence is why **layer normalization** exists: it normalizes across the features within a single example rather than across the batch, so it doesn't care how big your batch is, which suits transformers, where it's standard. A leaner version called **RMSNorm** skips the mean-subtraction and only rescales, which is cheaper and used in many recent large models. There are further variants (**group normalization** for small batches, **instance normalization** for style transfer), all the same idea applied to a different slice of the data.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The second concern is **initialization**: where the knobs start before training. This matters more than you'd guess, because a bad starting point can make activations explode or vanish before the first gradient step lands. The clear mistake is setting all weights to zero: if every neuron in a layer starts identical, they all receive identical gradients and update identically forever, so they never differentiate into doing different jobs. The symmetry is never broken and a wide layer collapses into the behavior of a single neuron. The fix is random initialization, but the scale of the randomness has to match the size of the layer, because too small and the signal shrinks layer by layer toward nothing, too large and it explodes. Two recipes solve this by tuning the variance of the random weights: **Xavier (Glorot) initialization** uses variance $2/(n_\\text{in} + n_\\text{out})$ and is tuned for tanh-style activations, while **He initialization** uses variance $2/n_\\text{in}$ and is tuned for ReLU (which, by zeroing the negatives, halves the variance and so needs a compensating boost). For ReLU networks, which is most of them, He initialization is standard. ($n_\\text{in}$ and $n_\\text{out}$ are simply the number of inputs and outputs of the layer.)",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why is initializing all the weights to zero a bad idea?",
+          answer: "Every neuron in a layer would compute the same thing and receive the same gradient, so they would update identically and never become different from one another. The symmetry is never broken, and the whole layer behaves like a single neuron.",
+        },
+      },
+      {
+        heading: "12. Diagnostics",
+        paragraphs: [
+          "A trained sense for what a training curve means is one of the most useful skills in deep learning, and it separates people who can fix a broken model from people who just re-run it and hope. The loss curve is the network's vital sign. Here is what the common patterns are telling you.",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Loss not decreasing at all", definition: "Learning rate too low, dead activations, a bug in the loss function, labels misaligned with inputs, or gradients not flowing (check for ReLU saturation or missing skip connections)." },
+          { term: "Loss explodes to NaN", definition: "Learning rate too high, exploding gradients, numerical instability in the loss (e.g. $\\log(0)$), or bad initialization. Apply gradient clipping, lower the learning rate, and check for division by zero." },
+          { term: "Training loss decreases but validation loss increases", definition: "Classic overfitting. Add regularization, get more data, reduce model size, or stop earlier." },
+          { term: "Training and validation both plateau high", definition: "Underfitting. Use a bigger model, better features, more training, or less regularization." },
+          { term: "Loss oscillates wildly", definition: "Learning rate too high, or batch size too small." },
+          { term: "Loss decreases then suddenly spikes", definition: "Often a single bad batch or numerical instability. Inspect the outlier examples." },
+        ],
+      },
+      {
+        paragraphs: [
+          "A few sanity checks are worth running first, because they catch most catastrophic bugs in minutes:",
+        ],
+      },
+      {
+        list: [
+          "Can the model overfit a single batch? If it can't drive the loss to nearly zero on five examples, something is fundamentally broken and no tuning will save it.",
+          "Does the initial loss match the expected value for random predictions (e.g. $\\log K$ for $K$-class cross-entropy)? If it's wildly off, your loss or labels are wrong.",
+          "Are the gradients a reasonable magnitude across all layers, rather than vanishing in the early ones?",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's the foundation. A function with knobs, a loss that measures wrongness, a gradient that points downhill, and backpropagation to compute it efficiently. The architectures get fancier, but the spine stays the same.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Next, we look at the advanced math behind these networks.",
         ],
       },
     ],
