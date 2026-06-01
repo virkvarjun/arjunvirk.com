@@ -50,6 +50,12 @@ import { MemoryPyramid } from "./interactive/MemoryPyramid";
 import { CudaTower } from "./interactive/cuda-tower";
 import { ParallelismStrategies } from "./interactive/parallelism-strategies";
 import { RooflineInteractive } from "./interactive/roofline";
+import { TfFeedforward } from "./interactive/tf-feedforward-neural-network";
+import { TfRnnUnrolled } from "./interactive/tf-rnn-unrolled-through-time";
+import { TfLstmCell } from "./interactive/tf-lstm-cell";
+import { TfSeq2seq } from "./interactive/tf-seq2seq-encoder-decoder-lstm";
+import { TfBahdanau } from "./interactive/tf-bahdanau-attention-added-to-seq2seq";
+import { TfTransformer } from "./interactive/tf-the-transformer-encoder-decoder";
 import {
   LinearRegression,
   KNN,
@@ -165,6 +171,13 @@ const registry: Record<string, Entry> = {
   "cuda-tower": { Comp: CudaTower, interactive: true },
   "parallelism-strategies": { Comp: ParallelismStrategies, interactive: true },
   "roofline-interactive": { Comp: RooflineInteractive, interactive: true },
+  // chapter 5 (Transformers) — interactive
+  "tf-feedforward-neural-network": { Comp: TfFeedforward, interactive: true },
+  "tf-rnn-unrolled-through-time": { Comp: TfRnnUnrolled, interactive: true },
+  "tf-lstm-cell": { Comp: TfLstmCell, interactive: true },
+  "tf-seq2seq-encoder-decoder-lstm": { Comp: TfSeq2seq, interactive: true },
+  "tf-bahdanau-attention-added-to-seq2seq": { Comp: TfBahdanau, interactive: true },
+  "tf-the-transformer-encoder-decoder": { Comp: TfTransformer, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
