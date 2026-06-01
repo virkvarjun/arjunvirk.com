@@ -9,6 +9,9 @@ import { SoftmaxConverter } from "./interactive/softmax-converter";
 import { LayerMatvec } from "./interactive/LayerMatvec";
 import { UniversalApproximation } from "./interactive/UniversalApproximation";
 import { LossExplorer } from "./interactive/loss-explorer";
+import { CostSurface } from "./interactive/cost-surface";
+import { ChainRule } from "./interactive/chain-rule";
+import { BackpropVisualizer } from "./interactive/backprop-visualizer";
 import {
   LinearRegression,
   KNN,
@@ -81,6 +84,9 @@ const registry: Record<string, Entry> = {
   "layer-matvec": { Comp: LayerMatvec, interactive: true },
   "universal-approximation": { Comp: UniversalApproximation, interactive: true },
   "loss-explorer": { Comp: LossExplorer, interactive: true },
+  "cost-surface": { Comp: CostSurface, interactive: true },
+  "chain-rule": { Comp: ChainRule, interactive: true },
+  "backprop-visualizer": { Comp: BackpropVisualizer, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
