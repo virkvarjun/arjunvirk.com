@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, MapPin } from "lucide-react";
+import { Calendar, Mail, MapPin } from "lucide-react";
 import { landing, profile, workSection } from "@/lib/data";
 
 function GithubIcon({ size = 20 }: { size?: number }) {
@@ -92,6 +92,15 @@ export default function Home() {
               className="hover:text-[var(--foreground)] transition-colors"
             >
               <Mail size={20} />
+            </a>
+            <a
+              href="https://cal.com/arjun-virk/15min"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Book a 15-minute call"
+              className="hover:text-[var(--foreground)] transition-colors"
+            >
+              <Calendar size={20} />
             </a>
             <a
               href={profile.socials.orcid}
