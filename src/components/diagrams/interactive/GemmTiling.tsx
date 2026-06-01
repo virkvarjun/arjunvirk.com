@@ -16,7 +16,7 @@ const BLOCK = N * STEP - GAP; // full matrix side
 
 // Layout: B sits above C, A sits left of C (classic matmul layout).
 const C_X = 230; // left edge of C grid (and of B grid above it)
-const C_Y = 95; // top edge of C grid (and of A grid left of it)
+const C_Y = 178; // top edge of C grid (and of A grid left of it)
 const A_X = C_X - BLOCK - 26; // A to the left, small channel between A and C
 const B_Y = C_Y - BLOCK - 26; // B above, small channel between B and C
 
@@ -83,7 +83,7 @@ export function GemmTiling() {
   return (
     <div>
       <svg
-        viewBox="0 0 440 240"
+        viewBox="0 0 440 360"
         className="h-auto w-full"
         role="img"
         aria-label="GEMM tiling"
@@ -193,19 +193,19 @@ export function GemmTiling() {
         {/* annotation for the single selected output tile */}
         {!all && sel && (
           <g>
-            <text x={A_X} y={232} fontSize={9.5} fill={C.ink} fontFamily={MONO}>
+            <text x={A_X} y={334} fontSize={9.5} fill={C.ink} fontFamily={MONO}>
               {`C[${sel.i + 1},${sel.j + 1}] = Σ A[${sel.i + 1},k]·B[k,${
                 sel.j + 1
               }]  (k = 1..${N})`}
             </text>
-            <text x={A_X} y={244} fontSize={9} fill={C.muted} fontFamily={MONO}>
-              {`accumulate: D = A·B + C  →  ${N} tile-products summed into one accumulator`}
+            <text x={A_X} y={348} fontSize={9} fill={C.muted} fontFamily={MONO}>
+              {`accumulate: ${N} tile-products summed into one accumulator`}
             </text>
           </g>
         )}
         {all && (
-          <text x={A_X} y={232} fontSize={9.5} fill={C.ink} fontFamily={MONO}>
-            {`${CORES.length} output tiles compute at once — each tile-multiply on its own tensor core`}
+          <text x={A_X} y={334} fontSize={9.5} fill={C.ink} fontFamily={MONO}>
+            {`${CORES.length} tiles compute at once — each on its own tensor core`}
           </text>
         )}
       </svg>

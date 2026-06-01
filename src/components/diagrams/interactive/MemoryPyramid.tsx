@@ -28,8 +28,8 @@ const RAMP = [
 
 // Pyramid band geometry. Bands widen going down (more capacity).
 const BAND_H = 30;
-const BAND_GAP = 4;
-const TOP_Y = 18;
+const BAND_GAP = 6;
+const TOP_Y = 30;
 const CX = 158; // pyramid horizontal center
 const MIN_HALF = 34; // half-width of top band
 const MAX_HALF = 132; // half-width of bottom band
@@ -74,7 +74,7 @@ export function MemoryPyramid() {
   return (
     <div>
       <svg
-        viewBox="0 0 440 260"
+        viewBox="0 0 440 220"
         className="h-auto w-full"
         role="img"
         aria-label="GPU memory hierarchy"

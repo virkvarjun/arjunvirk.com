@@ -33,9 +33,12 @@ const BAR_X = 70; // left edge of every bar
 const BAR_H = 22;
 const ROW_H = 36;
 const TOP = 24;
+// Extra vertical space inserted before the FP8 row (index 3) so the FP32/BF16
+// exponent-comparison bracket and its label have their own clear gap below BF16.
+const BRACKET_GAP = 28;
 
 function rowY(i: number): number {
-  return TOP + i * ROW_H;
+  return TOP + i * ROW_H + (i >= 3 ? BRACKET_GAP : 0);
 }
 
 export function PrecisionFormats() {
@@ -47,7 +50,7 @@ export function PrecisionFormats() {
 
   return (
     <div>
-      <svg viewBox="0 0 440 250" className="h-auto w-full" role="img" aria-label="Precision formats">
+      <svg viewBox="0 0 440 232" className="h-auto w-full" role="img" aria-label="Precision formats">
         {/* Header */}
         <text x={BAR_X} y={14} fontSize={10} fill={C.muted} fontFamily={MONO}>
           bit layout — scaled, {PPB}px = 1 bit

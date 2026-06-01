@@ -119,7 +119,7 @@ export function ParallelismStrategies() {
 
   return (
     <div>
-      <svg viewBox="0 0 440 260" className="h-auto w-full" role="img" aria-label="Parallelism strategies">
+      <svg viewBox="0 0 440 296" className="h-auto w-full" role="img" aria-label="Parallelism strategies">
         {/* ---- DATA PARALLELISM ---- */}
         {strat === "data" && (
           <>
@@ -132,11 +132,12 @@ export function ParallelismStrategies() {
                 {layerStack(i)}
               </g>
             ))}
-            {/* all-reduce: arrows from each chip meeting at a central sync node */}
+            {/* all-reduce: arrows from each chip meeting at a central sync node.
+                Lines begin below the batch[i] labels so they never cross them. */}
             {CHIP_X.map((_, i) => {
-              const sy = CHIP_Y + CHIP_H + 22;
+              const sy = CHIP_Y + CHIP_H + 42;
               const x1 = cx(i);
-              const y1 = CHIP_Y + CHIP_H + 4;
+              const y1 = CHIP_Y + CHIP_H + 24;
               return (
                 <g key={`ar${i}`}>
                   <line x1={x1} y1={y1} x2={220} y2={sy} stroke={C.coral} strokeWidth={1.6} />
@@ -144,8 +145,8 @@ export function ParallelismStrategies() {
                 </g>
               );
             })}
-            <circle cx={220} cy={CHIP_Y + CHIP_H + 22} r={6} fill={C.coralFill} stroke={C.coral} strokeWidth={1.4} />
-            <text x={220} y={CHIP_Y + CHIP_H + 44} fontSize={10} fill={C.coral} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+            <circle cx={220} cy={CHIP_Y + CHIP_H + 42} r={6} fill={C.coralFill} stroke={C.coral} strokeWidth={1.4} />
+            <text x={220} y={CHIP_Y + CHIP_H + 62} fontSize={10} fill={C.coral} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
               all-reduce: average gradients across chips
             </text>
           </>
@@ -179,9 +180,10 @@ export function ParallelismStrategies() {
                 </text>
               </g>
             ))}
-            {/* heavy intra-layer comm: arrows between adjacent chips, both ways */}
+            {/* heavy intra-layer comm: arrows between adjacent chips, both ways.
+                Drawn below the W[:, i] labels for clear separation. */}
             {[0, 1, 2].map((i) => {
-              const y = CHIP_Y + CHIP_H + 16;
+              const y = CHIP_Y + CHIP_H + 26;
               const xa = cx(i);
               const xb = cx(i + 1);
               return (
@@ -192,7 +194,7 @@ export function ParallelismStrategies() {
                 </g>
               );
             })}
-            <text x={220} y={CHIP_Y + CHIP_H + 36} fontSize={10} fill={C.coral} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+            <text x={220} y={CHIP_Y + CHIP_H + 48} fontSize={10} fill={C.coral} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
               exchange partial results WITHIN the layer (every step)
             </text>
           </>
@@ -227,7 +229,7 @@ export function ParallelismStrategies() {
             {/* schedule strip with start/end bubbles */}
             {(() => {
               const sx = 26;
-              const sy = CHIP_Y + CHIP_H + 18;
+              const sy = CHIP_Y + CHIP_H + 30;
               const cw = 24;
               const ch = 14;
               const SLOTS = 7; // time steps
@@ -300,11 +302,12 @@ export function ParallelismStrategies() {
                 {layerStack(i, { shard: i })}
               </g>
             ))}
-            {/* all-gather: shards converge to reconstruct the full layer */}
+            {/* all-gather: shards converge to reconstruct the full layer.
+                Lines begin below the shard/batch labels so they never cross them. */}
             {CHIP_X.map((_, i) => {
-              const sy = CHIP_Y + CHIP_H + 22;
+              const sy = CHIP_Y + CHIP_H + 42;
               const x1 = cx(i);
-              const y1 = CHIP_Y + CHIP_H + 4;
+              const y1 = CHIP_Y + CHIP_H + 24;
               return (
                 <g key={`ag${i}`}>
                   <line x1={220} y1={sy} x2={x1} y2={y1} stroke={C.coral} strokeWidth={1.6} strokeDasharray="4 3" />
@@ -312,8 +315,8 @@ export function ParallelismStrategies() {
                 </g>
               );
             })}
-            <circle cx={220} cy={CHIP_Y + CHIP_H + 22} r={6} fill={C.coralFill} stroke={C.coral} strokeWidth={1.4} />
-            <text x={220} y={CHIP_Y + CHIP_H + 44} fontSize={10} fill={C.coral} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+            <circle cx={220} cy={CHIP_Y + CHIP_H + 42} r={6} fill={C.coralFill} stroke={C.coral} strokeWidth={1.4} />
+            <text x={220} y={CHIP_Y + CHIP_H + 62} fontSize={10} fill={C.coral} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
               all-gather: rebuild full params just-in-time, then free
             </text>
           </>
@@ -321,7 +324,7 @@ export function ParallelismStrategies() {
 
         {/* physical topology line (toggled) */}
         {topo && (
-          <text x={220} y={252} fontSize={9} fill={C.muted} fontFamily={MONO} textAnchor="middle">
+          <text x={220} y={290} fontSize={9} fill={C.muted} fontFamily={MONO} textAnchor="middle">
             chips → slice (ICI) → 4×4×4 cube → pod → multislice (DCN)
           </text>
         )}

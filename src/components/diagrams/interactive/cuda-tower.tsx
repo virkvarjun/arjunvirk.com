@@ -35,10 +35,10 @@ const LAYERS: Layer[] = [
 const TOP = 0;
 const MOAT = 1; // libraries band — the moat, emphasized + default selection
 
-// Tower geometry within the 440x250 viewBox.
+// Tower geometry within the 440x268 viewBox.
 const BX = 40; // left edge of bands
-const BW = 290; // band width
-const Y0 = 24; // top of first band
+const BW = 360; // band width
+const Y0 = 38; // top of first band (leaves room for the note above it)
 const GAP = 8; // vertical gap between bands
 const H_NORMAL = 34;
 const H_MOAT = 46; // the moat band is taller, to emphasize its depth
@@ -59,42 +59,22 @@ export function CudaTower() {
   return (
     <div>
       <svg
-        viewBox="0 0 440 250"
+        viewBox="0 0 440 268"
         className="h-auto w-full"
         role="img"
         aria-label="The CUDA abstraction tower"
       >
-        {/* "what you usually touch" bracket beside the top band */}
-        <g>
-          <text
-            x={336}
-            y={bands[TOP].y + 14}
-            fontSize={9}
-            fill={C.muted}
-            fontFamily={MONO}
-          >
-            you usually
-          </text>
-          <text
-            x={336}
-            y={bands[TOP].y + 25}
-            fontSize={9}
-            fill={C.muted}
-            fontFamily={MONO}
-          >
-            only touch
-          </text>
-          <text
-            x={336}
-            y={bands[TOP].y + 36}
-            fontSize={9}
-            fill={C.ink}
-            fontFamily={MONO}
-            fontWeight={600}
-          >
-            this layer →
-          </text>
-        </g>
+        {/* one-line note above the top band: the layer you usually touch */}
+        <text
+          x={BX}
+          y={Y0 - 8}
+          fontSize={9}
+          fill={C.ink}
+          fontFamily={MONO}
+          fontWeight={600}
+        >
+          ↓ you usually only touch this top layer
+        </text>
 
         {/* the bands */}
         {LAYERS.map((layer, i) => {
@@ -175,7 +155,7 @@ export function CudaTower() {
         {/* downward arrow spine, top calls down to silicon */}
         <text
           x={BX + BW / 2}
-          y={Y0 + (H_MOAT + 4 * (H_NORMAL + GAP)) + GAP + 30}
+          y={bands[LAYERS.length - 1].y + bands[LAYERS.length - 1].h + 14}
           fontSize={9}
           fill={C.muted}
           fontFamily={MONO}

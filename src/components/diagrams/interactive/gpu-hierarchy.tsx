@@ -277,16 +277,50 @@ export function GpuHierarchy() {
                       </text>
                     </g>
                   ) : (
-                    <text
-                      x={p.x + p.w / 2}
-                      y={p.y + p.h / 2 + 3}
-                      fontSize={9.5}
-                      fill={C.ink}
-                      fontFamily={MONO}
-                      textAnchor="middle"
-                    >
-                      {p.name}
-                    </text>
+                    (() => {
+                      const fontSize = 9.5;
+                      // Monospace glyphs are ~0.6em wide; wrap if the label is
+                      // too wide for its box (with a little padding).
+                      const charW = fontSize * 0.6;
+                      const maxChars = Math.floor((p.w - 8) / charW);
+                      if (p.name.length <= maxChars) {
+                        return (
+                          <text
+                            x={p.x + p.w / 2}
+                            y={p.y + p.h / 2 + 3}
+                            fontSize={fontSize}
+                            fill={C.ink}
+                            fontFamily={MONO}
+                            textAnchor="middle"
+                          >
+                            {p.name}
+                          </text>
+                        );
+                      }
+                      // Split into two roughly balanced lines on a space.
+                      const words = p.name.split(" ");
+                      const mid = Math.ceil(words.length / 2);
+                      const line1 = words.slice(0, mid).join(" ");
+                      const line2 = words.slice(mid).join(" ");
+                      const cx = p.x + p.w / 2;
+                      const cy = p.y + p.h / 2;
+                      return (
+                        <text
+                          x={cx}
+                          fontSize={fontSize}
+                          fill={C.ink}
+                          fontFamily={MONO}
+                          textAnchor="middle"
+                        >
+                          <tspan x={cx} y={cy - 2}>
+                            {line1}
+                          </tspan>
+                          <tspan x={cx} y={cy + 9}>
+                            {line2}
+                          </tspan>
+                        </text>
+                      );
+                    })()
                   )}
                 </g>
               );

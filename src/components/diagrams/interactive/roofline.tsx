@@ -186,12 +186,12 @@ export function RooflineInteractive() {
           <>
             <circle cx={mapX(ridgeI)} cy={mapY(peakCompute)} r={3.5} fill={C.violet} />
             <text
-              x={mapX(ridgeI)}
-              y={mapY(peakCompute) + 16}
+              x={mapX(ridgeI) + 6}
+              y={mapY(peakCompute) + 20}
               fontSize={9}
               fill={C.violet}
               fontFamily={MONO}
-              textAnchor="middle"
+              textAnchor="start"
             >
               ridge I={ridgeI.toFixed(1)}
             </text>
