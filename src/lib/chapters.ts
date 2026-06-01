@@ -2153,144 +2153,371 @@ export const mlGuideChapters: Chapter[] = [
     number: "4",
     title: "AI Hardware and Compute",
     summary:
-      "From the CPU up through GPUs and TPUs to how a model scales across thousands of chips.",
+      "From the CPU and the von Neumann bottleneck up through GPUs, tensor cores, CUDA, and the TPU's systolic array — and how thousands of chips train one model.",
     sections: [
       {
+        heading: "1. Why Hardware Is the Whole Story",
         paragraphs: [
-          "Behind every frontier model is a hardware stack working in concert — trillions of parameters, thousands of chips, all coordinating across high-speed interconnects to do one thing: multiply matrices very, very fast. It's easy to treat all of this as a black box, but a surprising amount of why models are slow, expensive, or memory-starved lives down here. So we'll start at the CPU, build up through GPUs and TPUs, and end with how a single model gets split across an entire data center.",
+          "By now you know what a neural network is and what training it requires. Strip all of it down and one operation dominates: multiplying big matrices, over and over, billions of times. Every layer is a weight matrix times an activation vector (Chapter 1), and every forward and backward pass is a chain of those products (Chapter 2). A frontier model is, at the bottom, an astonishing pile of matrix multiplications.",
         ],
       },
       {
-        heading: "Three kinds of compute: the CPU",
         paragraphs: [
-          "Start with the chip you already know. A CPU reads instructions and data from memory, computes, and writes the results back — largely one thing after another. The catch is that memory access is far slower than arithmetic, and that gap is so fundamental it has a name: the von Neumann bottleneck. More often than not, the processor is sitting around waiting for data rather than actually computing.",
-          "CPUs fight this with a lot of clever machinery — deep instruction pipelines, branch predictors, several cache levels (L1/L2/L3), out-of-order execution — all of it in service of keeping a small number of cores fed. What you get in return is flexibility: one CPU can run a database, an operating system, a game, or a neural network. But that flexibility isn't free. Each core is large and complicated, so a chip only fits a few dozen of them. And for the kind of work neural networks do — massively parallel, arithmetic-heavy — most of that cleverness just goes to waste.",
+          "So the question that decides whether modern AI is possible at all is brutally practical: what kind of machine multiplies matrices fast? This chapter is the answer, and it is a story of escalating specialization. At one end sits the CPU, which can do anything but is not built for this. In the middle sits the GPU, which gave up some flexibility to gain thousands of parallel arithmetic units and turned out to fit neural networks almost by accident. At the far end sits the TPU, a chip designed from a blank sheet to do nothing but accelerate neural networks. Reading those three in order is reading the field discover, step by step, that the way to go faster is to give up generality and bet everything on one operation.",
         ],
       },
       {
-        heading: "The GPU",
         paragraphs: [
-          "A GPU makes the opposite bet. Strip out most of the control logic and the big caches, and trade that one heavyweight core for thousands of small arithmetic units (ALUs) — somewhere from 2,500 to 5,000 and up. That's a terrible design for running an operating system and a perfect one for any workload where the same operation runs over millions of independent data points. The original use case was 3D graphics: every pixel on the screen needs the same shading calculation, just on different inputs. Neural networks turned out to fit that pattern exactly. Multiplying two 4096×4096 matrices is 16 million independent multiply-accumulates; a GPU eats that for breakfast.",
-          "It's worth being honest that this is still a general-purpose processor — every ALU is reading operands from registers or shared memory. The massively parallel memory system softens the von Neumann bottleneck; it doesn't make it disappear.",
+          "We will go through each, then through the software that drives them, then through how thousands of these chips are wired together to train a single model, and finally through the handful of numbers and mental models you actually reach for when something is slow. Throughout, \"multiply matrices\" is the refrain. Everything here exists to keep arithmetic units fed with the numbers they need to multiply.",
         ],
-        diagram: {
-          id: "cpu-vs-gpu",
-          caption:
-            "Fig 3.1 — A CPU spends its silicon on a few complex cores; a GPU spends it on thousands of simple ALUs running in parallel.",
+      },
+      {
+        quiz: {
+          question: "What single operation does essentially all of a neural network's compute come down to?",
+          answer: "Matrix multiplication. Every layer is a weight matrix times an activation vector, and a whole forward or backward pass is a long chain of such products, so the hardware question is really \"what multiplies large matrices fastest?\"",
         },
       },
       {
-        heading: "Inside a GPU: streaming multiprocessors",
+        heading: "2. The CPU and the von Neumann Bottleneck",
         paragraphs: [
-          "A GPU's fundamental compute unit is the Streaming Multiprocessor (SM). Each SM packs CUDA cores (basic ALUs, one floating-point op per clock), Tensor Cores (specialized matrix multiply-accumulate units), special function units (sin, cos, exp, sqrt), warp schedulers, a register file, and shared memory / L1 cache. A data-center GPU like the H100 has 132 SMs, each with 128 CUDA cores and 4 fourth-generation tensor cores — over 16,000 CUDA cores and 528 tensor cores on one chip.",
-          "CUDA (Compute Unified Device Architecture) is NVIDIA's platform for general-purpose GPU computing; a CUDA core is its fundamental parallel processing unit.",
+          "Start with the chip in every laptop, because understanding why it is wrong for neural networks tells you what the others are fixing. A CPU, at heart, works one step at a time. It reads an instruction and some data from memory, performs a calculation, and writes the result back. Then it does the next one. Each step is essentially sequential.",
         ],
       },
       {
-        heading: "Threads, warps, and SIMT",
         paragraphs: [
-          "Here's how you actually program one. GPU code is written as a kernel — a function that describes what a single thread does. When you launch a kernel you spin up millions of threads, organized into blocks, which are themselves organized into a grid. Threads inside a block share fast on-chip memory and can synchronize with each other; blocks are independent and may run in any order the hardware likes.",
-          "Down at the hardware level, threads execute in warps of 32. A warp runs in SIMT mode — Single Instruction, Multiple Threads — meaning all 32 threads share one instruction fetch and decode and just operate on different data. One consequence is worth burning into memory: branching is expensive. If half a warp takes the if and half takes the else, the warp runs both paths one after the other, masking off the threads that shouldn't be active for each. That's warp divergence, and dodging it is a recurring theme in GPU optimization. Neural networks happen to barely branch at all, which is a big part of why they map onto GPUs so beautifully.",
+          "The problem hiding in that loop is that fetching data from memory is far slower than doing arithmetic on it. The processor finishes its calculation and then sits, waiting, for the next piece of data to arrive. This gap between fast compute and slow memory is so fundamental that it has a name, the **von Neumann bottleneck**, after the architecture that separates the processor from its memory. The processor spends more time waiting for data than it spends computing.",
         ],
       },
       {
-        heading: "Tensor cores and precision",
         paragraphs: [
-          "Tensor cores do the heavy lifting for deep learning: a single core performs an entire small matrix multiply-accumulate per clock, $D = A\\,B + C$. The dominant operation in deep learning is GEMM (general matrix multiply), and a large matmul decomposes into many small tiles that map directly onto tensor cores — the source of the roughly 1000× single-GPU inference speedup since 2017.",
-          "Modern tensor cores support multiple precisions in hardware: FP32 (full), FP16 and BF16 (half; BF16 keeps FP32's exponent range), FP8, and INT8. Each step down roughly doubles throughput and halves memory traffic. Quantization is the technique of mapping high-precision weights/activations to lower-precision formats (e.g. INT8) to shrink memory and speed up inference, at the cost of some precision.",
+          "CPUs fight this bottleneck with an enormous amount of clever machinery, all aimed at keeping a small number of cores busy. There are deep instruction pipelines that overlap the stages of different instructions, branch predictors that guess which way an \"if\" will go so work can start early, several levels of cache (L1, L2, L3) that hold frequently used data close to the cores, and out-of-order execution that reshuffles instructions to fill idle moments. All of this complexity exists for one purpose: to feed a few hungry cores.",
         ],
-        equations: ["D = A\\,B + C \\quad\\text{(a tensor-core tile)}"],
       },
       {
-        heading: "The memory hierarchy",
         paragraphs: [
-          "Performance lives and dies by where data sits. From fastest/smallest to slowest/largest: registers, shared memory / L1, L2 cache, HBM (the GPU's main memory, also called VRAM), and host memory (system RAM) reached over PCIe at a relatively pokey ~32–64 GB/s — going there is a last resort. The gap is enormous — registers and shared memory are about 100× faster than HBM. Most GPU optimization is the art of keeping data in the fast levels and minimizing trips to HBM.",
+          "The payoff is flexibility. A CPU runs a database, an operating system, a web server, a video game, or a neural network equally happily. But that flexibility is expensive in silicon. Each core is large and complicated, so you can fit only a few dozen on a chip. For a workload that is highly parallel and arithmetic-heavy, exactly what a neural network is, most of that elaborate machinery sits wasted. You do not need a brilliant branch predictor to multiply a matrix. You need many simple multipliers running at once.",
         ],
-        diagram: {
-          id: "memory-hierarchy",
-          caption:
-            "Fig 3.2 — The GPU memory hierarchy. Each level down is larger but slower; registers and shared memory are ~100× faster than HBM.",
+      },
+      {
+        diagram: { id: "von-neumann-bottleneck", caption: "Fig 4.1 — The von Neumann bottleneck: the processor races through compute, then idles while data crawls down the narrow channel from memory." },
+      },
+      {
+        quiz: {
+          question: "Why is most of a CPU's machinery wasted on neural network workloads?",
+          answer: "A CPU spends its silicon on branch prediction, deep pipelines, caches, and out-of-order execution to keep a few complex cores fed and to stay flexible. Neural network work is simple, uniform, highly parallel arithmetic, which needs many simple multipliers running at once, not a few clever cores, so that flexibility machinery goes unused.",
         },
       },
       {
-        heading: "From C++ to cubin: the CUDA toolchain",
+        heading: "3. The GPU's Bet: Thousands of Small Cores",
         paragraphs: [
-          "It's worth knowing the stack your kernels pass through on the way to the metal. Every GPU has a Compute Capability (CC) number written as major.minor — CC 12.0, say, which also names the SM architecture target (sm_120). Sitting underneath everything is the NVIDIA Driver (something like r580), effectively the operating system of the GPU. Above that, the CUDA Toolkit gives you the libraries, headers, and tools for writing GPU software, and the CUDA Runtime is the API you actually call to allocate memory, copy data, and launch kernels.",
-          "When you compile, your C++ is first lowered to PTX (Parallel Thread Execution), a high-level assembly that acts as an abstraction layer over the GPU's instruction set architecture (ISA). PTX is then compiled to a cubin (a CUDA binary) for a specific target. To keep one program runnable across many GPUs, the compiled code is bundled into a fatbin — a container holding cubins and PTX for several different targets at once. The path, end to end: C++ → PTX → cubin, packaged in a fatbin.",
+          "The GPU makes the opposite wager. Throw out most of the control logic, the complex caches, and the branch prediction that a CPU spends its silicon on. Take the area you saved and fill it with thousands of small, simple arithmetic units, usually called **ALUs** (Arithmetic Logic Units). A modern GPU packs somewhere from 2,500 to well over 5,000 of them, all working at the same time.",
         ],
       },
       {
-        heading: "The CUDA software moat",
         paragraphs: [
-          "CUDA's significance isn't only performance — it's the decade of optimized libraries built on top, which is what your framework actually calls into: cuBLAS (linear algebra), cuDNN (deep-net primitives — every PyTorch convolution ends up here), NCCL (multi-GPU communication for distributed training), TensorRT (inference optimization), plus Thrust, cuFFT, cuRAND, cuSPARSE. When you write model.cuda(), you hand your tensors to this entire stack.",
-          "This is why NVIDIA's moat is hard to dislodge: the hardware can be replicated, but the libraries, developer mindshare, and framework integrations can't be — quickly. AMD's ROCm and Intel's oneAPI are catching up, but PyTorch and TensorFlow still target CUDA first by a wide margin. A useful mental model when reasoning about speed: big tensor ops are great (millions of parallel threads); tiny ops are wasteful (kernel launch overhead dwarfs the work — hence kernel fusion); memory layout matters (coalesced, consecutive accesses get full bandwidth); and communication between blocks is expensive.",
+          "This is a wonderful design for any workload with massive parallelism, meaning the same operation applied to millions of independent pieces of data. The original target was 3D graphics: every pixel on a screen needs the same shading calculation run on different inputs, so a chip that does the same math to thousands of pixels at once is exactly right. Neural networks turned out to fit that pattern almost perfectly. Consider multiplying two 4096 by 4096 matrices: the output has roughly 16 million entries, and every single one can be computed independently of the others. A chip with thousands of parallel units devours that kind of work.",
         ],
       },
       {
-        heading: "TPUs and the systolic array",
         paragraphs: [
-          "Google looked at GPUs and decided even they weren't specialized enough, so they built the TPU (Tensor Processing Unit) from scratch with neural networks as the only customer. The first TPU was deployed in 2015, purely for inference; later generations handle both training and inference. TPUs power Google's own ML across products like Search, Translate, and Photos, and are available to external users through Google Cloud.",
-          "Confusingly, Google also named its compute unit a TensorCore — not the same thing as NVIDIA's. Each one has three pieces: a Matrix Multiplication Unit (the MXU, a systolic array — 256×256 multiply-accumulators in v6e/v7 (\"Ironwood\"); earlier versions used 128×128), a vector unit for activations, softmax, and norms, and a scalar unit for control flow and addressing. A single MXU performs about 16,000 multiply-accumulate operations per cycle — a staggering number out of one unit.",
-          "The systolic array is the TPU's defining trick, and it's genuinely elegant once you picture it. Values of A flow in from the left and move right; values of B flow in from the top and move down; each cell multiplies whatever two numbers happen to be passing through it, adds the result to a running total, and hands both operands along to its neighbors. The payoff is in one property: data gets loaded once and then reused over and over as it walks across the array — no memory access happens at all during the computation itself. It's really just a very large, very specialized GEMM engine wired straight into silicon.",
+          "One honest caveat keeps the GPU in perspective. It is still a general-purpose processor. Like a CPU, every calculation in its thousands of ALUs still has to read its operands from registers or shared memory and write its result back. So the von Neumann bottleneck is reduced, because the memory system is now massively parallel and can feed many units at once, but it is not eliminated. There is still real cost in moving data around, even inside the GPU itself. That residual cost is exactly the thing the TPU will later attack head-on.",
         ],
-        diagram: {
-          id: "systolic-array",
-          caption:
-            "Fig 3.3 — A TPU systolic array. A enters from the left, B from the top; each cell multiply-accumulates and passes operands on, so data is loaded once and reused across the whole grid.",
+      },
+      {
+        diagram: { id: "cpu-vs-gpu-race", caption: "Fig 4.2 — CPU vs GPU: a few powerful cores process tiles a handful at a time; thousands of small cores light up whole swaths at once." },
+      },
+      {
+        quiz: {
+          question: "Neural networks weren't the GPU's original purpose. Why do they fit it so well anyway?",
+          answer: "GPUs were built for 3D graphics, where the same shading calculation runs on millions of independent pixels. Neural network math has the same shape: a large matrix multiply is millions of independent multiply-accumulate operations, which maps directly onto thousands of parallel arithmetic units.",
         },
       },
       {
+        heading: "4. Inside the GPU: Streaming Multiprocessors",
         paragraphs: [
-          "A subtle but important detail: TPU MXUs take bfloat16 inputs but accumulate in FP32. BF16 has FP32's exponent range with a smaller mantissa — great for inputs with wide dynamic range, bad for accumulation where small errors compound. Low precision for the multiplies, high precision for the adds: this pattern is now standard across all AI hardware, NVIDIA's tensor cores included.",
-          "Recent TPU generations (v5p, v6e, v7) also include SparseCores alongside the main TensorCores. These are dataflow processors specialized for sparse operations — primarily the embedding lookups in recommendation systems. Picture a recommendation model with a tens-of-billions-row embedding table where each training step only touches a few thousand rows: a dense compute unit would be hopelessly wasteful on that, so the SparseCores handle the gather-heavy workload efficiently instead.",
+          "Zoom into a GPU and you find it is not one undifferentiated sea of cores but a hierarchy of repeated building blocks. The fundamental compute unit is the **Streaming Multiprocessor**, or SM, and a single SM bundles together everything a group of threads needs to work.",
         ],
       },
       {
-        heading: "From chips to pods",
         paragraphs: [
-          "A single chip is rarely enough. Google connects chips into a slice via a custom high-speed Inter-Chip Interconnect (ICI) — faster and lower-latency than standard data-center networking; a TPU cube is a 4×4×4 topology of 64 chips, applicable starting with TPU v4 (the 3D mesh maps gradient-communication patterns efficiently); a pod links thousands of chips; and multislice extends beyond a single pod over the slower data-center network (DCN) — within a slice the fast ICI handles communication, across slices the slower DCN does. Training a frontier model isn't done on one chip — it's thousands of chips constantly sharing gradients, and the interconnect speed can dominate the compute. You don't write TPU code directly: you write JAX, PyTorch/XLA, or TensorFlow, and the XLA compiler lowers your tensor ops to TPU instructions.",
+          "Inside one SM you will find several kinds of part. There are **CUDA cores**, the basic ALUs, each able to do one floating-point operation per clock cycle (a floating-point operation being any arithmetic on the computer's representation of a real number, the kind with a fractional part). There are **tensor cores**, specialized units that do a whole small matrix multiply-accumulate at once and are dramatically faster for AI work, which get their own section shortly. There are **special function units** that handle the awkward transcendental math like sine, cosine, exponentials, and square roots. There are **warp schedulers** that decide which group of threads runs next. There are **register files**, the fastest on-chip storage, and there is **shared memory and L1 cache**, a small, very fast pool of memory that all the threads on the same SM can share.",
         ],
       },
       {
-        heading: "Scaling a model across many chips",
         paragraphs: [
-          "Training a GPT-class model requires thousands of accelerators working in concert. The main parallelism strategies, usually combined:",
+          "To get a feel for the scale, take a modern data-center GPU, the H100. It has 132 SMs. Each SM carries 128 CUDA cores and 4 fourth-generation tensor cores. Multiply through: $132 \\times 128 \\approx 16{,}900$ CUDA cores, and $132 \\times 4 = 528$ tensor cores, on a single chip. Step back out one more level and the SMs are themselves grouped into clusters called Graphics Processing Clusters (GPCs), and the whole collection of GPCs connects to the GPU's own large memory, its VRAM, which we will meet again as HBM in the memory section. So the full picture is a chip of clusters, holding SMs, holding cores, all wired to a big pool of memory.",
         ],
-        diagram: {
-          id: "parallelism",
-          caption:
-            "Fig 3.4 — Three ways to split work: replicate the model (data), split a layer (tensor), or split the network depth-wise (pipeline).",
+      },
+      {
+        diagram: { id: "gpu-hierarchy", caption: "Fig 4.3 — Zoom into the GPU: chip → clusters → a Streaming Multiprocessor → CUDA cores, tensor cores, schedulers, registers, and shared memory." },
+      },
+      {
+        quiz: {
+          question: "What is a Streaming Multiprocessor, and roughly how many CUDA cores does an H100 have in total?",
+          answer: "An SM is the GPU's fundamental compute unit, bundling CUDA cores, tensor cores, special function units, schedulers, registers, and shared memory. An H100 has 132 SMs with 128 CUDA cores each, which is roughly 16,900 CUDA cores (plus 528 tensor cores).",
         },
       },
       {
-        list: [
-          "Data parallelism — every chip holds a full copy of the model; the batch is split across chips, and gradients are averaged (all-reduce) before each update. Simple, until the model stops fitting on one chip.",
-          "Tensor parallelism — split individual layers across chips (a weight matrix is cut into chunks). Needs very fast interconnect, because chunks communicate within every forward and backward pass.",
-          "Pipeline parallelism — split the network depth-wise (chip 0 holds layers 1–10, chip 1 holds 11–20). Saves memory but introduces bubble overhead at the start and end of each batch.",
-          "FSDP / ZeRO — shard the parameters, gradients, and optimizer states across chips and gather them on demand. Data-parallel simplicity with far lower per-chip memory. Real frontier training combines several of these, tuned to the model shape and cluster topology.",
+        heading: "5. Threads, Blocks, Grids, and Warps",
+        paragraphs: [
+          "We have the hardware. Now, how do you actually tell thousands of cores what to do? You do not write a separate program for each. Instead you write one small function, called a **kernel**, that describes what a single thread should do, and then you launch a vast number of threads that all run that same function in parallel on different data.",
         ],
       },
       {
         paragraphs: [
-          "This is where the interconnect investment pays off. Whether it's NVIDIA's NVLink + InfiniBand or Google's ICI + DCN, the network is half the supercomputer — the speed of moving gradients between chips can matter as much as the speed of the chips themselves.",
+          "Those threads are organized in a three-level hierarchy, and the names matter because they map onto the hardware. A **thread** is the smallest unit of execution, one running copy of the kernel. Each thread has a unique ID (accessible inside the kernel as `threadIdx`), and it uses that ID to figure out which piece of data it is responsible for. If you want to add two arrays of a million elements each, you launch a million threads, and thread number $i$ simply adds the elements at position $i$. A **block** is a group of threads, up to 1024 of them, that run together on the same SM, can share that SM's fast on-chip memory, and can synchronize with one another. Blocks are where threads cooperate. A **grid** is the full collection of blocks that together cover the whole problem. Blocks within a grid are independent: they cannot directly synchronize and may run in any order, in parallel or one after another, depending on what the hardware decides. When you launch a kernel you specify the grid dimensions (how many blocks) and the block dimensions (how many threads per block), and the GPU assigns blocks to SMs and runs them.",
         ],
       },
       {
-        heading: "Practical numbers and the roofline",
         paragraphs: [
-          "A few numbers recur. FLOPs measure raw throughput — an H100 does roughly 1,000 teraflops in FP16/BF16 and twice that in FP8, but real workloads hit only 30–60% of peak. Memory bandwidth is often the actual bottleneck (the H100 has ~3 TB/s of HBM). Whether you're limited by compute or by bandwidth is captured by the roofline model.",
+          "Underneath that tidy software picture, the hardware does not actually run threads one by one. It runs them in **warps** of 32. A warp executes in a mode called **SIMT**, Single Instruction, Multiple Threads: all 32 threads in the warp execute the very same instruction at the same moment, just on different data, sharing one instruction fetch, one decode, one piece of control logic. That sharing is a big part of why the GPU is efficient.",
         ],
-        diagram: {
-          id: "roofline",
-          caption:
-            "Fig 3.5 — The roofline. Below the ridge point an operation is memory-bound (limited by bandwidth); above it, compute-bound (limited by peak FLOPs).",
+      },
+      {
+        paragraphs: [
+          "It also creates one important hazard. Because the 32 threads must run the same instruction together, branching is expensive. Suppose an \"if\" splits a warp so that 16 threads take the \"if\" path and 16 take the \"else.\" The warp cannot run both at once. It runs the \"if\" path with the other 16 threads sitting idle, then runs the \"else\" path with the first 16 idle. This is called **warp divergence**, and avoiding it is a recurring theme in GPU optimization. Here is a quiet reason neural networks suit GPUs so well: they barely branch at all. A matrix multiply does the same arithmetic everywhere, so warps stay convergent and no lanes go to waste.",
+        ],
+      },
+      {
+        diagram: { id: "warp-divergence", caption: "Fig 4.4 — Warps of 32 run one instruction in lockstep. A branch that splits the warp runs both paths in sequence with half the lanes idle — warp divergence." },
+      },
+      {
+        quiz: {
+          question: "What is warp divergence, and why do neural networks mostly avoid it?",
+          answer: "A warp is 32 threads that must run the same instruction together. If a branch sends some threads one way and the rest another, the warp runs both paths in sequence with half the threads idle each time; that wasted work is warp divergence. Neural networks mostly do uniform arithmetic (like matrix multiplies) with little branching, so their warps stay convergent and no lanes are wasted.",
         },
       },
       {
+        heading: "6. Tensor Cores and the Matrix-Multiply Workload",
         paragraphs: [
-          "Arithmetic intensity — the ratio of operations to bytes moved — decides which side you're on. Large matmuls have high intensity (each loaded value is reused many times), so they are compute-bound and benefit from peak FLOPs. Element-wise operations have low intensity and are memory-bound — which is exactly why operator fusion matters, combining many small ops into one kernel to reuse loaded values. As a rule, inference for a small batch is memory-bandwidth bound (you reload all the weights per token), while training is more compute-bound. Attention in long contexts is its own beast — quadratic in sequence length, with specific memory-access patterns that motivated optimizations like FlashAttention.",
-          "Here's the whole arc in one breath. CPUs are universal but slow at parallel math. GPUs give up some of that flexibility for thousands of cores and turn out to be perfect for matrix multiplication. CUDA made GPUs programmable and, in doing so, built a software moat that's nearly as valuable as the silicon underneath it. And TPUs push further still, with purpose-built systolic arrays networked into pods the size of data centers. So the next time a training run is mysteriously slow, trust that the answer is almost always hiding somewhere in this hierarchy — a memory bottleneck, an interconnect bottleneck, a precision issue, or plain old kernel-launch overhead.",
+          "The CUDA cores are general multipliers, but for deep learning the heavy lifting is done by the **tensor cores**, and they exist because of one fact we keep returning to: the dominant operation in deep learning is matrix multiplication, known in this world as **GEMM** (General Matrix Multiply). If you can make GEMM fast, you make neural networks fast.",
         ],
+      },
+      {
+        paragraphs: [
+          "A regular CUDA core does one multiply per clock cycle. A tensor core instead performs an entire small matrix multiply-accumulate in a single clock cycle. Concretely it computes",
+        ],
+      },
+      {
+        equations: [
+          "D = A \\times B + C",
+        ],
+      },
+      {
+        paragraphs: [
+          "for small matrices (think 4 by 4 or 16 by 16) in one shot, where $A$ and $B$ are multiplied and the result is added onto an accumulator $C$ to produce $D$. The \"accumulate\" part matters because a large matrix multiply is built out of many small ones whose partial results must be summed. A big GEMM, say the 4096 by 4096 multiply from earlier, is decomposed into many small tile multiplications, each of which maps onto a tensor core. This single specialization is the largest reason a modern GPU does roughly a thousand times more inference per chip than one did in 2017.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Tensor cores also do something important with number formats: they support several precisions directly in hardware, from FP32 (full precision) down through FP16, BF16, FP8, and even INT8 for heavily quantized work. Each step down to a smaller format roughly doubles throughput and halves the amount of memory traffic, because each number takes fewer bits to move and store. That tradeoff between precision and speed is important enough to get its own section next.",
+        ],
+      },
+      {
+        diagram: { id: "gemm-tiling", caption: "Fig 4.5 — GEMM tiling: a giant matrix multiply is broken into small tiles, each a multiply-accumulate that a tensor core does in one shot." },
+      },
+      {
+        quiz: {
+          question: "What does a tensor core do in one clock cycle that an ordinary CUDA core cannot?",
+          answer: "A CUDA core does a single multiply per cycle. A tensor core does an entire small matrix multiply-accumulate (D = A times B plus C, for a small matrix like 4x4 or 16x16) in one cycle. Large matrix multiplies are tiled into many of these small ones, which is why tensor cores accelerate deep learning so dramatically.",
+        },
+      },
+      {
+        heading: "7. Precision and Quantization",
+        paragraphs: [
+          "Every number inside a network is stored in some format, and the choice of format is a direct tradeoff between accuracy and speed. To see the choices, you need a quick picture of how a computer stores a real number. A floating-point number is kept in three parts: a sign (positive or negative), an exponent (which sets the scale, how big or small the number can be), and a mantissa (which sets the precision, how many significant digits you keep). More exponent bits mean a wider range of representable magnitudes; more mantissa bits mean finer precision.",
+        ],
+      },
+      {
+        paragraphs: [
+          "With that picture, the formats line up naturally. **FP32**, 32-bit floating point, is the high-precision standard for training, with a full sign, 8 exponent bits, and 23 mantissa bits, but it is heavy on memory and compute. **FP16**, 16-bit, halves the memory and speeds up inference, but with only 5 exponent bits its range is narrow, so very large or very small values can overflow or underflow. **BF16** (brain float) is the clever compromise: it keeps FP32's full 8 exponent bits but trims the mantissa to 7, so it has the same wide range as FP32 (numbers rarely overflow) while sacrificing precision. That wide range is exactly what you want for the values flowing through a network during training. Smaller still are **FP8** and **INT8**, an 8-bit integer format that cuts memory to a quarter of FP32. Each step down roughly doubles throughput and halves memory traffic.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Getting a model down into one of those small formats is called **quantization**: you map a network's high-precision numbers, its weights and activations, from FP32 or FP16 into a low-precision format like INT8 or even INT4. Because integers do not natively represent fractional values, this requires a calibration step that figures out how to map the floating-point range onto the integer range without losing too much accuracy. Done well, quantization shrinks a model's memory footprint and compute needs dramatically, which is what lets a large model run on a phone, an edge device, or a consumer GPU instead of a data center. The cost is potential numerical trouble, so the format is chosen carefully, often using different precisions for different parts of the computation.",
+        ],
+      },
+      {
+        diagram: { id: "precision-formats", caption: "Fig 4.6 — Number formats: sign / exponent / mantissa bit layouts. BF16 keeps FP32's exponent range but a shorter mantissa; each step down halves the bytes." },
+      },
+      {
+        quiz: {
+          question: "BF16 and FP16 are both 16 bits. Why is BF16 often preferred for training?",
+          answer: "BF16 keeps the same number of exponent bits as FP32, so it has the same wide range and rarely overflows or underflows, at the cost of fewer mantissa bits (less precision). FP16's smaller exponent gives it a narrow range, so values are more likely to overflow or underflow during training. The wide range matters more than the extra precision for the values flowing through a network.",
+        },
+      },
+      {
+        heading: "8. The Memory Hierarchy",
+        paragraphs: [
+          "We keep saying the real cost is moving data, not doing math. The memory hierarchy is where that cost lives, and it is a steep ladder. Each rung is faster but smaller than the one below it, and the whole art of GPU optimization is keeping the data you are actively using on the fast rungs.",
+        ],
+      },
+      {
+        paragraphs: [
+          "From fastest to slowest: **registers** are the quickest storage of all, living inside an SM and holding the values a single thread is working on right now. **Shared memory and L1 cache** sit one step down, a small, very fast pool on the SM that all the threads in a block can share, which is exactly where you stash data that many cooperating threads will reuse. **L2 cache** is a larger on-chip layer shared across all the SMs on the chip, slower than shared memory but still on-chip. Below that is **HBM** (High Bandwidth Memory), the GPU's main memory, the big pool of VRAM where your model and data actually live. And at the very bottom is **host memory**, the ordinary system RAM, reachable only over the PCIe bus at a comparatively crawling 32 to 64 GB/s; going all the way out there is a last resort.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The gaps between these rungs are not small. Registers and shared memory are on the order of 100 times faster than HBM. That single number explains most of what GPU programmers obsess over: load a piece of data from HBM once, then do as much work with it as possible while it sits in the fast levels, and avoid trips back to HBM. A computation that keeps reusing data it has already pulled close runs fast; one that keeps reaching back down to HBM for fresh data stalls, no matter how many arithmetic units are sitting idle waiting.",
+        ],
+      },
+      {
+        diagram: { id: "memory-pyramid", caption: "Fig 4.7 — The memory hierarchy: registers and shared memory are ~100× faster than HBM. Keep data hot and minimize trips to HBM." },
+      },
+      {
+        quiz: {
+          question: "Roughly how much faster are registers and shared memory than HBM, and what does that imply for how you should write GPU code?",
+          answer: "About 100 times faster. The implication is to load data from HBM as few times as possible and do as much work as you can while it sits in the fast levels (registers and shared memory), because trips back to HBM are what stall the chip even when the arithmetic units are free.",
+        },
+      },
+      {
+        heading: "9. CUDA: The Programming Model and the Moat",
+        paragraphs: [
+          "Hardware is only half the story. The reason NVIDIA dominates is **CUDA**, the platform that lets developers actually program its GPUs for general-purpose work, and the decade of software built on top of it. The programming model is the thread, block, and grid hierarchy from earlier: you write a kernel for one thread and launch a grid of them. Under that sit layers of plumbing, the compute capability number that tells you which hardware features an SM supports, the driver, the CUDA toolkit and runtime that allocate memory and launch kernels, and a compilation path where your C++ becomes an assembly-like intermediate form called PTX and then a binary called a cubin, all bundled in a container called a fatbin so one program can target several GPU generations. You rarely touch most of that directly, and that is the point.",
+        ],
+      },
+      {
+        paragraphs: [
+          "What you do touch, usually without realizing it, is the library ecosystem, and this is where CUDA's real value sits. Your machine learning framework does not multiply matrices itself; it calls down into hand-optimized CUDA libraries. **cuBLAS** is the linear algebra library where matrix multiplication actually happens. **cuDNN** provides the deep-learning primitives like convolutions, pooling, normalization, and activations, so that every convolution in PyTorch ultimately calls cuDNN. **NCCL** handles communication between multiple GPUs and nodes, the all-reduce and all-gather operations that distributed training depends on. **TensorRT** takes a trained model and aggressively optimizes it for fast inference. There are more (Thrust, cuFFT, cuRAND, cuSPARSE), but the pattern is clear: when you write `model.cuda()` in PyTorch, you are handing your tensors to this whole stack.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That ecosystem is NVIDIA's moat, and it is wider than the silicon. A competitor can copy the hardware. What is far harder to copy quickly is the decade-plus of meticulously optimized libraries, the developer familiarity, and the deep integration with every major framework. AMD's competing platform (ROCm) and Intel's (oneAPI) are catching up, but PyTorch and TensorFlow still target CUDA first by a wide margin.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Even though most practitioners never write a raw kernel, the model is worth carrying in your head, because it explains why your code is fast or slow. Big tensor operations, large matrix multiplies, convolutions, big element-wise ops, are excellent, because they spawn millions of parallel threads. Tiny operations are wasteful, because the fixed overhead of launching a kernel can dwarf the actual work, which is why **kernel fusion**, combining many small operations into one launch, matters so much and why tools like torch.compile, JAX's JIT, and Triton do it automatically. Memory layout matters too: when the threads in a warp read consecutive memory addresses (a \"coalesced\" access) they get full bandwidth, while scattered addresses get a fraction of it. And communication between blocks is expensive, so work that splits into independent chunks parallelizes beautifully, while work whose chunks must constantly talk pays a penalty. When a training run is mysteriously slow, the cause is almost always one of these, and knowing the model is the difference between guessing and diagnosing.",
+        ],
+      },
+      {
+        diagram: { id: "cuda-tower", caption: "Fig 4.8 — The CUDA abstraction tower: from model.cuda() down through the optimized libraries (the moat) to PTX, cubin, and the silicon." },
+      },
+      {
+        quiz: {
+          question: "People say NVIDIA's real advantage is its \"moat.\" What is the moat, if the hardware itself can be copied?",
+          answer: "The CUDA software ecosystem: a decade-plus of highly optimized libraries (cuBLAS, cuDNN, NCCL, TensorRT), deep integration with every major ML framework, and the developer familiarity built around it. Competitors can replicate the silicon, but reproducing that software stack and mindshare quickly is far harder.",
+        },
+      },
+      {
+        heading: "10. The TPU and the Systolic Array",
+        paragraphs: [
+          "Google looked at all of this and decided that even a GPU was not specialized enough. As demand for neural network inference exploded inside its own products (Search, Translate, Photos), it built a chip from a blank sheet with exactly one goal: accelerate neural networks. That chip is the **TPU** (Tensor Processing Unit). The first one was deployed in 2015 for inference, later generations handle training too, and they are available to outside users through Google Cloud. Where the GPU evolved from a graphics chip into a general parallel processor, the TPU was purpose-built, and that shows in its design.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A small naming hazard first. Google calls the TPU's compute unit a \"TensorCore,\" which is not the same thing as NVIDIA's tensor cores. A TPU's TensorCore has three parts. The **Matrix Multiplication Unit (MXU)** is the main engine and the heart of the chip, a grid of multiply-accumulators that in the newest generations (v6e and v7, \"Ironwood\") is 256 by 256, with earlier versions at 128 by 128, performing tens of thousands of multiply-accumulate operations every clock cycle from a single unit. The **vector unit** handles everything that is not a matrix multiply, the activations, softmax, layer norm, and element-wise operations. The **scalar unit** handles control flow, memory addressing, and other housekeeping. This division of labor is more rigid than a GPU's, you cannot really repurpose the MXU for other work, but for the one workload it targets it is extraordinarily efficient.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The MXU is built as a **systolic array**, and this is the TPU's defining idea, the thing that attacks the data-movement cost head-on. Recall that a matrix multiplication $C = A \\times B$ is a grid of dot products: each entry $C[i,j]$ is the dot product of row $i$ of $A$ with column $j$ of $B$. A systolic array lays out a physical grid of multiply-accumulate units and streams the data through them. Values of $A$ flow in from the left, moving rightward. Values of $B$ flow in from the top, moving downward. Each unit multiplies the $A$ value and $B$ value currently passing through it, adds the product to a running total it keeps, and passes both values along to its neighbors. After enough cycles, each unit holds one finished entry of the result $C$. The point that makes this fast: a value is loaded once and then reused many times as it walks across the array, getting multiplied by every value it meets, with no trips back to memory during the whole process. The systolic array is, in effect, a very large GEMM engine wired directly into silicon, and it is what lets the TPU minimize the data movement that even a GPU cannot fully escape.",
+        ],
+      },
+      {
+        diagram: { id: "systolic-array-anim", caption: "Fig 4.9 — The systolic array: A streams in from the left, B from the top; each cell multiply-accumulates and passes the values on, so data is loaded once and reused across the grid." },
+      },
+      {
+        paragraphs: [
+          "A detail in the MXU ties straight back to the precision section. The MXU takes its inputs in BF16 but accumulates its running totals in FP32. This is deliberate. BF16, recall, has FP32's wide exponent range but a shorter mantissa, so it represents very large and very small numbers without overflowing while giving up some precision. That is the right tradeoff for the inputs, which span a large dynamic range, but the wrong one for accumulation, where many small errors would compound over thousands of additions. Accumulating in FP32 buys you the speed of low-precision inputs together with the numerical stability of high-precision sums. This pattern, low precision for the multiplies and high precision for the adds, is now standard across all AI hardware, NVIDIA's tensor cores included.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One more specialized unit appears in recent TPUs (v5p, v6e, v7): **SparseCores**, dataflow processors built for sparse operations, primarily the embedding lookups in recommendation systems. A recommendation model might have an embedding table with tens of billions of rows, of which each training step touches only a few thousand. Running that gather-heavy work on a dense matrix engine would waste almost all of it, so SparseCores handle it efficiently alongside the main TensorCores.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What is the key advantage of the systolic array's dataflow, where values stream across a grid of multiply-accumulators?",
+          answer: "Data is loaded once and reused many times. A value of A entering from the left gets multiplied by every B value it passes on its way across, and vice versa, with no trips back to memory during the computation. It minimizes the data-movement cost that even a GPU cannot fully avoid, acting as a GEMM engine wired into silicon.",
+        },
+      },
+      {
+        heading: "11. Scaling Across Many Chips",
+        paragraphs: [
+          "No single chip, however fast, trains a frontier model. That takes thousands of accelerators working in concert, and getting them to cooperate is its own discipline. Two things have to be solved: how to physically wire the chips together, and how to split the model's work across them.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Take the wiring first, using Google's TPU setup as the example. A **slice** is a group of chips connected by Google's custom high-speed Inter-Chip Interconnect (the ICI), which is faster and lower-latency than ordinary data-center networking. Starting with TPU v4, chips are arranged into a **TPU Cube**, a 4 by 4 by 4 grid of 64 interconnected chips; the three-dimensional topology is not arbitrary, because the gradient-sharing communication patterns of distributed training map efficiently onto a 3D mesh. A **Pod** is the largest contiguous group, possibly thousands of chips networked together. And **Multislice** extends beyond a single pod by linking multiple slices over the ordinary data-center network (the DCN): the fast ICI carries traffic within a slice, the slower DCN across slices, which lets you train on more chips than any one pod holds at the cost of some communication overhead. The reason all of this matters is blunt: training is thousands of chips constantly sharing gradients, and the speed of the interconnect can dominate the speed of the compute. Designing the network as carefully as the chip is half the battle, whether that network is Google's ICI plus DCN or NVIDIA's NVLink plus InfiniBand.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Now the splitting. There are a few main strategies, usually combined. **Data parallelism** is the simplest: every chip holds a full copy of the model, the training batch is split across chips, each computes gradients on its slice, and the gradients are averaged across all chips (an \"all-reduce\" operation) before each updates its weights. It works until the model itself stops fitting on one chip. **Tensor parallelism** splits individual layers across chips, so a large weight matrix is cut into chunks living on different chips that cooperate to compute the layer's output; it needs a very fast interconnect because the chunks must communicate within every pass. **Pipeline parallelism** splits the network by depth, chip 0 holding the first layers, chip 1 the next, and so on, with mini-batches flowing through like an assembly line; it saves memory but introduces \"bubble\" idle time at the start and end of each batch. And **Fully Sharded Data Parallel (FSDP), also called ZeRO**, refines data parallelism by sharding the model across chips and gathering the needed pieces on demand during each pass, giving data parallelism's simplicity with far less memory per chip. Real frontier-model training mixes these, for instance tensor parallelism within a node of 8 chips, pipeline parallelism across a few nodes, and FSDP across the rest, tuned to the model's shape and the cluster's layout.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A note on actually programming the TPU: you do not write TPU code directly the way you write CUDA. The TPU has its own instruction set, but in practice you write in JAX, PyTorch (through PyTorch/XLA), or TensorFlow, and the **XLA compiler** translates your high-level tensor operations into TPU instructions. You operate at a higher level of abstraction than CUDA, with no threads, blocks, or warps to manage; you write tensor operations like `jnp.matmul` and the compiler handles everything beneath. XLA's fusion-heavy compilation is a big part of why JAX is so popular for TPU work.",
+        ],
+      },
+      {
+        diagram: { id: "parallelism-strategies", caption: "Fig 4.10 — Parallelism strategies: data (replicate + all-reduce), tensor (split a layer), pipeline (split by depth), and FSDP/ZeRO (shard the model)." },
+      },
+      {
+        quiz: {
+          question: "Data parallelism gives every chip a full copy of the model. What forces us to use the other strategies (tensor, pipeline, FSDP) instead or in addition?",
+          answer: "The model getting too big to fit on a single chip. Data parallelism only splits the batch, not the model, so once one copy no longer fits in a chip's memory you must split the model itself: tensor parallelism splits layers across chips, pipeline parallelism splits by depth, and FSDP/ZeRO shards the model and gathers pieces on demand. Real training combines them.",
+        },
+      },
+      {
+        heading: "12. Practical Numbers and Mental Models",
+        paragraphs: [
+          "A handful of numbers and ideas come up constantly once you work with this hardware, and they are what you actually reason with when something is slow.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**FLOPs** (floating-point operations per second) measure raw throughput. An H100 does roughly 1,000 teraflops, that is $10^{15}$ operations per second, in FP16 or BF16 using its tensor cores, and about twice that in FP8; a TPU v5p is in a similar range. But these are peak theoretical figures, and real workloads typically reach only 30 to 60 percent of peak, because the chip spends time waiting on data rather than computing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Which points at the number that is often the real bottleneck: **memory bandwidth**, how fast you can move data between HBM and the compute units. The H100 has roughly 3 TB/s of HBM bandwidth. Whether bandwidth or compute limits you depends on the operation, and the clean way to think about it is **arithmetic intensity**, the ratio of arithmetic operations to bytes of data moved. An operation with high arithmetic intensity does a lot of math per byte loaded and is **compute-bound**, limited by FLOPs; one with low intensity does little math per byte and is **memory-bound**, limited by bandwidth, with its FLOPs going unused. Large matrix multiplies have high intensity, because each value loaded gets reused many times, so they are compute-bound and benefit from peak FLOPs. Element-wise operations have low intensity, roughly one operation per byte, so they are memory-bound. This is exactly why **operator fusion** helps so much: combining many element-wise operations into one kernel reuses the loaded values instead of re-reading them, raising the arithmetic intensity. The whole tradeoff is captured by the **roofline model**, a plot of arithmetic intensity on the horizontal axis against achievable performance on the vertical, giving a piecewise curve, a slanted region where you are bandwidth-limited rising to a flat ceiling where you are compute-limited, that tells you at a glance which side of the wall a given operation is on.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The precision tradeoffs from earlier reappear here as speed multipliers: moving from FP32 to FP16 roughly doubles throughput and halves memory, FP8 doubles it again, and INT8 inference can be about four times faster than FP16, with the cost being potential numerical trouble (gradients underflowing, accumulation errors compounding), which is why modern training uses **mixed precision**, choosing the format per operation to get the speed while keeping the delicate computations stable. And different workloads hit different walls: generating tokens one at a time for a small batch is usually memory-bandwidth bound, because you reload all the model's weights for each token, while training is more compute-bound. Attention over long contexts is its own beast, growing quadratically with sequence length and with memory access patterns awkward enough to have motivated dedicated optimizations like FlashAttention.",
+        ],
+      },
+      {
+        diagram: { id: "roofline-interactive", caption: "Fig 4.11 — The roofline: low-intensity ops are memory-bound on the slope; high-intensity matmuls hit the compute ceiling. Fusing ops slides a point rightward." },
+      },
+      {
+        quiz: {
+          question: "What does it mean for an operation to be \"memory-bound\" versus \"compute-bound,\" and which one is a large matrix multiply?",
+          answer: "Memory-bound means the operation is limited by how fast data can be moved (low arithmetic intensity, few operations per byte), so the compute units sit idle waiting. Compute-bound means it is limited by raw arithmetic throughput (high intensity, lots of operations per byte loaded). A large matrix multiply reuses each loaded value many times, so it has high arithmetic intensity and is compute-bound.",
+        },
+      },
+      {
+        heading: "13. Putting It All Together",
+        paragraphs: [
+          "Here is the whole arc in one breath. CPUs are universal but slow at the parallel arithmetic that AI needs, because they spend their silicon on flexibility and keep only a few cores. GPUs make the opposite bet, trading flexibility for thousands of parallel cores, and happen to be a near-perfect fit for the matrix multiplications neural networks are built from. CUDA made those GPUs programmable for general work and, over a decade, grew a software ecosystem that is almost as valuable as the hardware itself. TPUs push the specialization one step further, using systolic arrays to wire matrix multiplication directly into silicon and largely remove the memory-movement overhead, then networking thousands of chips into pods that behave like a single data-center-scale accelerator.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Every modern frontier model, the large language models, the image generators, the multimodal systems, is the product of this entire stack running in concert: trillions of parameters, billions of dollars of hardware, thousands of chips coordinating over high-speed interconnects, all in service of multiplying matrices very, very fast. When you write `model.cuda()` or `jax.device_put`, you are reaching down through a tower of abstractions twenty years deep, every layer of it designed to keep arithmetic units supplied with data.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The practical takeaway for anyone who works with this is the same lesson Chapter 1 ended on, now at the level of metal. Most of your day-to-day performance work happens up in the framework, but understanding what sits underneath is what lets you debug, optimize, or scale past what tutorials cover. When a training run is mysteriously slow, the cause is almost always somewhere in this hierarchy: a memory bottleneck, an interconnect bottleneck, a precision issue, or kernel-launch overhead. Knowing what is down there is the difference between guessing and diagnosing.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Your training run is mysteriously slow. Based on this chapter, what general categories of cause should you suspect?",
+          answer: "Something in the hardware hierarchy: a memory bottleneck (too many trips to slow HBM, low arithmetic intensity), an interconnect bottleneck (chips spending too long sharing gradients), a precision issue, or kernel-launch overhead from many tiny operations that should be fused. The fix usually comes from identifying which of these is the limiter.",
+        },
       },
     ],
   },
