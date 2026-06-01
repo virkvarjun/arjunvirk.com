@@ -2526,324 +2526,2432 @@ export const mlGuideChapters: Chapter[] = [
     number: "5",
     title: "Transformers",
     summary:
-      "Attention Is All You Need was published in 2017, and we're still living in its world.",
+      "Attention Is All You Need: from RNNs and LSTMs through self-attention, the full transformer, modern upgrades (RoPE, GQA, MoE, FlashAttention), training, LoRA, and GANs/VAEs.",
     sections: [
       {
         paragraphs: [
-          "In 2017, eight researchers at Google published a paper with the slightly cocky title \"Attention Is All You Need,\" and machine learning genuinely has not been the same since. The Transformer they introduced is the thing underneath GPT, Claude, Gemini, LLaMA — essentially every modern foundation model. But to really appreciate why it works, you have to see what came before it and exactly where each predecessor hit a wall.",
+          "In 2017, eight researchers at Google published a paper called *\"Attention Is All You Need,\"* and machine learning was never the same. The architecture they introduced — the **Transformer** — is the foundation of GPT, Claude, BERT, Gemini, LLaMA, and basically every modern foundation model. If you want to understand modern ML, this is the thing you have to understand.",
         ],
       },
       {
-        heading: "Before transformers: RNNs",
         paragraphs: [
-          "Start with the problem. A feedforward network has a fixed input size and no notion of order at all, which makes it a dead end the moment you care about sequences. Recurrent neural networks (RNNs) got around this by feeding their own output back in as input: a hidden state $\\mathbf{h}$ carries a running summary forward across timesteps, and the same weights are reused at every step, so suddenly the network can handle sequences of any length.",
+          "So here's the plan. We're going to take this from first principles. We'll start high-level — asking *why* the transformer had to exist at all — then go deep, building the architecture up one component at a time, with diagrams to make the math visual. Along the way you'll meet every idea that lives inside the transformer: memory, gates, attention, parallelism. None of those ideas were invented in 2017. They were each invented to fix a specific problem with the model that came before, and the transformer is what you get when you keep all the good parts and drop the parts that slowed everything down.",
         ],
+      },
+      {
+        paragraphs: [
+          "Take it slow. By the end you'll be able to read any modern LLM paper and know exactly which piece it's poking at.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A quick note on what I'm assuming: you already know what a neural network is and roughly how a GPU works. Everything else, I'll explain as we go.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's get into it.",
+        ],
+      },
+      {
+        heading: "History",
+        paragraphs: [
+          "For a long time, the models we used for language were good at recognizing fixed patterns but fell apart the moment you handed them a *sequence* — and sequences are exactly what separate human language from a pile of features. These early models had no memory of order or context. Ring a bell? It should, because every model we're about to walk through is one more attempt to fix that single problem, and the transformer is where it finally gets fixed properly.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the lineage we're going to trace, in order:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Feedforward → RNN → LSTM/GRU → Seq2Seq → Attention → Transformer.**",
+        ],
+      },
+      {
+        paragraphs: [
+          "Every arrow in that chain is a specific limitation that the next model was invented to solve. Hold that framing in your head the whole way through — it's the entire story, and it's what makes the transformer feel inevitable rather than magical.",
+        ],
+      },
+      {
+        heading: "1. Feedforward Neural Networks (1950s–1980s)",
+        paragraphs: [
+          "These are the familiar networks — the kind you already know. We'll use them as our starting line.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A feedforward network (FFN) is the most basic neural network there is. Information flows in exactly one direction: input → hidden layers → output. No loops, no memory, no notion of time. Each layer is a matrix multiplication followed by a nonlinearity:",
+        ],
+      },
+      {
         equations: [
-          "\\mathbf{h}_t = \\tanh(W_x \\mathbf{x}_t + W_h \\mathbf{h}_{t-1} + \\mathbf{b})",
+          "h = \\sigma(Wx + b)",
         ],
-        diagram: {
-          id: "rnn-unroll",
-          caption:
-            "Fig 4.1 — An RNN unrolled over time. The hidden state threads context forward; the same weights apply at every step.",
+      },
+      {
+        paragraphs: [
+          "Let's read every symbol in that:",
+        ],
+      },
+      {
+        list: [
+          "$x$ — the input vector you feed in.",
+          "$W$ — the weight matrix for the layer. This is what the network learns.",
+          "$b$ — the bias vector, a learnable offset.",
+          "$\\sigma$ — a nonlinear activation function (something like ReLU or sigmoid) applied element by element.",
+          "$h$ — the resulting hidden representation that gets passed to the next layer.",
+        ],
+      },
+      {
+        paragraphs: [
+          "You feed in a fixed-size input vector $x$, the network runs it through a series of these transformations, and out comes a fixed-size output vector. Train it on enough examples and it can approximate basically any function from inputs to outputs — the universal approximation theorem says so.",
+        ],
+      },
+      {
+        paragraphs: [
+          "For images, you'd flatten the pixels into one long vector. For tabular data, each column becomes an input dimension. For text, you'd... well, that's where the trouble started.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Why they were a breakthrough.** In the 1980s, feedforward networks — trained with backpropagation, popularized by Rumelhart, Hinton, and Williams in 1986 — showed that neural networks could learn complicated functions automatically, straight from data, with nobody hand-coding the rules. They worked great on problems with fixed-size inputs and outputs: digit recognition, simple classification, regression.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**How they handled sequences.** Badly. And here's the root of it: a feedforward network has a *fixed* input size. To process \"the cat sat,\" you'd have to pick a window size up front — say five words — and feed in five word embeddings glued together.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That choice immediately boxes you in three different ways:",
+        ],
+      },
+      {
+        paragraphs: [
+          "First, **fixed length**. A five-word window can't handle a six-word sentence, let alone a paragraph. You're stuck truncating or padding everything to fit.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Second, **no real sense of order**. The network treats \"word at position 1\" and \"word at position 2\" as completely separate features. There's no shared understanding that they're the same kind of thing showing up in different spots. Trying to learn grammar this way is painfully inefficient — the network has to relearn what a verb is at every position separately.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Third, **bag-of-words behavior**. In a lot of setups, researchers used simpler representations like averaging the word vectors together. Do that and the network literally can't tell \"dog bites man\" from \"man bites dog.\" Order just evaporates.",
+        ],
+      },
+      {
+        paragraphs: [
+          "For anything sequential — language, audio, time series — feedforward networks were a dead end. You couldn't even decide what the right input format was supposed to be. This is what pushed the whole field toward architectures that had memory and some awareness of order.",
+        ],
+      },
+      {
+        diagram: { id: "tf-feedforward-neural-network", caption: "Fig 5.1 — Feedforward Neural Network" },
+      },
+      {
+        quiz: {
+          question: "Why can't a plain feedforward network handle a sentence of arbitrary length?",
+          answer: "Because its input size is fixed at build time. You have to commit to a window (say five words) up front, so a six-word sentence won't fit and a three-word one has to be padded. On top of that, it treats each position as an unrelated feature, so it has no built-in notion that a word at position 2 is \"the same kind of thing\" as a word at position 1 — which makes learning order and grammar wildly inefficient.",
         },
       },
       {
+        heading: "2. Recurrent Neural Networks (1980s)",
         paragraphs: [
-          "RNNs gave networks a memory — it just turned out to be a very short one. Backpropagation through time multiplies by the recurrent matrix once per step, so the gradient either vanishes (shrinks to nothing, which is the default with tanh) or explodes (blows up to NaN). In practice that meant an RNN reliably learned dependencies of only 5–10 tokens, and on top of that, the entire history had to be crammed into one fixed-size hidden vector.",
+          "As the name suggests, RNNs are networks that feed their own output back in as input at the next step. The network keeps a hidden state $h$ that carries across timesteps. At each step $t$:",
         ],
       },
       {
-        heading: "LSTMs and the memory highway",
-        paragraphs: [
-          "The LSTM (1997) was built to fix vanishing gradients. It adds a separate cell state $C_t$ — a memory highway that information can flow along with minimal interference — controlled by learnable gates: a forget gate decides what to erase, an input gate what to write, an output gate what to read. The critical line is the cell-state update, which is a gated add rather than a repeated matrix multiply, so gradients flow back across many steps:",
+        equations: [
+          "h_t = \\tanh(W_x x_t + W_h h_{t-1} + b)",
+          "y_t = W_y h_t",
         ],
+      },
+      {
+        paragraphs: [
+          "Reading the symbols:",
+        ],
+      },
+      {
+        list: [
+          "$x_t$ — the input at the current timestep (e.g., the current word).",
+          "$h_{t-1}$ — the hidden state from the previous step. This is the memory.",
+          "$h_t$ — the new hidden state, a running summary of everything seen so far.",
+          "$W_x$ — weights applied to the current input.",
+          "$W_h$ — weights applied to the previous hidden state.",
+          "$W_y$ — weights that turn the hidden state into an output $y_t$.",
+          "$b$ — a bias term; $\\tanh$ is the squashing nonlinearity.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The hidden state is a \"running summary\" of everything the model has read up to now. And here's the most important part of the whole setup: **the same weights are reused at every single timestep.** There's only one $W_x$, one $W_h$, one $W_y$, no matter how long the sequence is. That weight-sharing is exactly what lets an RNN handle sequences of any length — you just keep applying the same transformation as new inputs roll in.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's walk an example. To process \"the cat sat,\" you'd:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. Feed in \"the,\" get $h_1$.",
+          "2. Feed in \"cat\" along with $h_1$, get $h_2$.",
+          "3. Feed in \"sat\" along with $h_2$, get $h_3$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "By the end, $h_3$ is supposed to be a summary of the entire sequence.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This was a genuine leap. RNNs gave neural networks memory for the first time. In principle the hidden state could carry information from arbitrarily far back. They handled variable-length sequences naturally. And they produced an output at every timestep, so they could do part-of-speech tagging, language modeling (predict the next word), or translation. For roughly two decades, RNNs were *the* standard architecture for any sequence problem in deep learning.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the unrolled view — the same cell repeated across time:",
+        ],
+      },
+      {
+        diagram: { id: "tf-rnn-unrolled-through-time", caption: "Fig 5.2 — Same weights reused at every step — that's what handles any length." },
+      },
+      {
+        paragraphs: [
+          "So why did RNNs fade out? One word: gradients. In theory the hidden state could carry information arbitrarily far. In practice it couldn't, and there were two compounding reasons plus a third structural one.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Vanishing gradients.** To train an RNN you backpropagate the gradient through every timestep — this is called *backpropagation through time*. The gradient at step 1, coming from a loss at step 50, gets multiplied by the recurrent weight matrix 49 times on the way back. If those multiplications shrink the signal even a little — which is the default behavior with sigmoid or tanh nonlinearities — the gradient shrinks exponentially toward zero. By the time it reaches the early steps it's a rounding error. The early timesteps simply can't learn from mistakes made later on.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Exploding gradients.** The mirror image. If the recurrent weights are a touch too large, the gradient *grows* exponentially through the backward pass and the loss blows up to NaN (Not a Number). It's less common than vanishing but harder to ignore when it hits. The standard fix became gradient clipping — capping the gradient's norm so it can't run away.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Compressed state.** Even if the gradient flowed perfectly, the entire history has to be crammed into one hidden-state vector — a few hundred numbers. There just isn't enough room to remember everything, so new inputs end up overwriting old information.",
+        ],
+      },
+      {
+        paragraphs: [
+          "In practice, RNNs reliably learned dependencies of about 5–10 tokens. Past that, they degraded. For language that's brutal. Understanding a sentence like \"the dog that the cat that the rat bit chased ran\" means linking words that sit far apart, and a plain RNN simply couldn't hold the thread that long. This is what sent everyone searching for an architecture with better memory.",
+        ],
+      },
+      {
+        quiz: {
+          question: "The vanishing-gradient problem keeps coming back in this guide. In an RNN, what specifically causes it?",
+          answer: "Backpropagation through time multiplies the gradient by the recurrent weight matrix once per timestep on the way back. With tanh/sigmoid nonlinearities those repeated multiplications tend to shrink the signal, so over many steps the gradient decays exponentially toward zero. The early timesteps therefore receive almost no learning signal from later losses. Keep this villain in mind — LSTMs, scaling in attention, residual connections, and LayerNorm are all partly about beating it.",
+        },
+      },
+      {
+        heading: "3. LSTM (1997) and GRU (2014)",
+        paragraphs: [
+          "An **LSTM** (Long Short-Term Memory network) was designed to fix that exact vanishing-gradient problem. The core difference from a plain RNN is that it gives the network a separate memory cell that information can flow through with almost no interference, controlled by learnable gates.",
+        ],
+      },
+      {
+        paragraphs: [
+          "An LSTM cell keeps *two* pieces of state at each step, not one:",
+        ],
+      },
+      {
+        list: [
+          "The **hidden state** $h_t$ — like an RNN's.",
+          "The **cell state** $C_t$ — a separate \"memory highway\" running straight through time.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And it has three gates deciding what happens to that cell state at each step:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Forget gate** $f_t$ — decides what to erase from the cell state. It's a sigmoid, so it outputs values between 0 (forget completely) and 1 (keep entirely).",
+          "2. **Input gate** $i_t$ — decides what new information to write into the cell state.",
+          "3. **Output gate** $o_t$ — decides what to read out of the cell state to form the hidden state.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here are the equations:",
+        ],
+      },
+      {
+        equations: [
+          "f_t = \\sigma(W_f [h_{t-1}, x_t])",
+          "i_t = \\sigma(W_i [h_{t-1}, x_t])",
+          "\\tilde{C}_t = \\tanh(W_C [h_{t-1}, x_t])",
+          "C_t = f_t \\odot C_{t-1} + i_t \\odot \\tilde{C}_t",
+          "o_t = \\sigma(W_o [h_{t-1}, x_t])",
+          "h_t = o_t \\odot \\tanh(C_t)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's name every symbol:",
+        ],
+      },
+      {
+        list: [
+          "$[h_{t-1}, x_t]$ — the previous hidden state and current input, concatenated into one vector.",
+          "$W_f, W_i, W_C, W_o$ — learnable weight matrices for the forget gate, input gate, candidate, and output gate respectively.",
+          "$\\sigma$ — the sigmoid function, squashing to $(0,1)$ — perfect for a gate, since it acts like a soft on/off dial.",
+          "$\\tilde{C}_t$ — the *candidate* new memory, the fresh information that might get written in.",
+          "$\\odot$ — element-wise multiplication (the gates act like dimmer switches on each dimension).",
+          "$C_t$ — the updated cell state; $h_t$ — the updated hidden state.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The line that does all the work is the cell-state update:",
+        ],
+      },
+      {
         equations: [
           "C_t = f_t \\odot C_{t-1} + i_t \\odot \\tilde{C}_t",
         ],
-        diagram: {
-          id: "lstm-cell",
-          caption:
-            "Fig 4.2 — An LSTM cell. When the forget gate is open and the input gate closed, information from far back flows through the cell state unchanged.",
+      },
+      {
+        paragraphs: [
+          "Look at what it's doing. The old cell state $C_{t-1}$ is multiplied by the forget gate (which can sit near 1, leaving memory basically untouched) and then *added* to. There's no repeated matrix multiplication grinding the signal down. That additive path is why gradients can flow back across many timesteps without vanishing. This is the famous \"memory highway\": when the forget gate is open and the input gate is closed, information from far in the past slides through unchanged.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the cell, gate by gate:",
+        ],
+      },
+      {
+        diagram: { id: "tf-lstm-cell", caption: "Fig 5.3 — The additive cell-state path is what lets gradients survive across many steps." },
+      },
+      {
+        heading: "The Gated Recurrent Unit (GRU)",
+        paragraphs: [
+          "The GRU is a simpler take on the same idea. It merges the cell state and hidden state into one, and uses two gates instead of three:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Update gate** $z_t$ — combines the jobs of the input and forget gates. It decides how much to update versus how much to preserve.",
+          "2. **Reset gate** $r_t$ — controls how much of the past to use when computing the new candidate state.",
+        ],
+      },
+      {
+        equations: [
+          "z_t = \\sigma(W_z [h_{t-1}, x_t])",
+          "r_t = \\sigma(W_r [h_{t-1}, x_t])",
+          "\\tilde{h}_t = \\tanh(W [r_t \\odot h_{t-1}, x_t])",
+          "h_t = (1 - z_t) \\odot h_{t-1} + z_t \\odot \\tilde{h}_t",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols echo the LSTM: $z_t$ and $r_t$ are the gates, $W_z$, $W_r$, $W$ are their learnable matrices, $\\tilde{h}_t$ is the candidate hidden state, and $\\odot$ is again element-wise multiplication. Notice the final line is another convex blend — $(1 - z_t)$ of the old state plus $z_t$ of the new candidate — which keeps that same gradient-friendly additive flavor with fewer moving parts. Fewer gates means fewer parameters and faster training, often at basically the same quality.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What single design choice lets an LSTM carry information across many timesteps where a plain RNN can't?",
+          answer: "The separate cell state with its additive update, $C_t = f_t \\odot C_{t-1} + i_t \\odot \\tilde{C}_t$. Because the old memory is gated (multiplied by something near 1) and then *added* to — rather than pushed through a fresh matrix multiply every step — there's a near-uninterrupted path for both information and gradients to travel down. That's the \"memory highway.\"",
         },
       },
       {
+        heading: "4. The limitations that finally retired recurrence",
         paragraphs: [
-          "The GRU (2014) is a simpler cousin that merges cell and hidden state and uses two gates instead of three. But two problems remained: training is inherently sequential (you can't parallelize across time, so GPUs sit idle), and long-range dependencies still degraded. In encoder–decoder setups for translation, the encoder also had to compress the entire source sentence into one fixed vector — an information bottleneck that hurt badly on long inputs.",
+          "LSTMs and GRUs were a huge step up. But even at their best, two problems stuck around — and a third one in translation setups turned out to be the spark for everything that followed.",
         ],
       },
       {
-        heading: "Attention is born",
         paragraphs: [
-          "Attention (Bahdanau, 2014) is what finally demolished that bottleneck. Rather than forcing the decoder to lean on one summary vector, it let the decoder look back at every encoder hidden state and decide which ones mattered right now: score each one, softmax the scores into weights that sum to 1, and take a weighted sum — a context vector. Translation quality jumped, especially on long sentences. And the deeper lesson is the one to hold onto: direct token-to-token interaction, mediated by learned attention weights, beats threading everything through a single recurrent state. Which sets up the question Vaswani and his coauthors actually asked — what if we keep only the attention and throw out the recurrence entirely?",
+          "**Sequential training is slow.** Computing $h_t$ requires $h_{t-1}$, which requires $h_{t-2}$, all the way back to the start. You cannot parallelize across time. On a GPU with thousands of cores, an LSTM uses roughly one core's worth of work per timestep. For a 1,000-token sequence, that's 1,000 operations that *have* to happen one after another. Modern GPUs scream through big dense matrix multiplications, but an LSTM can't feed them that kind of work. Training a large LSTM on a long sequence took days where a transformer does the same job in hours.",
         ],
       },
       {
-        heading: "Seq2Seq and Bahdanau attention",
         paragraphs: [
-          "The bridge from RNNs to attention runs through Seq2Seq, a model Ilya Sutskever built from two LSTMs: an encoder that reads the input sentence and produces a single final hidden state $h_{\\text{enc}}$, and a decoder LSTM initialized with that state that generates the output one token at a time. \"I like cats\" goes in, the encoder compresses the whole sentence into $h_{\\text{enc}}$, and the decoder unrolls \"J'aime les chats\" from it. It worked well for translation, but every drop of information had to flow through that one fixed-size vector — for a paragraph, the model forgot the beginning of the input by the time it generated the end.",
-          "Bahdanau attention (2014) was bolted on as the fix. The decoder's current hidden state $s_{i-1}$ acts as a query, each encoder hidden state $h_j$ as a key and value; you score how relevant each $h_j$ is to $s_{i-1}$, softmax the scores into weights $\\alpha_{ij}$ that sum to 1, and form a context vector $c_i = \\sum_j \\alpha_{ij}\\,h_j$ to generate the next token. This is exactly self-attention, generalized: instead of the decoder attending to the encoder, every token attends to every other. One detail to flag — Bahdanau computed the compatibility score with a small feedforward network, not the dot product the transformer would later use. But this was the birth of attention.",
+          "**Long-range dependencies still degrade.** LSTMs were far better than plain RNNs, but they still struggled past a few hundred tokens. The cell state has finite capacity, so over a long sequence the useful early information gets overwritten or muddied. Empirically, performance on long-range tasks just plateaued.",
         ],
       },
       {
-        heading: "The transformer, end to end",
         paragraphs: [
-          "At the highest level a transformer takes a sequence in and produces a sequence out. Internally it splits into an encoder that processes the input in parallel and a decoder that generates the output one token at a time — in the original paper, stacks of six identical layers each. The decoder generates autoregressively: each step looks at what it has already produced and, via cross-attention, at the full encoder output.",
-          "Modern LLMs like GPT are decoder-only — they keep the decoder stack and drop the encoder, since pure text generation needs no separate input stream. BERT is encoder-only, producing representations without generating. Inside the blocks, five mechanisms work together: attention (in a few variants), feed-forward networks, layer normalization, positional encoding, and residual connections.",
+          "**The information squeeze.** This one was especially painful in encoder–decoder LSTM setups for translation. The encoder had to compress the *entire* source sentence into one fixed-size vector before the decoder could even start generating. For a 30-word sentence, maybe that vector could hold it all. For a 100-word paragraph, no chance. Everything had to pass through one narrow choke point, and detail got crushed.",
         ],
       },
       {
-        heading: "Tokenization and embeddings",
         paragraphs: [
-          "Computers work in numbers, humans in words, so text is first split into tokens — usually subword pieces, a balance between whole words and characters. Each token maps to an ID, and each ID indexes a row of a learned embedding matrix $W_{\\text{emb}} \\in \\mathbb{R}^{|V| \\times d}$ (vocabulary size by embedding dimension). The result is a sequence of dense vectors where semantically similar tokens sit close together — the actual input the transformer operates on.",
+          "That last problem is the one attention was invented to solve. Which brings us to Seq2Seq.",
         ],
       },
       {
-        heading: "Self-attention: Q, K, V",
-        paragraphs: [
-          "Now the heart of it. Self-attention lets each token gather context from every other token. From its embedding, each token produces three vectors through learned matrices: a query (what it's looking for), a key (what it offers to others), and a value (the content it actually contributes). The cleanest analogy is a search engine — your query gets matched against a bunch of keys, and the best-matching ones hand back their values.",
-        ],
-        equations: [
-          "Q = X W_Q, \\quad K = X W_K, \\quad V = X W_V",
-        ],
-        diagram: {
-          id: "attention-qkv",
-          caption:
-            "Fig 4.3 — Scaled dot-product attention: score queries against keys, scale, softmax into weights, then take a weighted sum of values.",
+        quiz: {
+          question: "Why can't you speed up LSTM training by throwing more GPU cores at a single sequence?",
+          answer: "Because the computation is inherently sequential: step $t$ needs the hidden state from step $t-1$, which needs step $t-2$, and so on. There's no way to compute step 500 before step 499 exists, so the timesteps can't run in parallel. More cores don't help when the work forms a strict chain. The transformer's big structural win is removing this chain so the whole sequence can be processed at once.",
         },
       },
       {
+        heading: "5. Seq2Seq, and the birth of attention",
         paragraphs: [
-          "Measure how well each query matches each key with a dot product, arranged into an $n \\times n$ score matrix. Two fixes make it usable: divide by $\\sqrt{d_k}$ so the scores don't grow with dimension (which would saturate the softmax and kill gradients), and softmax each row into a probability distribution. Multiplying those weights by the value matrix gives a new representation for each token that blends its own meaning with its context — the entire mechanism in one line:",
-        ],
-        equations: [
-          "\\text{Attention}(Q, K, V) = \\text{softmax}\\!\\left( \\frac{Q K^\\top}{\\sqrt{d_k}} \\right) V",
+          "The **Seq2Seq** model, built by Ilya Sutskever and colleagues, used two LSTMs: an *encoder* that reads the input sentence and produces a single final hidden state, and a *decoder* LSTM that gets initialized with that state and generates the output one token at a time.",
         ],
       },
       {
-        heading: "Multi-head attention",
         paragraphs: [
-          "A single attention pattern can only capture one kind of relationship at a time. Multi-head attention gets around that by running $h$ of them in parallel (the original paper used $h = 8$), each with its own $W_Q, W_K, W_V$ working on a smaller $d/h$-dimensional slice. You concatenate the heads' outputs and push them through a final projection $W_O$. What's nice is that the heads end up specializing on their own — some learn grammar, some coreference, some positional patterns — and nobody assigns those roles by hand; training does it.",
-          "Why eight, though? It's a hyperparameter balancing two failure modes: too few heads and each must learn too many relationships at once, losing specialization; too many and each head's dimension gets too small to represent anything meaningful (while you pay more in compute). With $d = 512$ and $h = 8$, each head gets 64 dimensions — diverse enough to learn multiple patterns, large enough to keep useful capacity. Modern large models often use far more heads (32, 64, even 128), with proportionally smaller per-head dimensions.",
+          "The flow looked like this:",
         ],
-        equations: [
-          "\\text{MultiHead}(Q,K,V) = \\text{Concat}(\\text{head}_1, \\dots, \\text{head}_h)\\,W_O",
+      },
+      {
+        diagram: { id: "tf-seq2seq-encoder-decoder-lstm", caption: "Fig 5.4 — Everything the decoder knows about the input has to fit in one vector. That's the squeeze." },
+      },
+      {
+        paragraphs: [
+          "It worked well for tasks like translation. But the architecture had one glaring weak point: every drop of information from the input had to flow through that single fixed-size vector $h_{enc}$. For short sentences, fine. For paragraphs, the model had forgotten the beginning of the input by the time it was generating the end of the output.",
         ],
-        diagram: {
-          id: "multi-head",
-          caption:
-            "Fig 4.4 — Multi-head attention. h heads each attend in a smaller subspace; their outputs are concatenated and mixed by Wₒ.",
+      },
+      {
+        paragraphs: [
+          "This is where **attention** enters the story — first as an *add-on* to Seq2Seq, introduced by Bahdanau and colleagues in 2014. The idea was simple and, in hindsight, enormous: don't force the decoder to lean on one summary vector. Instead, let it look back at *every* encoder hidden state and decide, at each generation step, which ones are relevant right now.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the algorithm:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. The decoder's current hidden state $s_{i-1}$ acts as a **query**.",
+          "2. Each encoder hidden state $h_j$ acts as a **key/value**.",
+          "3. Compute a compatibility score: how relevant is encoder state $h_j$ to the current decoder state $s_{i-1}$?",
+          "4. Softmax those scores into weights $\\alpha_{ij}$ that sum to 1.",
+          "5. Compute a context vector $c_i = \\sum_j \\alpha_{ij} \\, h_j$ — a weighted sum of the encoder states.",
+          "6. Use $c_i$ alongside the decoder hidden state to generate the next token.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's name those symbols, because they'll come back in a big way:",
+        ],
+      },
+      {
+        list: [
+          "$s_{i-1}$ — the decoder's hidden state at the previous output step; the thing \"asking the question.\"",
+          "$h_j$ — the $j$-th encoder hidden state; one per input word.",
+          "$\\alpha_{ij}$ — the attention weight: how much output step $i$ should focus on input word $j$. The row sums to 1.",
+          "$c_i$ — the context vector for output step $i$; a custom-built summary tilted toward whatever's relevant right now.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Take a sec to let that sink in, because here's the punchline: **this is the exact same mechanism that becomes the centerpiece of the transformer.** Modern self-attention is just this idea, generalized — instead of the decoder attending to the encoder, every token attends to every other token. Same query/key/value skeleton, same softmax-weighted sum.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One historical detail. In Bahdanau attention, the compatibility score was computed by a small feedforward network — different from the dot product the transformer would later use. But conceptually, this was the birth of attention.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's that original attention mechanism laid out:",
+        ],
+      },
+      {
+        diagram: { id: "tf-bahdanau-attention-added-to-seq2seq", caption: "Fig 5.5 — The decoder builds a custom summary each step instead of reusing one frozen vector." },
+      },
+      {
+        paragraphs: [
+          "What did attention buy us? It demolished the squeeze. Translation quality jumped, especially on long sentences. Suddenly the decoder could zero in on whichever input word mattered most at each output step — which is, not coincidentally, exactly how a human translator works.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And the lesson reached past translation. It showed that **direct token-to-token interaction across the sequence, weighted by learned attention, was a more powerful idea than threading everything through a recurrent hidden state.** The model was no longer limited by what it could squeeze into one vector — it could pull from anywhere it needed.",
+        ],
+      },
+      {
+        quiz: {
+          question: "In Bahdanau attention, what plays the role of the \"query,\" and what do the attention weights $\\alpha_{ij}$ actually represent?",
+          answer: "The decoder's current hidden state $s_{i-1}$ is the query — it's what's asking \"which input words matter for what I'm about to generate?\" Each $\\alpha_{ij}$ is the weight on input word $j$ for output step $i$; the weights for a given output step are softmaxed so they form a distribution summing to 1, and the context vector is the $\\alpha$-weighted sum of encoder states. This query/key/value-and-softmax pattern is exactly what self-attention generalizes.",
         },
       },
       {
-        heading: "Masked self-attention",
+        heading: "6. The leap: \"Attention Is All You Need\"",
         paragraphs: [
-          "In the decoder, the first attention layer comes with a catch — it's masked. The reason is simple: during generation a token must not be allowed to see the future, because if it could, training would be trivial and pointless. The model would just peek at the next token, copy it, and never actually learn to generate anything. A look-ahead mask handles this by setting every score above the diagonal to $-\\infty$ before the softmax, which makes those weights come out as exactly zero. That keeps the autoregressive property intact: the model writes strictly left to right.",
+          "For a few years, the architecture of choice was \"LSTM + attention.\" It worked — but the LSTM part was still slow and stubbornly sequential. Every step waited on the previous step. The attention was the good part; the recurrence was the part dragging everything down.",
         ],
-        diagram: {
-          id: "causal-mask",
-          caption:
-            "Fig 4.5 — The causal mask. Positions above the diagonal are set to −∞ (→ 0 after softmax), so each token attends only to itself and earlier tokens.",
+      },
+      {
+        paragraphs: [
+          "Think about what that meant. Even with attention bolted on, you still couldn't parallelize across timesteps. You still couldn't truly feed a GPU the dense work it loves. And you were now doing *more* total computation — both the recurrent step and the attention step — at every position.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So Vaswani and his coauthors asked the obvious question in 2017: what if we keep *only* the attention? What if we throw out the LSTMs entirely and let attention do all the work? If attention is the part actually solving the long-range problem, why are we still paying for recurrence at all?",
+        ],
+      },
+      {
+        paragraphs: [
+          "The answer was *\"Attention Is All You Need,\"* and the transformer was born. The very mechanism that started life as a helper for LSTMs became the entire architecture.",
+        ],
+      },
+      {
+        quiz: {
+          question: "By 2017, attention was already working well as an add-on to LSTMs. What was the key realization that produced the transformer?",
+          answer: "That the recurrence was no longer pulling its weight. Attention was doing the heavy lifting on long-range dependencies, while the LSTM backbone was forcing sequential, un-parallelizable computation and extra work per step. The transformer's move was to *drop recurrence entirely* and let attention handle everything — which unlocked full GPU parallelism across the sequence.",
         },
       },
       {
-        heading: "Cross-attention and the feed-forward network",
+        heading: "The Transformer (Attention Is All You Need)",
         paragraphs: [
-          "After masked self-attention, the decoder still needs the input. Cross-attention is the bridge: the query comes from the decoder, the keys and values from the encoder output — so the decoder asks \"given what I've written, which input tokens are relevant?\" (Decoder-only models like GPT have no cross-attention, since there's no separate encoder.)",
-          "Once attention has gathered context, the feed-forward network processes it, applied independently to each position. It's a two-layer MLP that expands to a larger dimension (the original used $d_{\\text{model}} = 512 \\to d_{\\text{ff}} = 2048$, a 4× expansion), applies a nonlinearity, and contracts back. Here's why it matters that the FFN holds most of a transformer's parameters: with $d_{\\text{model}} = 512$ and $d_{\\text{ff}} = 2048$, each FFN layer has roughly $4 \\times 512 \\times 2048 \\approx 4$ million parameters, while multi-head attention at the same $d_{\\text{model}}$ has only about $4 \\times 512^2 \\approx 1$ million. In large LLMs the FFN is where most of the model's \"knowledge\" lives — which is exactly why Mixture of Experts targets it.",
-        ],
-        equations: [
-          "\\text{FFN}(x) = \\max(0,\\ x W_1 + b_1)\\,W_2 + b_2",
-        ],
-      },
-      {
-        heading: "Layer norm and residual connections",
-        paragraphs: [
-          "Two pieces hold deep stacks together. Layer normalization rescales each token's activations to zero mean and unit variance across its features, then learns a scale $\\gamma$ and shift $\\beta$. The contrast with batch norm — which computes its statistics across a batch of examples rather than across one example's features — is exactly why transformers prefer layer norm, for three reasons: it doesn't depend on batch size (transformers train at wildly varying batch sizes), it works fine with variable-length sequences, and it's compatible with autoregressive generation, where you process one token at a time at inference. (LLaMA and many recent LLMs go a step further with RMSNorm, dropping the mean subtraction entirely.)",
-        ],
-        equations: [
-          "\\text{LayerNorm}(x) = \\gamma\\,\\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} + \\beta",
+          "Let's start by looking at the transformer as a black box, then crack it open and study the system underneath.",
         ],
       },
       {
         paragraphs: [
-          "Residual connections (from ResNet) are why deep transformers train at all: a direct path bypasses each sublayer, so gradients flow straight back and each layer only has to learn a delta. Every sublayer is wrapped this way. (Modern models often use pre-norm — normalize before the sublayer — which is more stable for very deep networks.)",
+          "At the highest level, a transformer is an architecture that takes a sequence in and produces a sequence out. The classic example is translation — an English sentence in, a French sentence out.",
         ],
-        equations: ["\\text{output} = \\text{LayerNorm}(x + \\text{Sublayer}(x))"],
-        diagram: {
-          id: "transformer-block",
-          caption:
-            "Fig 4.6 — One encoder layer: multi-head attention and a feed-forward network, each wrapped in a residual connection and layer norm. Every layer has the same shape in and out, so you can stack as many as you want.",
+      },
+      {
+        paragraphs: [
+          "Why did this one architecture kick off the entire AI revolution? Because it fixed, all at once, everything the earlier models kept tripping over. The models we just walked through struggled to remember context over long paragraphs — when they tried, they either forgot too fast (small effective memory) or went unstable. They were hard to scale because they couldn't take advantage of GPUs, and all that compression crushed the detail out of long inputs. The transformer flips every one of those:",
+        ],
+      },
+      {
+        list: [
+          "it lets the model attend to all the words at once, through **self-attention**;",
+          "it trains far faster by processing the whole sequence in **parallel**;",
+          "it preserves word order with **positional encodings**;",
+          "and it **scales** beautifully — stack more layers, add more data, and it keeps improving.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Internally, the transformer splits into two halves: an **encoder** that processes the input, and a **decoder** that generates the output. In the original paper, each half is a stack of 6 identical layers. Both halves are built from the same kit of components — they just use them a little differently.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A few things to lock in from the big picture. The encoder processes the entire input *in parallel*, producing a rich representation of every input token in context. The decoder generates the output *one token at a time*, and each step looks at (1) what the decoder has already produced and (2) the full encoder output, via cross-attention. That one-token-at-a-time pattern is **autoregressive generation**, and every modern LLM still works this way. (Quick definition: an *autoregressive* model predicts the next value in a sequence from the previous values in that same sequence.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Also worth flagging early, since it reframes everything that follows: modern LLMs like GPT are technically *decoder-only* transformers — they keep the decoder stack and drop the encoder, because for pure text generation you don't need a separate \"input\" to encode. BERT is *encoder-only* for the opposite reason — it builds representations of text but never needs to generate. The original encoder–decoder design is most natural for input-to-output tasks like translation. We'll come back to all three.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Inside these blocks, five core mechanisms work together: **attention** (in four variants), **feed-forward networks**, **layer normalization**, **positional encoding** (added to the initial input embeddings), and **residual connections**. We'll cover every one.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the whole thing, assembled — the full encoder–decoder transformer:",
+        ],
+      },
+      {
+        diagram: { id: "tf-the-transformer-encoder-decoder", caption: "Fig 5.6 — Encoder understands the input in parallel; decoder generates the output one token at a time." },
+      },
+      {
+        paragraphs: [
+          "Before we get into the attention mechanisms themselves, there's some housekeeping to do. We need to talk about how raw text even becomes something a transformer can chew on. That's tokenization and embeddings.",
+        ],
+      },
+      {
+        heading: "Housekeeping: tokenization and embeddings",
+        paragraphs: [
+          "**Tokenization.** Computers speak in numbers; humans speak in words. Tokenization is the bridge: we break raw text into smaller, manageable units called **tokens**. A token might be a whole word, a piece of a word (\"token\" + \"ization\"), or even a single character, depending on the scheme. Common approaches include word-level (split on spaces — simple but the vocabulary explodes and rare words break it), character-level (tiny vocabulary, but sequences get very long and meaning is thin per token), and the modern workhorse, **subword** tokenization like Byte-Pair Encoding (BPE) or WordPiece, which strikes a balance: frequent words stay whole, rare words split into reusable pieces, and you never hit a word you literally can't represent.",
+        ],
+      },
+      {
+        diagram: { id: "tf-tokenization", caption: "Fig 5.7 — Subword tokenization balances vocabulary size against sequence length." },
+      },
+      {
+        paragraphs: [
+          "**Token embeddings.** Once text is split into tokens, each token is mapped to a unique token ID from a predefined vocabulary. But transformers don't compute on raw integers — they work with *vectors*. This is where embeddings come in. An **embedding** is a numerical representation of an object (like a word) that turns high-dimensional, sparse data into a dense, lower-dimensional vector living in a continuous space — the **embedding space** — where semantically similar items sit close together.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The machinery is an **embedding matrix**: a big table with $V$ rows and $d$ columns, where:",
+        ],
+      },
+      {
+        list: [
+          "$V$ — the **vocabulary size**, the total number of unique tokens the model knows.",
+          "$d$ — the **embedding dimension**, the length of the vector representing each token (you can think of it as the number of learned \"features\" per token). It's a hyperparameter you choose.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Each row of this matrix is a trainable vector for one token. For example: `Transform → token ID 1231 → [0.1, 0.3, 0.4, 0.9, 0.8]`. Once every input ID is swapped for its embedding, the entire input sentence becomes a 2D tensor of shape (number of tokens, $d$).",
+        ],
+      },
+      {
+        paragraphs: [
+          "The takeaway: after tokenization and embedding, every token is a vector that carries semantic meaning, and similar concepts (bat, swung, hit, ball) land near each other in this high-dimensional space. These embeddings are what the transformer actually operates on.",
+        ],
+      },
+      {
+        diagram: { id: "tf-token-embeddings", caption: "Fig 5.8 — Each token becomes a trainable vector; similar meanings sit close together." },
+      },
+      {
+        quiz: {
+          question: "What do $V$ and $d$ stand for in the embedding matrix, and why can't the transformer just use the raw token IDs?",
+          answer: "$V$ is the vocabulary size (how many distinct tokens exist) and $d$ is the embedding dimension (the length of each token's vector). Raw token IDs are just arbitrary labels — ID 1231 isn't \"more\" than ID 5, and nearby IDs aren't semantically related. Embeddings replace each ID with a learned vector so that distance and direction in the space carry meaning, which is the kind of input the transformer's matrix math can actually work with.",
         },
       },
       {
-        heading: "Positional encoding",
+        heading: "Self-Attention — the heart of the transformer",
         paragraphs: [
-          "Self-attention treats its input as a set, not a sequence — \"I like cats\" and \"cats like I\" would look identical. Positional encodings fix this by injecting position into the embeddings before the first layer. The original transformer added sinusoids of different frequencies, giving each position a unique fingerprint and letting the model express relative offsets as linear functions:",
+          "Time for the main event. Let's build the intuition first.",
         ],
+      },
+      {
+        paragraphs: [
+          "Consider the sentence: *\"I like this girl.\"* The word *like* is ambiguous on its own — is it the \"similar to\" *like*, or the \"fond of\" *like*? How do you, or a model, know which one we mean? The answer is **context**. As humans, we see that *girl* is sitting right there in the same sentence, so we connect *like* to fondness rather than similarity. Self-attention is the mechanism that lets each word do exactly this — gather context from the other words around it. Instead of treating each word in isolation, every word looks at every other word and decides how much each one matters for its own meaning.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Now the single most important idea in transformers: **Q, K, V.**",
+        ],
+      },
+      {
+        paragraphs: [
+          "Self-attention gives each token three different vectors, all derived from its embedding:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Query (Q)** — what this token is looking for.",
+          "2. **Key (K)** — what this token offers to others.",
+          "3. **Value (V)** — the actual content this token will contribute.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The classic analogy is a search engine. You type a search into the bar (your **query**). The engine matches your query against page titles and keywords (the **keys**). Where it finds good matches, it hands back the actual page content (the **values**).",
+        ],
+      },
+      {
+        paragraphs: [
+          "In self-attention, every token does this at the same time. Each token acts as a query searching across all the other tokens (including itself), finds its best matches based on key similarity, and pulls in their values — weighted by how good each match was.",
+        ],
+      },
+      {
+        heading: "Computing Q, K, V",
+        paragraphs: [
+          "Q, K, and V are computed from the input embeddings via three learned weight matrices: $W_Q$, $W_K$, $W_V$. For an input embedding $x$:",
+        ],
+      },
+      {
         equations: [
-          "\\text{PE}_{(pos,\\,2i)} = \\sin\\!\\left(\\frac{pos}{10000^{2i/d}}\\right), \\quad \\text{PE}_{(pos,\\,2i+1)} = \\cos\\!\\left(\\frac{pos}{10000^{2i/d}}\\right)",
+          "Q = x W_Q, \\quad K = x W_K, \\quad V = x W_V",
         ],
       },
       {
         paragraphs: [
-          "Putting it together, one encoder layer takes embeddings-plus-positions of shape $(n, d)$, runs multi-head attention, adds and norms, runs the FFN, adds and norms, and outputs the same shape — so layers stack indefinitely. After the final layer, a linear projection maps each vector to vocabulary-size logits, and a softmax gives the next-token distribution. Train with cross-entropy against the true next token; at inference, sample (or take the argmax) and feed it back in.",
+          "Reading the symbols:",
         ],
       },
       {
-        heading: "Decoder-only, encoder-only, encoder–decoder",
-        paragraphs: [
-          "When the task is pure text generation, the input and output are the same sequence shifted by one, so you don't need two stacks. This realization gave us decoder-only models (GPT, LLaMA, Claude): a tall stack of masked-self-attention + FFN layers. Next-token prediction over a huge corpus turns out to be an extraordinarily general training signal — to predict the next token of code, a sonnet, or a proof, the model must understand programming, meter, and algebra.",
-          "Encoder-only models (BERT) go the other way: bidirectional self-attention produces rich representations but doesn't generate. They're trained with masked language modeling — hide ~15% of tokens and predict them from both sides — and power embeddings, retrieval/reranking, and classification. Encoder–decoder models (T5, BART) keep both stacks and shine when input and output are clearly distinct sequences, like translation and summarization.",
+        list: [
+          "$x$ — the token's input embedding (its vector from the embedding step, with position added).",
+          "$W_Q, W_K, W_V$ — the three learned projection matrices. These are trained via backpropagation; the model figures out on its own what makes a good query, key, and value for the task at hand.",
+          "$Q, K, V$ — the resulting query, key, and value vectors for that token.",
         ],
       },
       {
-        heading: "What encoders are still for",
         paragraphs: [
-          "In the GPT era encoders aren't obsolete, just specialized into the parts of the pipeline where bidirectional representation beats generation. Embedding models — OpenAI's text-embedding-3, Cohere Embed, BGE, Voyage, sentence-transformers — are encoders: text in, vector out, powering semantic search, RAG retrieval, clustering. Reranking uses a cross-encoder that takes the query and a candidate document jointly and outputs one relevance score — slower than a vector lookup but more accurate, run after the initial retrieval. And classification and structured tasks — sentiment, intent detection, named-entity recognition, content moderation — are often faster, cheaper, and more accurate with a fine-tuned encoder than with an LLM. (The vision side of multimodal models, typically a ViT, is an encoder too.)",
+          "For a sequence of $n$ tokens you do this for the whole sequence at once with a single matrix multiplication, producing three matrices of shape $(n, d_k)$, $(n, d_k)$, and $(n, d_v)$ — where $d_k$ is the dimension of the query/key vectors and $d_v$ the dimension of the value vectors.",
         ],
       },
       {
-        heading: "RAG and tool use",
+        heading: "The compatibility function: dot product",
         paragraphs: [
-          "Even the best LLM has three hard limits: it doesn't know facts from after its training cutoff, it can't see your private data, and it can confabulate plausible-sounding nonsense. Both fixes augment the model with external systems. Retrieval-augmented generation (RAG) retrieves relevant documents — via those encoder embedding models — and feeds them into the prompt so the model answers from real, current, private sources instead of parametric memory. Tool use lets the model call external functions (search, code execution, databases, APIs) and condition on the results. Either way, the model stops being a closed box and starts grounding its output in something verifiable.",
+          "Once each token has its query and every token has its key, we need to measure how well each query matches each key. The transformer uses the **dot product** — a simple, fast operation that measures how aligned two vectors are. A large positive dot product means strong alignment (relevant); near zero means orthogonal (irrelevant); negative means anti-aligned.",
         ],
       },
       {
-        heading: "How modern models diverge",
         paragraphs: [
-          "The 2017 recipe is still the skeleton; modern LLMs swap individual pieces. Positional encodings moved to RoPE (rotate Q and K by an angle that depends on position, so the dot product naturally depends on the relative offset $m-n$) and ALiBi (bias attention scores by distance) — both extrapolate to longer contexts better than sinusoids. RMSNorm replaces LayerNorm (drop the mean subtraction, ~10–15% cheaper), and SwiGLU — a gated activation — replaces ReLU in the FFN:",
+          "For each query $Q_i$ and key $K_j$, compute $Q_i \\cdot K_j$. Arrange all of these into a compatibility matrix of shape $(n, n)$, where entry $(i, j)$ answers \"how much should token $i$ pay attention to token $j$?\"",
         ],
+      },
+      {
+        paragraphs: [
+          "But there's a wrinkle. When you're working with high-dimensional vectors, those dot products between $Q$ and $K$ can get very large. Large values feed into the softmax and push it into a region where its gradients become tiny — and you'll recognize that immediately as our old enemy, the **vanishing-gradient problem**, showing up in a brand-new place. On top of that, raw dot products aren't probabilities; we want each query's attention to spread across the keys and sum to 1.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So we fix both issues in two steps.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 1 — scale.** Divide the scores by $\\sqrt{d_k}$:",
+        ],
+      },
+      {
         equations: [
-          "\\text{RMSNorm}(x) = \\gamma\\,\\frac{x}{\\sqrt{\\frac{1}{d}\\sum_i x_i^2 + \\epsilon}}, \\qquad \\text{SwiGLU}(x) = \\big(\\text{Swish}(xW_1)\\big) \\odot (xW_2)",
+          "\\text{scores} = \\frac{Q K^\\top}{\\sqrt{d_k}}",
         ],
       },
       {
-        heading: "Attention efficiency and the KV cache",
         paragraphs: [
-          "Full attention costs $O(n^2)$ in sequence length — fine at 1,000 tokens, ruinous at a million. Sparse and sliding-window attention (each token attends only to a local window of $w$ tokens, as in Mistral) cut this to $O(n \\cdot w)$; stacking layers grows the effective receptive field to $L \\cdot w$, so information still propagates globally. Patterns like Longformer (local + a few global tokens) and BigBird (local + global + random) recover near-full expressivity at far lower cost.",
-          "The single most important inference optimization is the KV cache. Generating autoregressively, the keys and values of past tokens never change, so you compute them once and cache them — turning each step from $O(n^2)$ into $O(n)$. The cache is two big tensors that grow by one row per generated token, and managing it (it can reach tens of GB per user at long context) drives most production-serving work: quantized KV, PagedAttention, prefix caching.",
+          "Here $d_k$ is the dimensionality of the key vectors (a hyperparameter that sets the size of the subspace the embeddings get projected into), and $\\sqrt{d_k}$ is the scaling factor. Dividing by it keeps the scores in a sensible range no matter how large the dimension gets, which keeps the softmax in its healthy, well-gradiented zone.",
         ],
-        diagram: {
-          id: "kv-cache",
-          caption:
-            "Fig 4.7 — The KV cache. Past keys and values are stored and reused; only the new token's K, V are computed each step.",
+      },
+      {
+        paragraphs: [
+          "**Step 2 — softmax.** Apply softmax along each row, turning the scores into a probability distribution. Each row of the resulting attention-weight matrix sums to 1, telling us \"of all the tokens, here's the fraction of attention this token should pay to each.\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "Finally, multiply those attention weights by the value matrix $V$. The values carry the actual content each token contributes, so the weighted sum produces a new representation for each token that blends in exactly the context it found relevant.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Put it all together and you get the whole mechanism in one line:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{Attention}(Q, K, V) = \\text{softmax}\\!\\left(\\frac{Q K^\\top}{\\sqrt{d_k}}\\right) V",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's it — the entire self-attention mechanism in one equation. Read it right to left: take queries and keys, measure their alignment with a dot product, scale it down by $\\sqrt{d_k}$, softmax to get probabilities, then use those probabilities to take a weighted blend of the values. For its time, this was a massive breakthrough — and it's still the beating heart of every model we'll discuss.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the full mechanism, visualized:",
+        ],
+      },
+      {
+        diagram: { id: "tf-scaled-dot-product-self-attention", caption: "Fig 5.9 — Every token queries every token, scales, softmaxes, then pulls a weighted blend of values." },
+      },
+      {
+        quiz: {
+          question: "Why do we divide the attention scores by $\\sqrt{d_k}$ before the softmax?",
+          answer: "Because in high dimensions the raw dot products $Q \\cdot K$ can grow large, and large inputs push softmax into a flat region where gradients shrink toward zero — the vanishing-gradient problem again. Dividing by $\\sqrt{d_k}$ (the square root of the key dimension) rescales the scores back into a range where softmax stays sensitive and trainable, regardless of how big the embedding dimension is.",
         },
       },
       {
-        heading: "What sliding window sacrifices",
+        heading: "Multi-Head Attention",
         paragraphs: [
-          "Windowed attention isn't free context. A token at position 50,000 can't directly attend to one at position 100 — the information has to ripple up through layers — and that produces real failure modes: needle-in-a-haystack retrieval at long distance (the answer at position 1,000 and the question at 50,000 can get lost as information propagates through $L$ layers without being overwritten), multi-hop reasoning whose reference chains span the whole document, and long-range copying of a specific phrase from far back. The usual mitigations are periodic full-attention layers and attention sinks — always attending to the first few tokens, which empirically stabilizes long-context behavior.",
+          "Self-attention lets a model work out which words matter to each other. But there's more nuance in language than a single attention pattern can capture. Take the sentence *\"He swung the bat with incredible force.\"* One relationship worth tracking is *swung*–*bat*; a totally different one is *incredible*–*force*. **Multi-head attention** lets us look at all of these relationships in parallel. Each *head* learns its own slightly different way of paying attention — one might focus on grammar, another on meaning, another on something like emphasis — and when you combine them, you get a far richer understanding of the sentence, much closer to how we read it.",
         ],
       },
       {
         paragraphs: [
-          "Inference splits into two phases with different bottlenecks: prefill (process the whole prompt in parallel, compute-bound) and decode (generate one token at a time, memory-bandwidth-bound — it reads the entire cache and weights per token). Grouped-Query Attention shrinks the cache by sharing K and V across groups of query heads — Multi-Query is the extreme of one shared KV — recovering most of the memory with little quality loss.",
+          "Instead of one Q, K, V projection, you create $h$ different sets of them (the original paper used $h = 8$ heads). Each head gets its own learned $W_Q$, $W_K$, $W_V$, but each works on a smaller slice of the embedding space — typically $d/h$ dimensions per head. With $d = 512$ and 8 heads, each head gets 64 dimensions.",
         ],
-        diagram: {
-          id: "grouped-query",
-          caption:
-            "Fig 4.8 — Multi-head, grouped-query, and multi-query attention trade KV-cache size against quality by sharing key/value heads.",
+      },
+      {
+        paragraphs: [
+          "Each head independently runs the full scaled-dot-product attention we just built, producing its own output. Then the $h$ outputs are concatenated back together and passed through one final projection matrix $W_O$ that mixes the information from all heads:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{MultiHead}(Q, K, V) = \\text{Concat}(\\text{head}_1, \\dots, \\text{head}_h) W_O",
+          "\\text{where } \\text{head}_i = \\text{Attention}(Q W_Q^{(i)}, K W_K^{(i)}, V W_V^{(i)})",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols: $h$ is the number of heads; $\\text{head}_i$ is the output of the $i$-th head; $W_Q^{(i)}, W_K^{(i)}, W_V^{(i)}$ are that head's own projection matrices; $\\text{Concat}$ glues the head outputs back into one vector; and $W_O$ is the output projection that blends them. The shape comes out the same as if you'd run a single attention over the full dimension — you've just done it in parallel, specialized slices.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Later research gave us a nice interpretation: different heads *specialize*. Some learn grammatical patterns (subject–verb agreement), some learn semantic links (which words refer to the same entity), some learn positional habits (\"look at the previous token\"). Nobody tells them what to learn — the model sorts it out through training.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Why 8 heads?** Eight isn't magic — it's a hyperparameter chosen to balance two failure modes. Too few heads and each one has to learn too many relationships at once, losing its specialization. Too many heads and each head's slice of dimensions gets so small it can't represent anything meaningful, and you pay more in compute for the privilege. With $d = 512$ and $h = 8$, each head gets 64 dimensions — diverse enough to learn several patterns, large enough to stay useful. Modern large models often use far more heads (32, 64, even 128), with proportionally smaller per-head dimensions.",
+        ],
+      },
+      {
+        diagram: { id: "tf-multi-head-attention", caption: "Fig 5.10 — Each head attends differently and in parallel; concat + W_O mixes them back together." },
+      },
+      {
+        quiz: {
+          question: "With $d = 512$ and $h = 8$ heads, how many dimensions does each head get, and what's the danger of using too many heads?",
+          answer: "Each head gets $d/h = 512/8 = 64$ dimensions. If you push the head count too high, each head's slice of the embedding shrinks until it's too small to represent meaningful relationships — and you also pay more compute. Too few heads has the opposite failure: each head is overloaded trying to learn many patterns at once and loses specialization. Eight is just a balance point.",
         },
       },
       {
+        heading: "Masked Self-Attention (decoder side)",
         paragraphs: [
-          "Flash Attention is worth dwelling on because of what it represents. It's a re-implementation of attention that is mathematically identical to the original but never actually materializes the full $n \\times n$ score matrix — it works through attention in tiles small enough to fit in fast on-chip SRAM, using an online softmax, and the result is a 2–4× speedup with memory that grows linearly instead of quadratically. That's a pattern you'll see again and again in modern ML: some of the biggest wins don't come from new math at all, but from implementing the existing math more cleverly.",
+          "In the decoder, the first attention layer gets one small but critical modification. In regular self-attention, every token can \"see\" every other token in the sequence — which is totally fine in the encoder, since the whole input is known up front. In **masked self-attention**, the difference is, almost literally, just a mask: the model is forbidden from looking at *future* tokens when predicting the next word.",
         ],
+      },
+      {
+        paragraphs: [
+          "Mechanically, a **look-ahead mask** is applied to the scaled dot-product score matrix, setting every entry above the diagonal to negative infinity *before* the softmax. That guarantees each token can only attend to itself and the tokens before it, which preserves the **autoregressive property** — the model writes strictly left to right.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Why negative infinity, specifically? Because softmax turns $-\\infty$ into $0$. You're effectively telling the softmax that those future positions don't exist, so they get zero attention weight.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And why bother with all this? Here's the intuition. If we *didn't* mask, the model would already be able to peek at the correct future tokens while predicting the next word — so there'd be no real learning, just copying. It would hit a perfect training loss by cheating and never learn to generate text on its own at inference, when those future tokens genuinely aren't available yet.",
+        ],
+      },
+      {
+        diagram: { id: "tf-masked-self-attention", caption: "Fig 5.11 — Block the future with a -inf mask so the model learns to predict, not copy." },
+      },
+      {
+        quiz: {
+          question: "Why set the masked entries to negative infinity instead of, say, zero?",
+          answer: "Because the mask is applied *before* the softmax. Softmax exponentiates its inputs, so $e^{-\\infty} = 0$ — those positions end up with exactly zero attention weight and the remaining (allowed) positions still form a clean probability distribution that sums to 1. Setting the raw scores to 0 wouldn't work, since $e^{0} = 1$ would leave the future tokens with plenty of attention.",
+        },
+      },
+      {
+        heading: "Cross-Attention (decoder side)",
+        paragraphs: [
+          "After the decoder applies masked self-attention to its own generated tokens, it still needs to actually look at the input. The encoder did all that work understanding \"I like cats\" — so how does the decoder get at it?",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Cross-attention** is the bridge. The mechanism is exactly the same scaled-dot-product attention as before, with one twist in where the vectors come from:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Query (Q)", definition: "— from the decoder's own hidden state (what we've generated so far)." },
+          { term: "Key (K)", definition: "— from the encoder output (the processed input)." },
+          { term: "Value (V)", definition: "— from the encoder output (the actual input content)." },
+        ],
+      },
+      {
+        paragraphs: [
+          "So when the decoder is about to generate the next French word, it forms a query that essentially asks \"given what I've written so far, which English words are relevant right now?\" — and pulls the matching values out of the encoder's representation. This is how the decoder lines up what it's generating with what the encoder understood. When the decoder produces \"chats,\" cross-attention is what makes it look back at the encoder's representation of \"cats\" to know what to say.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One note: cross-attention only exists in encoder–decoder transformers (like the original). Decoder-only models like GPT don't have it — there's no separate encoder to attend to.",
+        ],
+      },
+      {
+        diagram: { id: "tf-cross-attention", caption: "Fig 5.12 — Q from the decoder, K and V from the encoder — the decoder looks back at the input." },
+      },
+      {
+        quiz: {
+          question: "In cross-attention, where do Q, K, and V each come from, and which models lack cross-attention entirely?",
+          answer: "The query comes from the decoder (what it's generated so far); the keys and values both come from the encoder output (the processed input). Decoder-only models like GPT have no cross-attention at all, because they have no separate encoder to attend to — they fold the input into the same sequence the decoder generates.",
+        },
+      },
+      {
+        heading: "Feed-Forward Networks (FFN)",
+        paragraphs: [
+          "Attention has now gathered context for each token. But the model still needs to *process* that context — and that's the job of the **feed-forward network** inside every transformer layer.",
+        ],
+      },
+      {
+        paragraphs: [
+          "If attention answers \"what should I pay attention to?\", the FFN answers \"okay, now that I know what to focus on, what do I actually do with it?\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "Each transformer layer has an FFN that processes each token independently — the same little network applied at every position. It's a simple two-layer MLP:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{FFN}(x) = \\max(0, x W_1 + b_1) W_2 + b_2",
+        ],
+      },
+      {
+        paragraphs: [
+          "Symbol by symbol: $x$ is the token's representation coming out of attention; $W_1, b_1$ are the weights and bias of the first (expansion) layer; $\\max(0, \\cdot)$ is the ReLU nonlinearity; $W_2, b_2$ are the weights and bias of the second (contraction) layer. It runs in three steps:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Expansion** — project from the embedding dimension $d_{model}$ up to a larger $d_{ff}$ (in the original paper, $d_{model} = 512 \\to d_{ff} = 2048$, a 4× expansion). This gives the model room to detect complex features.",
+          "2. **Nonlinear activation** — apply ReLU (or GELU in more modern variants). This step is essential: without a nonlinearity, stacking layers would just collapse into one big linear transformation, and depth would buy you nothing.",
+          "3. **Contraction** — project back down from $d_{ff}$ to $d_{model}$, so the output matches the input shape and can flow into the next layer.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A practical fact that surprises people: the FFN holds *most* of the parameters in a transformer. With $d_{model} = 512$ and $d_{ff} = 2048$, each FFN layer has roughly $4 \\times 512 \\times 2048 \\approx 4$ million parameters. Multi-head attention with the same $d_{model}$ has only about $4 \\times 512^2 \\approx 1$ million. In large LLMs, the FFN is where most of the model's *knowledge* actually lives.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's exactly why an innovation like **Mixture of Experts (MoE)** targets the FFN specifically — it swaps the single dense FFN for many smaller \"expert\" FFNs and routes each token to just a few of them, letting you blow up the total parameter count without a matching blowup in compute. More on that later.",
+        ],
+      },
+      {
+        diagram: { id: "tf-position-wise-feed-forward-network", caption: "Fig 5.13 — Attention decides what to mix; the FFN decides what to do with it. Most parameters live here." },
+      },
+      {
+        quiz: {
+          question: "What breaks if you remove the nonlinearity (ReLU) from the FFN, and why does that matter for a deep transformer?",
+          answer: "Without a nonlinearity, the FFN is just two linear layers back to back — and a composition of linear maps is itself a single linear map. Stack as many as you like and the whole thing collapses to one linear transformation, so depth gives you no extra expressive power. The ReLU (or GELU) is what lets stacked layers learn genuinely richer, non-linear functions.",
+        },
+      },
+      {
+        heading: "Layer Normalization",
+        paragraphs: [
+          "This one is essential for keeping training stable — and, you guessed it, for keeping our gradients from exploding or vanishing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The idea: we normalize the activations so they always have mean 0 and standard deviation 1, then let the model learn how to rescale them through two trainable parameters:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{LayerNorm}(x) = \\gamma \\cdot \\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} + \\beta",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols:",
+        ],
+      },
+      {
+        list: [
+          "$x$ — the activation vector for a single token.",
+          "$\\mu$ — the mean, computed across the features of that one token.",
+          "$\\sigma^2$ — the variance, also across that token's features.",
+          "$\\epsilon$ — a tiny constant added for numerical stability (so we never divide by zero).",
+          "$\\gamma$ — a learnable scale parameter.",
+          "$\\beta$ — a learnable shift parameter.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The $\\gamma$ and $\\beta$ are the clever bit: they let the model \"un-normalize\" when that's actually useful, so normalization never costs it expressive power.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Layer norm vs. batch norm.** Batch norm computes its statistics across a whole batch of examples. Layer norm computes them across the features of a *single* example. For transformers, layer norm wins for three reasons: it doesn't depend on batch size (transformers get trained with wildly varying batch sizes), it works fine with variable-length sequences, and it's compatible with autoregressive generation, where at inference you process one token at a time and simply don't *have* a batch to normalize over.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Modern variants like **RMSNorm** drop the mean-subtraction step entirely and just normalize by the root-mean-square, which saves a little compute. LLaMA and many recent LLMs use it — we'll dig into exactly why it works later.",
+        ],
+      },
+      {
+        diagram: { id: "tf-layer-normalization-vs-batch-normalization", caption: "Fig 5.14 — Layer norm normalizes across one token's features — batch-size independent, generation-friendly." },
+      },
+      {
+        quiz: {
+          question: "Why is layer normalization preferred over batch normalization in transformers, especially at inference?",
+          answer: "Layer norm computes its mean and variance across a single token's own features, so it doesn't depend on the batch at all. That matters at inference time during autoregressive generation, where you're producing one token at a time and there's effectively no batch to compute statistics over. It also handles variable-length sequences and wildly varying batch sizes gracefully — all situations where batch norm struggles.",
+        },
+      },
+      {
+        heading: "Residual Connections",
+        paragraphs: [
+          "Residual connections are the reason deep transformers work at all. Here's the problem they solve. If you stack many layers, the early layers have a hard time learning, because their gradient has to travel all the way back down through every layer above them — and we've seen what long backward paths do to a gradient. Layer norm helps, but it doesn't fully fix it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The fix came from ResNet (2015): **residual connections**, also called skip connections. The idea is to add a direct path that bypasses each sublayer:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{output} = \\text{LayerNorm}(x + \\text{Sublayer}(x))",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $x$ is the input to the sublayer and $\\text{Sublayer}(x)$ is whatever that sublayer computes (attention or the FFN). The magic is the $+ x$. Why does this help so much?",
+        ],
+      },
+      {
+        paragraphs: [
+          "First, **gradients flow freely.** That $+ x$ creates a direct highway during backpropagation. Even if $\\text{Sublayer}(x)$ produces a tiny gradient, $x$'s gradient passes straight through unimpeded. This is what stops gradients from vanishing across dozens of stacked layers.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Second, **it's easy to learn the identity.** Without residuals, every layer has to learn its full transformation from scratch. With residuals, a layer only needs to learn the *delta* — what to add to the input. If a layer doesn't need to do anything useful, it can just output zero and the residual passes the input through untouched. Learning \"add nothing\" is far easier than learning \"be the identity function.\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "Residual connections wrap *every* sublayer in the transformer — both the multi-head attention and the feed-forward network. Without them, transformers with 6, 12, or 96 layers simply wouldn't train.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One modern variation worth knowing: **pre-norm vs. post-norm.** The original transformer applied the norm *after* the addition (post-norm). Modern models usually use pre-norm — applying LayerNorm to the input *before* the sublayer, then adding the unchanged residual. Pre-norm is more stable for very deep networks and is now the default in most modern LLMs.",
+        ],
+      },
+      {
+        diagram: { id: "tf-residual-connection-add-norm", caption: "Fig 5.15 — The +x skip path gives gradients a clear road back, so deep stacks stay trainable." },
+      },
+      {
+        quiz: {
+          question: "Two distinct benefits come from the $+x$ in a residual connection. What are they?",
+          answer: "(1) Gradient flow: the skip path is a direct route for gradients during backprop, so even if a sublayer contributes almost nothing, the input's gradient passes straight through — preventing vanishing gradients across many layers. (2) Easy identity: each layer only has to learn the *change* to apply to its input (the delta), and can effectively \"do nothing\" by outputting zero, which is much easier to learn than reconstructing the identity function from scratch.",
+        },
+      },
+      {
+        heading: "Positional Encoding",
+        paragraphs: [
+          "There's one big problem we haven't addressed yet. Self-attention treats the input as a *set* of tokens, not a *sequence*. Without extra information, \"I like cats\" and \"cats like I\" would look identical to the model — the attention computation comes out the same regardless of the order the tokens arrive in.",
+        ],
+      },
+      {
+        paragraphs: [
+          "But order is everything in language. **Positional encodings** fix this by injecting position information directly into the embeddings before they enter the first transformer layer. Each position in the sequence gets its own $d$-dimensional vector — the positional encoding for that position — and it's simply added to the token embedding sitting there:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{input}_i = \\text{token\\_embed}_i + \\text{pos\\_encode}_i",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $\\text{token\\_embed}_i$ is the embedding of the token at position $i$, and $\\text{pos\\_encode}_i$ is the positional vector for that position. Add them and the token now \"knows\" where it sits.",
+        ],
+      },
+      {
+        heading: "Sinusoidal positional encoding",
+        paragraphs: [
+          "The original transformer used a neat scheme built from sine and cosine waves at different frequencies:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{PE}_{(pos, 2i)} = \\sin\\!\\left(\\frac{pos}{10000^{2i/d}}\\right)",
+          "\\text{PE}_{(pos, 2i+1)} = \\cos\\!\\left(\\frac{pos}{10000^{2i/d}}\\right)",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols: $pos$ is the position in the sequence (0, 1, 2, …); $i$ indexes the dimension of the encoding vector; $d$ is the embedding dimension; and $10000$ is a constant chosen to spread the frequencies across many scales. Even dimensions ($2i$) use sine, odd dimensions ($2i+1$) use cosine.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Each dimension of the encoding oscillates at a different frequency. Low dimensions wiggle fast (capturing fine, nearby position differences); high dimensions wiggle slowly (capturing long-range position). Together they produce a unique \"fingerprint\" for every position.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Why design it this way? Three reasons:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Every position gets a unique signature** — no two positions share the same encoding, because the combination of frequencies never repeats over the range you care about.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**The model can read off relative distances.** This is the deep reason for using trig functions. Thanks to the sine/cosine angle-addition identities, the encoding for position $pos + k$ can be written as a fixed linear transformation (a rotation) of the encoding for position $pos$. So \"look $k$ positions back\" becomes a simple linear operation the model can learn — relative position awareness comes basically for free. The waves are periodic, but using many different frequencies (by varying $i$) guarantees each position still gets a unique overall combination.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**It generalizes past the training length.** Since sine and cosine are defined for every input, you can compute the encoding for any position, even one longer than anything seen during training.",
+        ],
+      },
+      {
+        diagram: { id: "tf-sinusoidal-positional-encoding", caption: "Fig 5.16 — Different frequencies give every position a unique fingerprint and encode relative distance." },
+      },
+      {
+        heading: "Modern positional encoding",
+        paragraphs: [
+          "Sinusoidal encodings are elegant, but most modern LLMs (LLaMA, GPT-4-era models) use **Rotary Positional Embeddings (RoPE)** instead. Rather than adding a positional vector to the embedding, RoPE *rotates* pairs of dimensions inside the query and key vectors by an angle that depends on position — so when you later compute the dot product $Q \\cdot K$ for attention, the rotations naturally produce a term that depends on the *difference* between the two positions, not their absolute values. **ALiBi (Attention with Linear Biases)** is another modern alternative that biases attention scores directly by relative distance. We'll cover both in more depth in the modern-divergences section.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The core idea never changes: somehow inject position so the model knows the order. The specifics keep evolving.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Without positional encoding, why would \"I like cats\" and \"cats like I\" look the same to a transformer?",
+          answer: "Because self-attention is permutation-invariant — it treats its input as an unordered set. The attention scores between a given pair of tokens depend only on their content vectors, not on where they sit in the sequence, so shuffling the tokens produces the same set of pairwise interactions. Positional encoding breaks this symmetry by adding position-specific information to each token's vector before attention sees it.",
+        },
+      },
+      {
+        heading: "A full trace, to wrap up the architecture",
+        paragraphs: [
+          "Let's put every piece together. Here's exactly what happens when a sequence of tokens passes through a single transformer **encoder** layer:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Input:** a sequence of token embeddings with positional encodings added, shape $(n, d)$.",
+          "2. **Multi-head self-attention:** project to Q, K, V across $h$ heads; compute scaled-dot-product attention per head; concatenate; project through $W_O$.",
+          "3. **First Add & Norm:** add the input back as a residual, then apply layer norm.",
+          "4. **Feed-forward network:** expand to $d_{ff}$, apply the nonlinearity, contract back to $d$.",
+          "5. **Second Add & Norm:** add the attention output back as a residual, then apply layer norm.",
+          "6. **Output:** same shape $(n, d)$, handed to the next layer.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's one encoder layer. Stack 6 of them (or 12, or 96) and you have an encoder. A **decoder** layer adds one extra step in the middle: masked self-attention followed by Add & Norm, *then* cross-attention to the encoder output followed by Add & Norm, *then* the FFN and a final Add & Norm.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And here's the genuinely beautiful part: every layer has the same shape coming out as going in — $(n, d)$ to $(n, d)$. That means you can stack as many as you want — 6, 12, 96, 120 — and the data just flows straight through, each layer refining the representation a little more. That compositional simplicity is a huge part of why transformers scale so gracefully.",
+        ],
+      },
+      {
+        paragraphs: [
+          "After the last decoder layer, you've got a sequence of $d$-dimensional vectors. To turn those into actual words, two more steps:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Linear projection to vocabulary size.** A learned weight matrix maps each $d$-dimensional vector to a $V$-dimensional vector — one entry per vocabulary token. These raw scores are called **logits**.",
+          "2. **Softmax over the vocabulary.** Convert the logits into a probability distribution over the whole vocabulary. The token with the highest probability is the predicted next token.",
+        ],
+      },
+      {
+        paragraphs: [
+          "At **training** time, you compute the cross-entropy loss between this predicted distribution and the true next token. At **inference** time, you sample from the distribution (or just take the argmax for greedy decoding) to pick the next token, then feed everything back through the decoder to predict the token after that, and so on — autoregression in action.",
+        ],
+      },
+      {
+        diagram: { id: "tf-one-encoder-layer-one-decoder-layer-full-trace", caption: "Fig 5.17 — Same shape in, same shape out — that's why you can stack layers freely." },
+      },
+      {
+        quiz: {
+          question: "What's the one structural difference between an encoder layer and a decoder layer, and what turns the decoder's final vectors into a predicted word?",
+          answer: "A decoder layer inserts an extra sub-block: after its masked self-attention (+ Add & Norm), it has a cross-attention block (+ Add & Norm) that attends to the encoder's output, before the FFN. The encoder layer has no cross-attention. To produce a word, the decoder's final $d$-dimensional vector is sent through a linear projection to vocabulary size (giving logits), then softmax turns those logits into a probability distribution over the vocabulary, and the highest-probability token is chosen (or sampled).",
+        },
+      },
+      {
+        heading: "Where Modern Models Have Diverged",
+        paragraphs: [
+          "The original 2017 transformer is still the conceptual foundation. But modern LLMs have evolved several of its components — and here's the reassuring thing: every one of these is an *optimization* of the original recipe, not a replacement. Once you understand the architecture we just built, every modern paper clicks into place, because it's almost always improving one specific piece while leaving the overall shape intact.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the short list before we go deep on each:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Decoder-only architecture", definition: "— GPT, LLaMA, Claude, and most modern LLMs drop the encoder entirely. For pure text generation you don't need a separate \"input\" stream, so the whole model is just a stack of decoder layers with causal masking." },
+          { term: "Better positional encodings", definition: "— RoPE and ALiBi instead of sinusoidal, for better behavior on long contexts." },
+          { term: "RMSNorm instead of LayerNorm", definition: "— slightly cheaper, comparable quality." },
+          { term: "SwiGLU instead of ReLU", definition: "— a gated activation in the FFN that consistently beats ReLU at scale." },
+          { term: "Grouped-Query Attention (GQA)", definition: "— fewer key/value heads than query heads, easing memory pressure at inference." },
+          { term: "Flash Attention", definition: "— a re-implementation of attention that's mathematically identical but uses the GPU memory hierarchy carefully. Dramatically faster, especially on long sequences." },
+          { term: "Sparse / sliding-window attention", definition: "— attend to only a local window instead of every token. Trades a little capability for big efficiency gains on long contexts." },
+          { term: "Mixture of Experts (MoE)", definition: "— replace the dense FFN with many smaller experts and route each token to a few. Massively more parameters without proportional compute." },
+          { term: "Long context windows", definition: "— the original handled hundreds of tokens; modern models handle millions." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's go through them.",
+        ],
+      },
+      {
+        heading: "Decoder-only transformers",
+        paragraphs: [
+          "The original transformer had two stacks: an encoder for the input language and a decoder for the output language. But when the task is pure text generation — predict the next token given everything so far — you don't really need two streams. The \"input\" and the \"output\" are the same sequence, just shifted by one position.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That realization gave us **decoder-only** models: GPT-1 in 2018, then GPT-2, GPT-3, GPT-4, Claude, LLaMA, and basically every modern frontier LLM. The encoder is gone. The cross-attention block is gone. What's left is a tall stack of decoder layers, each with masked self-attention and a feed-forward network.",
+        ],
+      },
+      {
+        paragraphs: [
+          "It almost seems too simple. How can a model that just predicts the next token translate languages, write code, answer questions, and reason? The answer: next-token prediction over a huge, diverse corpus turns out to be an extraordinarily general training signal. To predict the next token of a Python function, the model has to understand programming. To predict the next token of a Shakespearean sonnet, it has to understand iambic pentameter. To predict the next token of a math proof, it has to understand algebra. By being forced to model *everything* people write, the model implicitly absorbs the structure of language, knowledge, and reasoning.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Tasks like translation, summarization, and Q&A become special cases — you just frame them as text:",
+        ],
+      },
+      {
+        paragraphs: [
+          "…and let the model predict what comes next. That's the unified interface decoder-only models gave us: one architecture handling every text task by reframing it as completion.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The masked self-attention is what makes this work. Each token can only attend to itself and earlier tokens, never future ones — which preserves the autoregressive property and lets the same model both train (predicting all positions in parallel) and generate (one token at a time at inference).",
+        ],
+      },
+      {
+        diagram: { id: "tf-decoder-only-transformer-gpt-style", caption: "Fig 5.18 — Drop the encoder, keep masked self-attention, predict the next token. That's a modern LLM." },
+      },
+      {
+        quiz: {
+          question: "A decoder-only model only ever learns to \"predict the next token.\" How does that single objective produce a model that can translate, code, and reason?",
+          answer: "Because next-token prediction over a massive, varied corpus forces the model to learn whatever structure makes the next token predictable. Predicting code well requires understanding syntax and logic; predicting poetry requires meter; predicting proofs requires math. The objective is narrow but the data is everything, so the model ends up internalizing language, facts, and reasoning patterns as a side effect. Specific tasks then become text-completion problems framed in the prompt.",
+        },
+      },
+      {
+        heading: "Encoder-only transformers",
+        paragraphs: [
+          "Encoder-only transformers stack self-attention layers to process input sequences *bidirectionally* — every token attends to every other token, both forward and backward. This makes them great for language *understanding*, representation learning, and structured prediction, rather than text generation.",
+        ],
+      },
+      {
+        paragraphs: [
+          "(Quick definition: *representation learning* is the set of techniques that automatically discover compact, structured representations — embeddings — for things like feature detection or classification, replacing hand-engineered features.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "An encoder takes a sequence of tokens and produces a *contextualized representation* for each one. For \"I like cats,\" the encoder outputs three vectors — one per token — where each vector has soaked up information from the whole sentence. The output vector for \"cats\" isn't just \"the cats embedding\"; it's \"the cats embedding, having paid attention to 'I' and 'like.'\" These representations aren't predictions — they're rich features that downstream tasks can build on. The encoder is fundamentally a representation learner, not a generator.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Encoder vs. decoder: the attention difference.** The encoder uses *bidirectional* self-attention — every token attends to every other token, in both directions. That's fine, because the encoder isn't generating anything; it just needs to understand the input, and looking ahead doesn't help you cheat if you're not predicting the next token. The decoder uses *causal* (masked) self-attention — each token attends only to itself and prior tokens — which is required for autoregressive generation. This single difference leads to wildly different training objectives.",
+        ],
+      },
+      {
+        paragraphs: [
+          "You can't train an encoder with next-token prediction, because it sees the whole sequence at once and the task would be trivial (it could just read the answer). So the objective that made encoders work is **Masked Language Modeling (MLM)**, introduced in BERT (Bidirectional Encoder Representations from Transformers). The procedure:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. Take a sentence: \"I like cats and dogs.\"",
+          "2. Randomly mask out about 15% of the tokens: \"I [MASK] cats and [MASK].\"",
+          "3. Train the encoder to predict the masked tokens from the surrounding context.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Because the encoder is bidirectional, filling in a \"[MASK]\" in the middle of a sentence requires looking at the words both before *and* after it. That forces the model to build deep, two-sided understanding — context flows in from everywhere.",
+        ],
+      },
+      {
+        paragraphs: [
+          "BERT's exact recipe was a touch more elaborate. Of the 15% of tokens selected for masking, 80% get replaced with [MASK], 10% get replaced with a random token, and 10% are left unchanged. This trick stops the model from learning that \"[MASK] is the only signal that a prediction is needed\" — which would hurt it on real downstream tasks where no [MASK] tokens appear.",
+        ],
+      },
+      {
+        diagram: { id: "tf-encoder-only-transformer-masked-language-modeling-bert", caption: "Fig 5.19 — Bidirectional attention + predict the masked words = deep two-sided understanding." },
+      },
+      {
+        paragraphs: [
+          "BERT itself was a landmark: 12 encoder layers, 110M parameters in its base version, trained on Wikipedia and BookCorpus with MLM plus a next-sentence-prediction objective. From roughly 2018–2022, BERT and its descendants dominated NLP benchmarks.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Are encoders obsolete in the GPT era?** Not at all — they've just specialized into the jobs where bidirectional understanding is the advantage:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Embedding models", definition: "Almost every modern text embedding model (OpenAI's text-embedding-3, Cohere Embed, sentence-transformers, BGE, Voyage) is an encoder. Text in, vector out — and that vector powers semantic search, RAG, clustering, and classification. The entire retrieval step of a RAG pipeline depends on encoder models." },
+          { term: "Reranking", definition: "After a vector search returns candidate documents, a *cross-encoder* (an encoder that reads the query and a document jointly and outputs a relevance score) reranks them for higher quality. Slower than a vector lookup, but more accurate." },
+          { term: "Classification and structured tasks", definition: "Sentiment analysis, intent detection, named-entity recognition, content moderation. When you have labels and just need a score or a class, a fine-tuned encoder is often faster, cheaper, and more accurate than a full LLM." },
+          { term: "Encoder components in multimodal models", definition: "The vision side of vision-language models (CLIP, LLaVA, GPT-4V) is an encoder — typically a Vision Transformer (ViT) — that produces image embeddings fed into the decoder LLM." },
+        ],
+      },
+      {
+        paragraphs: [
+          "So encoders didn't disappear; they migrated to the parts of the pipeline where building representations beats generating text.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why can't you train an encoder with plain next-token prediction, and what objective is used instead?",
+          answer: "Because the encoder is bidirectional — every token already sees every other token, including the \"next\" one. Next-token prediction would be trivial: the model could just look ahead and copy the answer, learning nothing. Instead, encoders use Masked Language Modeling: randomly hide ~15% of tokens and train the model to reconstruct them from both-side context, which forces genuine bidirectional understanding.",
+        },
+      },
+      {
+        heading: "Encoder–decoder models",
+        paragraphs: [
+          "A few important models still use the full encoder–decoder structure:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "T5 (Text-to-Text Transfer Transformer)", definition: "frames every task as text-to-text. Translation, summarization, question-answering — all become \"given input text, produce output text.\" The encoder reads the input, the decoder generates the output. Surprisingly effective, and still competitive." },
+          { term: "BART", definition: "is like T5 but trained with denoising objectives: corrupt the input, then recover the original." },
+          { term: "Flan-T5", definition: "is T5 instruction-tuned across many tasks — a strong, compact alternative to LLM-style models for structured work." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Encoder–decoder shines when the input and output are clearly distinct sequences with different roles — especially translation and summarization. Decoder-only models can handle these too, by treating input + output as one continuous sequence, but the explicit encoder–decoder split gives the model clearer built-in assumptions about which part is which.",
+        ],
+      },
+      {
+        quiz: {
+          question: "When does the explicit encoder–decoder split (like T5) have an edge over a decoder-only model?",
+          answer: "When the input and output are genuinely distinct sequences with different roles — translation (source language → target language) and summarization (long document → short summary) are the classic cases. The separate encoder gives the model a clean, dedicated representation of the input to attend to via cross-attention, which is a helpful inductive bias. Decoder-only models can do these tasks by concatenating input and output, but they don't get that explicit structural separation.",
+        },
+      },
+      {
+        heading: "The component upgrades",
+        paragraphs: [
+          "Now the pieces modern models swap in. We'll take them one at a time, since each is a self-contained improvement to a part you already understand.",
+        ],
+      },
+      {
+        heading: "Modern positional encodings, in depth",
+        paragraphs: [
+          "The original sinusoidal scheme worked, but it had two weaknesses. It encoded *absolute* positions when what really matters is *relative* distance (\"the token 3 places back\"), and it didn't extrapolate well past the maximum training length. Modern LLMs use two main alternatives.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**RoPE (Rotary Positional Embedding).** RoPE doesn't add a positional vector to the embedding. Instead it *rotates* pairs of dimensions in the query and key vectors by an angle that depends on position. Then, when you compute the attention dot product $Q \\cdot K$, the rotations naturally produce a term that depends on the *difference* between the two positions, not their absolute values.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Mathematically, treat each pair of dimensions as a 2D vector and apply a rotation matrix:",
+        ],
+      },
+      {
+        equations: [
+          "R_\\theta = \\begin{pmatrix} \\cos\\theta & -\\sin\\theta \\\\ \\sin\\theta & \\cos\\theta \\end{pmatrix}",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $\\theta$ depends on both the position and the dimension. After rotation, the dot product between a rotated $Q$ at position $m$ and a rotated $K$ at position $n$ depends only on $(m - n)$ — the relative offset. You get relative-position information for free, without changing the attention formula at all.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Why it matters in practice: it extrapolates better to sequences longer than training (especially with NTK-aware scaling and YaRN, which stretch the rotation frequencies), it naturally captures the relative position the model actually cares about, and it's used by LLaMA, Mistral, Qwen, and most modern open LLMs.",
+        ],
+      },
+      {
+        diagram: { id: "tf-rope-rotary-positional-embedding", caption: "Fig 5.20 — Rotate Q and K by a position-dependent angle; the dot product then sees only relative distance." },
+      },
+      {
+        paragraphs: [
+          "**ALiBi (Attention with Linear Biases).** ALiBi takes a different route: don't touch the embeddings at all. Instead, add a position-dependent bias directly to the attention scores. Tokens that are far apart get a more negative bias, making them harder to attend to:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{scores}_{ij} = q_i \\cdot k_j - m \\cdot |i - j|",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols: $q_i$ and $k_j$ are the query and key vectors; $|i - j|$ is the distance between positions $i$ and $j$; and $m$ is a head-specific slope. Because different heads get different slopes, some heads attend mostly to nearby tokens while others can still reach far away. ALiBi is simpler than RoPE and extrapolates extraordinarily well — models trained at 2k context can sometimes handle 16k at inference. The tradeoff: it's a softer bias than RoPE and can be slightly weaker on tasks where exact distance matters.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Both RoPE and sinusoidal encoding inject position, but RoPE is preferred for long contexts. What's the key property RoPE gives you?",
+          answer: "RoPE makes the attention dot product depend only on the *relative* distance $(m - n)$ between two tokens, not their absolute positions — because it rotates Q and K by position-dependent angles and the rotation angles subtract in the dot product. Relative distance is what the model actually needs, and this formulation extrapolates to longer sequences far better than absolute sinusoidal encodings, especially with frequency-scaling tricks like NTK-aware scaling and YaRN.",
+        },
+      },
+      {
+        heading: "RMSNorm instead of LayerNorm",
+        paragraphs: [
+          "Recall LayerNorm does two things: subtract the mean (re-centering), then divide by the standard deviation (re-scaling). Empirical research turned up something surprising: the re-centering step barely matters. The model trains nearly as well if you only do the re-scaling. So **RMSNorm (Root Mean Square Normalization)** drops the mean subtraction entirely:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{RMSNorm}(x) = \\gamma \\cdot \\frac{x}{\\sqrt{\\frac{1}{d}\\sum_i x_i^2 + \\epsilon}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols: $x$ is the token's activation vector; $x_i$ is its $i$-th component; $d$ is the dimension; the denominator is the root-mean-square of the features; $\\epsilon$ is a small stability constant; and $\\gamma$ is a learnable scale. Notice what's *missing* compared to LayerNorm: there's no mean $\\mu$ and no shift $\\beta$. It just divides by the RMS of the features and applies a learnable scale.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The benefits are modest but real: roughly 10–15% faster than LayerNorm, slightly fewer parameters, and identical or marginally better quality. It's used in LLaMA, Mistral, PaLM, and many modern LLMs. It's one of those small wins that genuinely adds up when you're training billions of parameters over trillions of tokens.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What does RMSNorm drop relative to LayerNorm, and why is that okay?",
+          answer: "It drops the mean-subtraction (re-centering) step and the learnable shift $\\beta$ — it only divides by the root-mean-square of the features and applies a learnable scale $\\gamma$. Empirically, the re-centering turns out to contribute very little to training quality, so removing it costs almost nothing while saving ~10–15% of the normalization compute and a few parameters.",
+        },
+      },
+      {
+        heading: "SwiGLU instead of ReLU",
+        paragraphs: [
+          "The FFN in the original transformer was Linear → ReLU → Linear. Modern models almost universally use a gated variant called **SwiGLU**.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The idea comes from GLU (Gated Linear Units): instead of one linear projection followed by an activation, use *two* linear projections and multiply them together, with the activation applied to only one of them:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{SwiGLU}(x) = (\\text{Swish}(x W_1)) \\odot (x W_2)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here $\\text{Swish}(x) = x \\cdot \\sigma(x)$ (also called SiLU) is a smooth nonlinearity, $\\odot$ is element-wise multiplication, and $W_1, W_2$ are two separate learned projections. The output is then sent through a third linear layer to project back down:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{FFN}_{\\text{SwiGLU}}(x) = (\\text{Swish}(x W_1) \\odot x W_2) W_3",
+        ],
+      },
+      {
+        paragraphs: [
+          "with $W_3$ the down-projection. Because this uses three matrices instead of two, modern models shrink $d_{ff}$ to keep the parameter count fair — the original used $d_{ff} = 4 \\times d_{model}$, while SwiGLU models typically use $d_{ff} \\approx \\tfrac{8}{3} \\times d_{model}$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Why does it work better? Intuitively, the multiplicative gate lets the network express more complex functions per parameter — one projection can dynamically modulate the other. Empirically, SwiGLU outperforms ReLU and GELU at scale across many benchmarks. The candor of the field is worth preserving here: Noam Shazeer's 2020 paper introducing it for transformers ended with the memorable line that they offer no explanation for why these architectures work and chalk it up, like all else, to divine benevolence. Funny as that is, gated activations have become standard in LLaMA, PaLM, Mistral, and most modern LLMs.",
+        ],
+      },
+      {
+        diagram: { id: "tf-swiglu-ffn-vs-relu-ffn", caption: "Fig 5.21 — A multiplicative gate lets one projection modulate the other — more expressive per parameter." },
+      },
+      {
+        quiz: {
+          question: "SwiGLU uses three weight matrices where the original FFN used two. How do modern models keep the parameter count fair?",
+          answer: "They shrink the hidden width $d_{ff}$. The original transformer used $d_{ff} = 4 \\times d_{model}$; SwiGLU models typically use about $\\tfrac{8}{3} \\times d_{model}$ instead. That smaller hidden dimension, spread across three matrices ($W_1$, $W_2$ for the gate and $W_3$ for the down-projection), lands at roughly the same total parameter count as the original two-matrix ReLU FFN.",
+        },
+      },
+      {
+        heading: "Sparse and sliding-window attention",
+        paragraphs: [
+          "The biggest cost of full attention is its time complexity: $O(n^2)$ in the sequence length $n$, and it's the single biggest barrier to long-context LLMs. For $n = 1{,}000$, totally fine. For $n = 1{,}000{,}000$, you're looking at $10^{12}$ operations per layer per head — not fine. Sparse attention patterns trade a little flexibility for huge efficiency gains.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The simplest pattern is **sliding-window attention**: each token attends only to the $w$ tokens before it, not all of them. With a window of $w = 4096$ and a sequence of $n = 100{,}000$, you do work proportional to $n \\times w = 4 \\times 10^8$ operations instead of $n^2 = 10^{10}$ — about a 25× reduction.",
+        ],
+      },
+      {
+        paragraphs: [
+          "But wait — if a token can only see 4,096 tokens back, how does a model ever use a 128k context? Here's **the depth trick**, and it's lovely. Stack layers. Layer 1 at a given position sees 4k tokens back. Layer 2's output at that position depends on Layer 1's outputs across its own 4k window — each of which already absorbed 4k more tokens back. So after $L$ layers, the *effective* receptive field is $L \\times w$ tokens, even though every individual layer stays cheap. Information flows like ripples: each layer sees nearby context, but that nearby context already soaked up slightly more distant context from the layer below. With 32 layers and a 4096 window, the effective field is $32 \\times 4096 = 131{,}072$ tokens.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is exactly the strategy Mistral uses: Mistral 7B has a 4096-token sliding window across 32 layers, giving an effective context of ~128k tokens at modest compute.",
+        ],
+      },
+      {
+        diagram: { id: "tf-sliding-window-attention-the-depth-trick", caption: "Fig 5.22 — A small local window per layer, stacked deep, reaches far — that's how long context stays cheap." },
+      },
+      {
+        paragraphs: [
+          "**What sliding window sacrifices:** direct attention to faraway tokens. A token at position 50,000 can't *directly* attend to one at position 100 — the information has to flow up through the layers. For tasks that need exact long-range, pointer-like retrieval, that hurts.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A few richer patterns build on the basic window:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Longformer's pattern: local + global.** Longformer added something simple but powerful — a few designated \"global\" tokens that attend to everything and that everything attends to (typically the [CLS] token or the start of each document). Most tokens use the cheap sliding window; the few special tokens get full attention to and from everyone. This is great when you have a fixed query at the front of the input (like extractive QA): the query tokens get global attention while the document body stays windowed, giving strong performance at sub-quadratic cost.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**BigBird: local + global + random.** BigBird (2020) is the most elaborate combination — local sliding window, a few global tokens, *plus* random connections (each token attends to a few random others). The random links are the clever part: they let information hop across the sequence efficiently, like a small-world graph where every node is a few hops from every other. Even though no single token sees everything, after a few layers the information has mixed globally. BigBird was proven to retain the theoretical expressivity of full attention (under mild conditions) while running at $O(n)$ compute — the cleanest theoretical justification for sparse attention.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And several more you'll run into:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Strided / dilated attention", definition: "— attend to every $k$-th token in addition to nearby ones." },
+          { term: "Block-sparse attention", definition: "— divide the sequence into blocks; attend within blocks plus a sparse pattern between them." },
+          { term: "Sparse Transformers (OpenAI, 2019)", definition: "— strided patterns where each head attends to either nearby tokens or every $k$-th token, alternating. Used in early image and music generation." },
+          { term: "Sliding window only", definition: "— Mistral and many recent models. Simple to implement, works well, easy to combine with Flash Attention." },
+          { term: "Hybrid sliding window + full", definition: "— alternate layers between sliding window and full attention. Recent models like Gemma 2 and some Llama variants do this: efficiency from the windowed layers, full mixing from the occasional dense one." },
+          { term: "Native sparse attention (DeepSeek)", definition: "— recent work training models with structured sparsity from scratch, reaching near-full-attention quality at much lower cost." },
+        ],
+      },
+      {
+        paragraphs: [
+          "The theoretical landscape is rich, but the production reality is mostly \"sliding window plus full attention every few layers.\" The 2×–10× speedups are great; chasing every theoretical optimization for another 5% has historically not been worth the engineering pain.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One honest caveat: sliding window doesn't literally extend context for free. Watch for these failure modes — **needle-in-a-haystack at long distance** (if the answer is at position 1,000 and the question at position 50,000, windowed models can struggle even with enough effective receptive field, because the info has to survive propagation through many layers without being overwritten); **multi-hop reasoning over long contexts** (chains of references spanning the whole document degrade); and **long-range copying** (copying a specific phrase from far back gets harder). That's why pure sliding window is often paired with periodic full-attention layers, or with **attention sinks** (always attend to the first few tokens) to soften these effects.",
+        ],
+      },
+      {
+        quiz: {
+          question: "If each layer only attends to a 4,096-token window, how can a 32-layer model effectively use ~128k tokens of context?",
+          answer: "The depth trick. Each layer's output at a position summarizes its own 4k window — but the tokens in that window already summarized *their* 4k windows in the layer below. Stacking $L$ layers compounds this, so the effective receptive field grows to about $L \\times w$ ($32 \\times 4096 \\approx 131{,}072$). Information ripples upward through the stack even though no single layer ever attends beyond its local window. The cost: faraway tokens are reached only indirectly, which can hurt exact long-range retrieval.",
+        },
+      },
+      {
+        heading: "KV cache (important!)",
+        paragraphs: [
+          "The KV cache is the single most important inference-time optimization in LLMs. Here's the setup. When you generate text autoregressively, you produce one token at a time. To generate token $n+1$, you compute attention for position $n$ — and attention needs the $K$ and $V$ vectors of *every previous position* too.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The naive approach recomputes $K$ and $V$ for every position from scratch at each step. That's $O(n^2)$ work over the whole generation, and most of it is redundant: the $K$ and $V$ for position 4 don't change when you're generating position 100. Hugely wasteful.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The fix is to **cache** them. Once you compute the $K$ and $V$ vectors for a token, save them. When generating the next token, only compute $Q$, $K$, $V$ for the *new* position, then concatenate with the cached $K$, $V$ from before. Now attention does work proportional to $n$ per step instead of $n^2$. This optimization is so fundamental that every modern inference engine has it. The \"KV cache\" is just two big tensors of shape (num_layers, num_kv_heads, sequence_length, head_dim) — one for K, one for V — growing by one row per generated token.",
+        ],
+      },
+      {
+        paragraphs: [
+          "How big does it get? The KV cache size is:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{KV cache} = 2 \\times \\text{num\\_layers} \\times \\text{num\\_kv\\_heads} \\times \\text{seq\\_len} \\times \\text{head\\_dim} \\times \\text{bytes\\_per\\_param}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The leading $2$ counts both K and V. Plug in a 70B model with 80 layers, 8 KV heads, head_dim 128, in FP16 (2 bytes), at sequence length 100k:",
+        ],
+      },
+      {
+        equations: [
+          "2 \\times 80 \\times 8 \\times 100{,}000 \\times 128 \\times 2 \\approx 32 \\text{ GB}",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's for a *single user's* context. Now multiply by the number of concurrent users on a server and you see why KV cache management is the single biggest pressure point in production LLM serving. Innovations have piled up to deal with it:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "GQA / MQA", definition: "— fewer KV heads, smaller cache (covered right below)." },
+          { term: "Quantized KV cache", definition: "— store K and V in 8-bit or even 4-bit precision." },
+          { term: "PagedAttention (vLLM)", definition: "— manage the cache in pages, like virtual memory, so concurrent requests can share GPU memory efficiently." },
+          { term: "Prefix caching", definition: "— when many requests share the same system prompt, cache its K and V once and reuse across requests." },
+        ],
+      },
+      {
+        diagram: { id: "tf-kv-cache", caption: "Fig 5.23 — Cache K and V once, reuse them every step. The cache size is why serving is hard." },
+      },
+      {
+        quiz: {
+          question: "What exactly does the KV cache store, and why does caching turn per-step attention cost from $O(n^2)$ into $O(n)$?",
+          answer: "It stores the key and value vectors of every token processed so far (two tensors of shape num_layers × num_kv_heads × seq_len × head_dim). Without it, generating each new token would recompute K and V for all previous positions — redundant work that grows quadratically over a generation. With the cache, each step computes K and V only for the single new token and concatenates them onto the stored ones, so a step costs work proportional to the current length $n$, not $n^2$.",
+        },
+      },
+      {
+        heading: "Prefill vs. decode",
+        paragraphs: [
+          "The KV cache leads to an important distinction in how LLMs actually run, splitting inference into two phases with very different performance characters.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Prefill** — processing the entire prompt at once. All prompt tokens are computed in parallel, building up the initial KV cache. This phase is *compute-bound* and fast per token. It's the latency you wait through before the first generated token appears.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Decode** — generating tokens one at a time. Each step does one new token's worth of compute but has to *read the entire KV cache* (and the model weights) to do it. This phase is *memory-bandwidth-bound* and slow per token. It's what sets the speed at which the response streams out.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Optimizing each phase needs different tricks. Prefill loves big tensor cores chewing through dense matrix multiplies; decode lives or dies by memory bandwidth.",
+        ],
+      },
+      {
+        diagram: { id: "tf-prefill-vs-decode", caption: "Fig 5.24 — Prompt processing is parallel and compute-bound; generation is sequential and bandwidth-bound." },
+      },
+      {
+        quiz: {
+          question: "Why is the decode phase memory-bandwidth-bound while prefill is compute-bound?",
+          answer: "In prefill, all prompt tokens are processed at once, so the GPU does large dense matrix multiplications that saturate its compute units — lots of arithmetic per byte read. In decode, you generate one token at a time, doing only a sliver of arithmetic, but each step must read the entire KV cache and the full model weights from memory. The work is dominated by moving data, not by computing on it, so memory bandwidth is the limiting factor.",
+        },
+      },
+      {
+        heading: "Grouped-Query Attention (GQA) and Multi-Query Attention (MQA)",
+        paragraphs: [
+          "Both of these attack the KV cache size directly by sharing key/value heads.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Multi-Query Attention (MQA)** is the radical version: keep all $h$ query heads, but use only *one* shared $K$ and one shared $V$ across all of them. This shrinks the KV cache by a factor of $h$ — for an 8-head model, the cache is 8× smaller. The cost: quality drops noticeably, because the model has less flexibility in how different heads can attend.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Grouped-Query Attention (GQA)** is the compromise. Group the $h$ query heads into $g$ groups, and have each group share one $K$ and $V$. With $h = 32$ heads and $g = 8$ groups, you get a 4× smaller KV cache than full multi-head, with almost no quality loss. GQA hits a sweet spot and is now the default in LLaMA 2, LLaMA 3, Mistral, and many production LLMs.",
+        ],
+      },
+      {
+        diagram: { id: "tf-mha-vs-gqa-vs-mqa", caption: "Fig 5.25 — Share K/V across query heads to shrink the cache. GQA is the sweet spot." },
+      },
+      {
+        quiz: {
+          question: "GQA sits between MHA and MQA. What does it trade, and why is it usually the default?",
+          answer: "GQA groups the query heads and lets each group share one set of K/V heads, instead of every head having its own (MHA) or all heads sharing one (MQA). That shrinks the KV cache — e.g. 4× smaller with 32 query heads in 8 groups — while losing almost no quality, because there's still enough K/V diversity for heads to attend differently. MQA shrinks the cache more but visibly hurts quality, so GQA's balance of big memory savings for negligible quality loss makes it the common default.",
+        },
+      },
+      {
+        heading: "Flash Attention",
+        paragraphs: [
+          "Standard attention has a memory problem. The intermediate attention matrix ($Q K^\\top$ before softmax) has shape (seq_len, seq_len). For seq_len = 100k, that's 10 billion entries — and you need it for every layer and every head. Even at FP16 it eats hundreds of GB. Worse, the standard algorithm writes that giant matrix out to the GPU's main memory (HBM), reads it back for softmax, then reads it *again* for the multiply with V. All that shuffling thrashes memory bandwidth.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Flash Attention** (Tri Dao, 2022) is a re-implementation of attention that's *mathematically identical* to the original but treats the GPU memory hierarchy with care. The key insight: never materialize the full attention matrix. Instead, process attention in tiles small enough to fit in fast on-chip SRAM, and use a clever *online softmax* algorithm that computes the right answer without ever seeing all the values at once.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the contrast. The standard algorithm: compute $S = Q K^\\top$ (huge matrix, write to HBM); compute $P = \\text{softmax}(S)$ (read from HBM, write back); compute $O = P V$ (read both, write output). Flash Attention instead: load tiles of Q, K, V into SRAM; compute partial scores and partial softmax statistics on each tile; accumulate the output incrementally while updating running statistics; and never materialize the full $S$ or $P$ matrix in HBM at all.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The result is 2–4× faster attention for typical sequence lengths and dramatic memory savings — linear in sequence length instead of quadratic. Flash Attention 2 and 3 refine it further with better parallelism and newer hardware features. Modern LLMs essentially all use some Flash Attention variant.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The takeaway is worth underlining because it's a recurring theme in modern ML: *same math, radically different performance, purely by being smarter about memory access patterns.* Many of the biggest practical gains come not from new algorithms but from better implementations of existing ones.",
+        ],
+      },
+      {
+        diagram: { id: "tf-flash-attention-tiling-online-softmax", caption: "Fig 5.26 — Never build the full attention matrix — stream tiles through fast on-chip memory instead." },
+      },
+      {
+        quiz: {
+          question: "Flash Attention computes exactly the same result as standard attention. Where does its speedup come from?",
+          answer: "From memory access, not math. Standard attention materializes the full (seq_len × seq_len) score matrix in slow GPU main memory (HBM) and shuttles it back and forth for softmax and the value multiply. Flash Attention never builds that matrix: it streams small tiles of Q, K, V through fast on-chip SRAM and uses an online-softmax trick to accumulate the correct output incrementally. Far fewer slow-memory reads/writes means 2–4× speed and memory that scales linearly instead of quadratically.",
+        },
+      },
+      {
+        heading: "Mixture of Experts (MoE)",
+        paragraphs: [
+          "Remember that most of a transformer's parameters live in the FFN. So here's the question MoE asks: what if you could have *many* FFNs but only run a few of them for each token?",
+        ],
+      },
+      {
+        paragraphs: [
+          "The architecture replaces each FFN in the transformer with $N$ \"expert\" FFNs plus a **router** (also called a gating network). For each token, the router picks the top-$k$ experts (typically $k = 1$ or $2$) and sends the token through only those. The other $N - k$ experts sit idle for that token. If you have 8 experts and pick the top 2 per token, the model has 8× the FFN parameters but does only ~2× the work per token — actually less, since the experts are individually smaller than one dense FFN of equivalent total capacity. This is the **sparse activation** principle: total parameters huge, compute per token small. The router itself is just a small linear layer that produces scores over the experts; you take the top-$k$, softmax those chosen scores, and weight the experts' outputs by them.",
+        ],
+      },
+      {
+        diagram: { id: "tf-mixture-of-experts-moe", caption: "Fig 5.27 — Many experts, few active per token: huge capacity, small per-token compute." },
+      },
+      {
+        paragraphs: [
+          "MoE gives you a massive capacity boost without the matching compute cost. Mixtral 8×7B has roughly 47B total parameters but activates only about 13B per token. GPT-4 is widely believed to be a large MoE, and most larger frontier models almost certainly are.",
+        ],
+      },
+      {
+        paragraphs: [
+          "But MoE comes with real challenges:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Load balancing", definition: "If the router always picks expert 1, the other experts are wasted. Auxiliary \"load-balancing losses\" during training nudge usage to spread evenly across experts." },
+          { term: "Memory", definition: "Even though compute is sparse, *all* experts must be loaded into memory. A 47B-param Mixtral needs roughly 47B params' worth of memory even though it only does 13B params of compute per token." },
+          { term: "Training instability", definition: "Routing decisions are discrete (top-$k$), which makes gradients tricky. Tricks like soft routing, expert-capacity limits, and noise injection keep training stable." },
+          { term: "Inference complexity", definition: "Routing different tokens to different experts is harder to batch efficiently, so production serving takes careful engineering." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Despite all that, MoE is the path most frontier models have taken. It's how you build a model with effective trillion-parameter capacity without needing a trillion-parameter forward pass.",
+        ],
+      },
+      {
+        quiz: {
+          question: "An MoE model can have far more total parameters than a dense model yet cost less compute per token. How — and what's the catch on memory?",
+          answer: "A router sends each token through only the top-$k$ experts (say 2 of 8), so compute scales with the *active* experts, not the total. That's why Mixtral 8×7B can hold ~47B parameters but only activate ~13B per token. The catch: even idle experts still have to be resident in GPU memory, so memory usage tracks the *total* parameter count (~47B), not the active count. You save compute, not memory.",
+        },
+      },
+      {
+        heading: "Long context windows",
+        paragraphs: [
+          "The original transformer handled a few hundred tokens. Modern models routinely handle 200k, 1M, even 10M tokens. Getting there took innovations across every part of the stack — and notice that each one is a tool we've already met:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Positional encodings", definition: "Sinusoidal didn't extrapolate. RoPE plus scaling tricks (NTK-aware scaling, YaRN, position interpolation) let models trained at 8k handle 128k or more. ALiBi extrapolates natively." },
+          { term: "Attention efficiency", definition: "Quadratic attention can't reach 1M tokens ($10^{12}$ operations per layer per head). Flash Attention cuts the memory cost; sliding-window and sparse attention cut the compute cost." },
+          { term: "KV cache compression", definition: "At 1M tokens, the KV cache alone can run to hundreds of GB. Quantization (FP8, INT4), eviction strategies (drop old or low-attention tokens), and compression schemes are all active research." },
+          { term: "Training data", definition: "A model trained only on 4k-token examples won't suddenly use 1M tokens well, even if it technically can. Long-context ability requires curating long documents and using techniques like progressive length training." },
+          { term: "Evaluation", definition: "\"Needle in a haystack\" tests check whether a model can retrieve a specific fact placed somewhere in a long context. More demanding tests like RULER and LongBench probe whether models actually *reason* over long context or merely retrieve." },
+        ],
+      },
+      {
+        paragraphs: [
+          "The honest truth: many models *claim* long context but degrade substantially as the context fills up. A model advertising 1M-token context might really only use the first 32k well plus the last few thousand. This is improving fast, but it's still a real design consideration when you're building systems.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Name two distinct techniques from earlier in this guide that combine to make million-token context windows feasible, and what each one fixes.",
+          answer: "For example: (1) RoPE with frequency-scaling (NTK-aware scaling / YaRN) fixes the positional-encoding problem — sinusoidal encodings didn't extrapolate past training length, RoPE does. (2) Flash Attention and/or sliding-window attention fix the cost problem — full $O(n^2)$ attention is impossible at 1M tokens, so Flash cuts memory and windowed/sparse attention cuts compute. KV-cache quantization is a valid third answer, addressing the hundreds-of-GB cache that long contexts create.",
+        },
       },
       {
         heading: "Quantization",
         paragraphs: [
-          "Quantization maps high-precision numbers down to fewer bits. The ladder runs FP32 → FP16/BF16 (already standard, 2× memory and bandwidth savings at minimal quality cost), FP8 (newer, another 2× on top, common in training on H100s and beyond), INT8 (common for inference — weights, sometimes activations), and INT4/NF4 (aggressive, for running large models on consumer hardware, with some quality loss on harder tasks). Per-group or per-channel schemes quantize different slices of the weights with different scales for better precision than naive uniform quantization.",
-          "There are two main approaches: post-training quantization (PTQ) trains in high precision and quantizes after — cheap but lossy, with tools like GPTQ and AWQ — while quantization-aware training (QAT) simulates quantization during training so the model learns to be robust to it, costing more but giving better quality. Quantization is what lets a 70B-parameter model run on a single workstation GPU: at 4 bits, 70B params = 35 GB, which fits in a 48 GB card. Without it, frontier models would be inaccessible to anyone outside a major data center.",
+          "Quantization is a term you'll hear constantly in inference engineering. It's the process of mapping a large or continuous set of input values to a smaller, finite set of discrete output values. In plain terms: smaller numbers, faster math, less memory. Modern LLMs are deployed with aggressive quantization:",
         ],
+      },
+      {
+        definitions: [
+          { term: "FP32 → FP16 / BF16", definition: "— already standard. 2× memory and bandwidth savings, minimal quality impact." },
+          { term: "FP8", definition: "— newer. Another 2× savings on top of FP16, often used in training on H100s and newer hardware." },
+          { term: "INT8", definition: "— common for inference. Weights quantized to 8 bits, sometimes activations too." },
+          { term: "INT4 / NF4", definition: "— aggressive. Used to run large models on consumer hardware. Some quality loss, especially on harder tasks." },
+          { term: "Per-group / per-channel quantization", definition: "— quantize different parts of the weights with different scales, for better precision than naive uniform quantization." },
+        ],
+      },
+      {
+        paragraphs: [
+          "There are two main approaches. **Post-training quantization (PTQ)** trains in higher precision and quantizes afterward — cheap but lossy; common tools are GPTQ and AWQ. **Quantization-aware training (QAT)** simulates quantization *during* training so the model learns to be robust to it — more expensive, better quality.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Quantization is what makes it possible to run a 70B-parameter model on a single consumer GPU: with INT4, 70B params at 4 bits is about 35 GB, which fits in a 48 GB workstation card. Without it, frontier models would be out of reach for anyone outside a major data center.",
+        ],
+      },
+      {
+        diagram: { id: "tf-quantization", caption: "Fig 5.28 — Fewer bits per weight: less memory and faster math, at some cost to precision." },
+      },
+      {
+        quiz: {
+          question: "Roughly how does INT4 quantization let a 70B model fit on a 48 GB GPU, and what's the cost?",
+          answer: "At 4 bits per parameter, 70B parameters take about $70 \\times 10^9 \\times 0.5$ bytes ≈ 35 GB, which fits in a 48 GB card (versus ~140 GB at FP16). The cost is precision: rounding each weight to one of only 16 levels introduces some error, which can show up as quality loss, especially on harder tasks. Techniques like per-group/per-channel scaling and quantization-aware training reduce that loss.",
+        },
       },
       {
         heading: "Speculative decoding",
         paragraphs: [
-          "Decode is bottlenecked by memory bandwidth: each step reads the full KV cache and model weights for one token's worth of compute. Speculative decoding exploits a clever asymmetry — a small, fast \"draft\" model proposes $k$ tokens cheaply, and the big model verifies all $k$ in a single parallel forward pass (the same work it would have done for one token anyway). You compare the proposals against the big model's predictions and accept the longest matching prefix, then continue from the big model's correction.",
-          "When the draft agrees with the big model most of the time — which holds for easy tokens like punctuation, common words, and predictable completions — you get a 2–3× speedup with no quality loss, since the big model still has the final say. It's now standard in production inference. Variants include Medusa (multiple prediction heads on the same model), EAGLE (improved drafting via feature reuse), and lookahead decoding (parallel verification of multiple candidate sequences).",
+          "LLM inference is dominated by the decode phase — generating one token at a time, each step limited by memory bandwidth (reading the full KV cache and weights for one token's worth of compute). Speculative decoding is a clever way to claw back speed.",
         ],
       },
       {
-        heading: "Inference engines and long context",
         paragraphs: [
-          "Production serving doesn't run raw PyTorch — it runs specialized inference engines: vLLM (PagedAttention, high-throughput dynamic batching), TensorRT-LLM (NVIDIA's optimized engine), SGLang (flexible structured generation with constraint enforcement), and llama.cpp (quantized models on CPUs and consumer GPUs). Through continuous batching, paged KV cache, fused kernels, and quantization, these typically hit 5–10× the throughput of naive PyTorch.",
-          "Stretching context from a few hundred tokens to 200k, 1M, even 10M took innovations across the whole stack. Positional encodings: RoPE plus scaling tricks — NTK-aware scaling, YaRN, position interpolation — let a model trained at 8k handle 128k or more (ALiBi extrapolates natively). KV cache compression: at 1M tokens the cache alone can run to hundreds of GB, so quantization and eviction strategies (drop old or low-attention tokens) become essential. Training data: a model trained only on 4k examples won't use 1M tokens well even if it technically can, so long-context training curates long documents and uses progressive length training. And evaluation: \"needle in a haystack\" checks retrieval, while harder suites like RULER and LongBench probe whether a model actually reasons over long context. The honest caveat is that many models claim 1M but really only use the first 32k (and the last few thousand) well — improving fast, but still a real consideration when you design systems.",
+          "The trick rests on one observation: a small, fast model can *propose* several tokens cheaply, and a large model can *verify* them in a single forward pass — which is the same kind of pass the big model would have done for one token anyway. If the proposals are right, you got multiple tokens for the price of one. If they're wrong at some point, you fall back to the big model's prediction at that position. Concretely:",
         ],
       },
       {
-        heading: "Mixture of Experts",
         paragraphs: [
-          "Here's a tempting idea. Most of the parameters live in the FFN — so what if you had many FFNs lying around but only ran a few of them per token? That's Mixture of Experts: replace each FFN with $N$ experts plus a router that sends each token to its top-$k$ (usually just 1 or 2). You end up with the capacity of all $N$ experts but the compute cost of only $k$ — Mixtral 8×7B has roughly 47B total parameters yet activates only ~13B per token. It isn't free, though: every expert has to sit in memory, load balancing needs auxiliary losses to keep the router honest, and routing makes batching genuinely messier.",
+          "1. A small \"draft\" model generates $k$ tokens in sequence.",
+          "2. The big model processes those $k$ tokens in parallel (one forward pass, like prefill).",
+          "3. Compare the proposals to the big model's predictions and accept the longest matching prefix.",
+          "4. Continue from there with the big model's correction.",
         ],
-        diagram: {
-          id: "moe",
-          caption:
-            "Fig 4.9 — Mixture of Experts. A router picks the top-k experts per token; the rest sit idle. Huge parameter count, small compute per token.",
+      },
+      {
+        paragraphs: [
+          "When the draft model agrees with the big model most of the time — which is true for easy tokens like punctuation, common words, and predictable completions — you get a 2–3× speedup with *no quality loss* (the big model's distribution is always what's ultimately honored). This is now standard in production inference engines. Variants include **Medusa** (multiple prediction heads on the same model), **EAGLE** (improved drafting with feature reuse), and **lookahead decoding** (parallel verification of multiple candidate sequences).",
+        ],
+      },
+      {
+        diagram: { id: "tf-speculative-decoding", caption: "Fig 5.29 — A small model guesses ahead; the big model checks them all at once. Free speed when guesses are right." },
+      },
+      {
+        quiz: {
+          question: "Speculative decoding speeds up generation but is guaranteed not to change the output distribution. Why is the quality preserved?",
+          answer: "Because the small draft model's tokens are only *accepted* when they match what the big (target) model would have produced — verification happens against the big model's own predictions, and any mismatch is corrected by the big model at that position. The draft model just lets the big model confirm several easy tokens in one parallel pass instead of one at a time. The final tokens always come from (or are validated against) the target model, so the distribution is identical; only the speed changes.",
         },
       },
       {
-        heading: "Training and fine-tuning",
+        heading: "RAG (Retrieval-Augmented Generation) and tool use",
         paragraphs: [
-          "A modern assistant is trained in stages: pretraining (next-token prediction over trillions of tokens — the bulk of the compute), supervised fine-tuning (curated instruction–response pairs), and preference alignment (RLHF, or DPO which skips the reward model). Constitutional AI / RLAIF replace much of the human feedback with AI critique against a set of principles. Scaling laws (Kaplan, Chinchilla) make all of this predictable: for a given compute budget, optimal model and dataset size grow together.",
+          "Even the best LLM has limits baked in: it doesn't know facts from after its training cutoff, it can't see your private data, and it can confidently produce plausible-sounding nonsense (hallucinate). Two main approaches fix these by hooking the model up to external systems.",
         ],
       },
       {
         paragraphs: [
-          "Full fine-tuning of a large model is expensive, so LoRA freezes the base weights and learns a low-rank update $\\frac{\\alpha}{r} B A$ added to each weight matrix. Because the fine-tuning update has low intrinsic rank, two skinny matrices capture most of it — a rank-16 adapter on an 8B model is a few million parameters (~13 MB) versus 16 GB for a full copy. Adapters are cheap to store, swap, and serve many-at-once, and they're permanently bound to their base model.",
+          "**RAG (Retrieval-Augmented Generation)** gives the model a search step before it answers. The pipeline: take the user's query, embed it into a vector (using an encoder model — remember those?), search a vector database of document embeddings for the most similar chunks, retrieve the top matches, and stuff that retrieved text into the prompt as context. Now the model answers *grounded* in real, current, possibly-private documents rather than only its frozen training memory. This is why encoder models never went away — the retrieval step depends entirely on them, and a cross-encoder often reranks the candidates for extra precision.",
         ],
-        equations: ["W' = W + \\tfrac{\\alpha}{r}\\,B A, \\qquad r \\ll d"],
-        diagram: {
-          id: "lora",
-          caption:
-            "Fig 4.10 — LoRA. The base weight W stays frozen; only the low-rank matrices B and A are trained, then added back at inference.",
+      },
+      {
+        paragraphs: [
+          "**Tool use (function calling)** goes a step further: instead of only retrieving text, the model can call external tools — run a calculator, query a database, hit a web API, execute code — and fold the results back into its reasoning. The model is trained to emit a structured call (\"call `search(query)`\"), the system runs it, and the result comes back as more context for the next step. This is the foundation of modern agents.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Both share the same core idea: the transformer is the reasoning engine, but it doesn't have to *contain* every fact or capability. Wire it to retrieval and tools and you get something current, grounded, and far more capable than the weights alone.",
+        ],
+      },
+      {
+        diagram: { id: "tf-retrieval-augmented-generation-rag", caption: "Fig 5.30 — Retrieve relevant text first, then let the model answer grounded in it — no retraining needed." },
+      },
+      {
+        quiz: {
+          question: "RAG depends on a component we covered much earlier in the guide. Which one, and what's its job in the pipeline?",
+          answer: "It depends on encoder models. The retrieval step embeds both the user's query and the candidate documents into vectors using an encoder, then finds the most similar document chunks by comparing those vectors. (A cross-encoder often reranks the top candidates for higher precision.) That's exactly the \"representation learning, not generation\" role encoders specialized into — RAG is one of their biggest modern uses.",
         },
       },
       {
+        heading: "Pretraining vs. fine-tuning vs. RLHF",
         paragraphs: [
-          "A few variants are worth naming: QLoRA combines LoRA with quantization (a 4-bit frozen base plus trainable adapters) so you can fine-tune large models on a single consumer GPU, and DoRA decomposes each weight into a magnitude and a direction and applies the low-rank update to the direction, recovering a bit more of FullFT's quality. The adapter is permanently bound to its exact base model — a LoRA trained on Llama-3.1-8B works only with Llama-3.1-8B, since $B$ and $A$ take their shapes from that base's matrices — which is precisely what makes multi-tenant serving (many adapters over one frozen base, as in vLLM and SGLang) coherent.",
+          "Building a modern instruction-following LLM happens in three phases:",
         ],
       },
       {
-        heading: "LoRA Without Regret",
-        paragraphs: [
-          "Thinking Machines' empirical study (\"LoRA Without Regret\") condenses into two conditions for matching full fine-tuning (FullFT). First, apply LoRA to all layers — especially the MLP/MoE layers that hold most of the parameters. Attention-only LoRA underperforms even at matched parameter counts: on Llama-3.1-8B, attention-only at rank 256 (0.25B params) loses to MLP-only at rank 128 (0.24B params), so the gap isn't about parameter count, and applying LoRA to attention adds nothing beyond applying it to the MLPs. Second, stay out of the capacity-constrained regime — keep trainable parameters above the dataset's information content. LoRA doesn't hit a hard loss floor when starved; instead lower-rank adapters \"fall off\" the optimal loss curve once they run out of capacity.",
-          "On the practical knobs: the optimal LoRA learning rate is consistently about 10× higher than FullFT's (their multi-model fit landed on 9.8×), which makes transferring a known FullFT learning rate nearly mechanical — and for very short runs under ~100 steps the multiplier rises toward 15×, converging back to 10× for longer runs. The optimal learning rate is roughly independent of rank (thanks to the $1/r$ scaling in $W' = W + \\frac{\\alpha}{r}BA$, it shifts by less than 2× between rank 4 and 512, though rank 1 wants a touch lower). They used $\\alpha = 32$ with the standard Hugging Face peft initialization (uniform $A$ scaled by $1/\\sqrt{d_{\\text{in}}}$, zero-initialized $B$, same learning rate for both) and couldn't beat it. One caution: LoRA is less tolerant of large batch sizes than FullFT, a penalty that grows with batch size and isn't fixed by raising the rank — it's an optimization-dynamics effect of the $BA$ product, not a capacity one.",
-          "The standout result is for reinforcement learning: LoRA fully matches FullFT for policy-gradient RL even at rank 1. The argument is information-theoretic — policy gradients learn from the advantage function, which carries only $O(1)$ bits per episode, roughly 1000× less information per token than supervised learning. In their MATH example, ~10,000 problems at 32 samples each is about 320,000 bits to absorb, while a rank-1 LoRA on Llama-3.1-8B already has 3M parameters — nearly 10× that. RL also gave LoRA a wider band of well-performing learning rates.",
+        definitions: [
+          { term: "Pretraining", definition: "— train on a huge corpus (trillions of tokens) with next-token prediction. This is the bulk of the compute. It produces a \"base model\" that can complete text but doesn't naturally follow instructions." },
+          { term: "Supervised fine-tuning (SFT)", definition: "— train on curated examples of instructions paired with good responses. This teaches the *format* of being a helpful assistant." },
+          { term: "Reinforcement learning from human feedback (RLHF)", definition: "— use human ratings to train a reward model, then optimize the LLM against it. This produces models that are helpful, harmless, and aligned with human preferences. Modern variants include **DPO (Direct Preference Optimization)**, which skips the separate reward model and optimizes directly on preference pairs." },
         ],
       },
       {
-        heading: "Beyond transformers: GANs and VAEs",
+        diagram: { id: "tf-three-phases-of-training-an-llm", caption: "Fig 5.31 — Pretrain for knowledge, SFT for format, RLHF for alignment with human preferences." },
+      },
+      {
+        quiz: {
+          question: "What does each of the three training phases contribute, and which one uses the most compute?",
+          answer: "Pretraining (next-token prediction on trillions of tokens) gives the model its broad knowledge and language ability and uses by far the most compute, producing a base model that completes text. SFT teaches it to follow instructions in an assistant format using curated instruction–response pairs. RLHF (or DPO) aligns it with human preferences — making it helpful and harmless — using human ratings to shape the model's behavior.",
+        },
+      },
+      {
+        heading: "LoRA and parameter-efficient fine-tuning, in depth",
         paragraphs: [
-          "Two generative architectures round out the picture. A GAN pits a generator (noise $z$ → fake data) against a discriminator (real vs fake) in a minimax game over a single shared value function — D wants to push it up, G wants to push it down:",
+          "Let's slow down here, because LoRA is one of the most useful ideas in practical ML — and it ties directly back to the rank concept from linear algebra.",
         ],
+      },
+      {
+        paragraphs: [
+          "Start with the motivation. The leading LLMs today contain upwards of a trillion parameters, pretrained on tens of trillions of tokens. A model like Gemini 3 is trained once on an enormous internet-scale corpus, which gives it a broad but shallow understanding across many domains. The trouble is that companies paying for these models usually don't want a generalist — they want a *specialist* that's excellent at their specific task.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So after pretraining comes **post-training**: small datasets meant to focus the model on a narrower domain of knowledge or a particular range of behavior. And now think about the mismatch. Doesn't it seem absurdly expensive to use a *terabit* of weights to absorb updates from just a *gigabit or megabit* of training data? It's a small, narrow lesson being written into an enormous network.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is exactly where **LoRA (Low-Rank Adaptation)** comes in. It's a method of **parameter-efficient fine-tuning (PEFT)** — adjust a large network by updating only a small set of parameters. LoRA is the leading and most popular PEFT method. It works by replacing each weight matrix $W$ from the original model with a modified version:",
+        ],
+      },
+      {
         equations: [
-          "\\min_G \\max_D V(D,G) = \\mathbb{E}_{x \\sim p_{\\text{data}}}\\big[\\log D(x)\\big] + \\mathbb{E}_{z \\sim p_z}\\big[\\log\\big(1 - D(G(z))\\big)\\big]",
+          "W' = W + \\gamma BA",
         ],
       },
       {
         paragraphs: [
-          "Early on, when G is bad, D rejects its fakes with total confidence and $\\log(1 - D(G(z)))$ flattens out, leaving G almost no gradient — the saturation problem. The standard fix is the non-saturating loss: train G to maximize $\\log D(G(z))$ instead, same goal (fool D) but with strong gradients exactly when G is struggling. The reason the game converges to reality is Goodfellow's 2014 proof. Hold G fixed and the optimal discriminator is $D^*(x) = \\frac{p_{\\text{data}}(x)}{p_{\\text{data}}(x) + p_g(x)}$ — the ideal detective's confidence at a point is just the fraction of stuff there that's genuinely real. Substitute $D^*$ back in and G's objective reduces to minimizing the Jensen–Shannon divergence between $p_g$ and $p_{\\text{data}}$, which bottoms out at exactly one place: $p_g = p_{\\text{data}}$, where $D^*(x) = \\tfrac{1}{2}$ everywhere — the coin flip. The perfectly played game recovers the true data distribution. In practice GANs are notoriously unstable (mode collapse, vanishing gradients from a too-strong discriminator), which is what Wasserstein GANs, spectral normalization, and gradient penalties exist to tame.",
+          "where $B$ and $A$ are matrices that together have far fewer parameters than $W$, and $\\gamma$ is a constant scaling factor. In effect, LoRA creates a low-dimensional representation of the *updates* that fine-tuning imparts.",
         ],
+      },
+      {
+        paragraphs: [
+          "Take a sec to let that internalize. We're not changing $W$ at all — we're learning a small, cheap *correction* to add on top of it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "According to the Thinking Machines blog, LoRA offers advantages in the cost and speed of post-training, plus a few operational reasons to prefer it over full fine-tuning (which we'll call FullFT):",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Multi-tenant serving", definition: "Since LoRA trains an adapter (the $A$ and $B$ matrices) while leaving the original weights untouched, a single inference server can keep many adapters — different specialized versions — in memory and sample from them all in a batched way. Modern engines like vLLM and SGLang implement this. (See *Punica: Multi-Tenant LoRA Serving*, Chen, Ye, et al., 2023.)" },
+          { term: "Smaller training footprint", definition: "When you fine-tune the whole model, you also have to store the optimizer state alongside the weights, often at higher precision (float32) than the bfloat16-or-lower used for inference. You need gradients and optimizer moments for *all* the weights. As a result, FullFT usually needs an order of magnitude more accelerators than just sampling from the same model does — a different hardware layout entirely. Because LoRA trains far fewer weights and uses far less memory, it can run on a layout only slightly bigger than what you'd use for sampling. That makes training more accessible and often more efficient." },
+          { term: "Easy loading and transfer", definition: "With far fewer weights to store, LoRA adapters are quick to set up or move between machines." },
+        ],
+      },
+      {
+        paragraphs: [
+          "These reasons explain LoRA's surging popularity since the original paper (*LoRA: Low-Rank Adaptation of Large Language Models*, Hu et al., 2021). Still, the literature was for a while unclear on how well LoRA performs *relative* to FullFT — which we'll get to.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**What \"rank\" actually means.** From linear algebra, the **rank** of a matrix is the dimension of the vector space spanned by its columns (or rows — they're always equal). It's the maximum number of linearly independent row or column vectors in the matrix. Think of it as a measure of the *unique information* in the matrix. Hold onto that, because it's the whole key.",
+        ],
+      },
+      {
+        paragraphs: [
+          "In the original paper, the authors realized that the *change* matrix produced by fine-tuning has a **low intrinsic rank**. Meaning: even though that change matrix may be huge, the unique information stored in it actually lives in a tiny subspace. So the matrix can be closely approximated from a representation space much smaller than the matrix itself. In essence, the fine-tuning update can be stored with a small amount of data.",
+        ],
+      },
+      {
+        paragraphs: [
+          "LoRA exploits this with a **decomposition trick**. It operates on a delta weight matrix produced by two skinny matrices $A$ and $B$. Say you had a weight matrix of shape (2048, 2048) — that's 4,194,304 parameters. After fine-tuning, the original matrix stays frozen. LoRA approximates the *change* as the product of two much skinnier matrices: a column-shaped $B$ of shape (2048, $r$) and a row-shaped $A$ of shape ($r$, 2048). The number $r$ — the **rank** of the decomposition — decides how much of the original matrix's structure the approximation can retain. It's always small: 8, 16, 32, or 64. When you multiply $A$ and $B$, the result is back to the full (2048, 2048) shape, but it was *reconstructed* from $2 \\times r \\times 2048$ numbers instead of $2048^2$. For $r = 16$, that's $2 \\times 16 \\times 2048$ parameters — a tiny fraction.",
+        ],
+      },
+      {
+        diagram: { id: "tf-lora-low-rank-decomposition-of-the-update", caption: "Fig 5.32 — Freeze W, learn a tiny low-rank correction B*A. The update's real information fits in a small subspace." },
+      },
+      {
+        paragraphs: [
+          "As for those billions of base-model parameters, they stay **frozen**, in the same form as after pretraining. During LoRA fine-tuning, it's the two small matrices that get learned. At inference, the model uses $W + BA$ rather than $W$ alone. This combination is called an **adapter**: the base model's behavior is preserved and improved by the adapter. Different adapters, trained for different tasks, produce different $(B, A)$ pairs — all attaching to the same frozen base. One fixed model, many small additions.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The obvious question: how do you choose the rank? A smaller rank means a smaller adapter and faster inference, but less capacity to capture what fine-tuning is trying to teach. A larger rank means higher cost and slower inference. Picking $r$ is a quality-vs-cost tradeoff, and the right value depends on the task.",
+        ],
+      },
+      {
+        paragraphs: [
+          "There's also the hyperparameter $\\alpha$ (alpha), which scales how strongly the adapter modifies the base. The computation is really $W + (\\alpha / r) \\cdot BA$, with $\\alpha$ conventionally set to twice the rank. Its purpose is to give a stable way to control the adapter's influence *independently* of $r$, since the raw magnitude of $BA$ would otherwise swing a lot as you change the rank.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Connecting back to attention: LoRA is classically applied to the **query and value projections**, the matrices we called $q\\_proj$ and $v\\_proj$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A concrete sizing example. Llama-3.1-8B has 32 layers, so an adapter targeting $q\\_proj$ and $v\\_proj$ contains 64 individual $(B, A)$ pairs in total — one pair per targeted matrix per layer. Each pair contributes on the order of 100,000 parameters at rank 16, so the full adapter is a few million parameters and occupies about **13 MB on disk in fp16**. Compared against the ~16 GB needed to store a fully fine-tuned copy of the same base model, that's a ratio of roughly **1,200 to 1**.",
+        ],
+      },
+      {
+        paragraphs: [
+          "One implementation wrinkle worth knowing: modern Llama models use **Grouped-Query Attention (GQA)**, under which the value matrix is smaller than the query matrix. As a result, the $B$ matrix on $v\\_proj$ has shape (1024, 16) rather than (4096, 16) — which is why the adapter lands at 13 MB rather than the rounder 32 MB that naive shape arithmetic would predict. (Nice to see GQA show up again, isn't it? The pieces interlock.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "A final property to emphasize: an adapter is **permanently bound to a specific base model**. A LoRA trained on Llama-3.1-8B will only work with Llama-3.1-8B, because the shapes of $B$ and $A$ are determined by that base model's weight dimensions. A Llama adapter can't be applied to Qwen, or even to a different size of Llama. That constraint is exactly what makes multi-tenant serving coherent — every adapter on the server attaches to the same known base.",
+        ],
+      },
+      {
+        paragraphs: [
+          "(And **QLoRA** combines LoRA with quantization — fine-tuning a 4-bit-quantized base with LoRA adapters on top — for even cheaper fine-tuning on consumer hardware.)",
+        ],
+      },
+      {
+        quiz: {
+          question: "LoRA freezes $W$ and learns $W' = W + (\\alpha/r)BA$ with $r$ small. What linear-algebra insight makes this work, and what does $\\alpha$ do?",
+          answer: "The insight is that the *update* produced by fine-tuning has low intrinsic rank — its unique information lives in a tiny subspace, so it can be well-approximated by the product of two skinny matrices $B$ (d×r) and $A$ (r×d) with $r$ much smaller than the matrix dimension. You reconstruct a full-size update from only $2 \\times r \\times d$ trainable numbers. $\\alpha$ scales the adapter's influence: using $(\\alpha/r)$ keeps the effective update magnitude stable as you change $r$, so the optimal learning rate doesn't shift much with rank.",
+        },
+      },
+      {
+        heading: "Findings from Thinking Machines: \"LoRA Without Regret\"",
+        paragraphs: [
+          "For a while the open question was whether LoRA could actually *match* full fine-tuning. The Thinking Machines work, \"LoRA Without Regret,\" answers it with refreshing specificity. The whole article condenses into two requirements for matching FullFT.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Condition 1 — apply LoRA to all layers, especially the MLP/MoE layers that hold most of the parameters.** Attention-only LoRA underperforms even when you match the number of trainable parameters by cranking up the rank. Concretely, on Llama-3.1-8B, attention-only at rank 256 (0.25B params) underperforms MLP-only at rank 128 (0.24B params) despite roughly equal parameter counts — so the gap isn't a parameter-count issue, it's *where* you apply the adapter. They also found that applying LoRA to the attention matrices shows no extra benefit beyond applying it to the MLPs alone. (This is a nice twist on the original paper's advice to target $q\\_proj$/$v\\_proj$ — at scale, the FFN/MLP is where the action is, which lines up with the fact that the FFN holds most of the parameters.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Condition 2 — stay out of the capacity-constrained regime.** Keep the number of trainable parameters above the information content of the dataset. When a dataset exceeds LoRA's capacity, LoRA doesn't slam into a hard loss floor; instead it shows worse training *efficiency*, depending on the ratio of model capacity to dataset size. Lower-rank adapters \"fall off\" the optimal loss curve once they run out of capacity.",
+        ],
+      },
+      {
+        paragraphs: [
+          "On the practical settings, several findings are worth stating flat out:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "The optimal learning rate for LoRA is consistently about 10× higher than for FullFT", definition: ", across both supervised learning and RL. This 10× ratio showed up in every U-shaped plot of performance against learning rate, and their multi-model fit landed on a multiplier of 9.8. That makes transferring a known FullFT learning rate to LoRA almost mechanical. For very short runs (under ~100 steps), preliminary evidence suggests a higher multiplier around 15×, converging to 10× for longer runs." },
+          { term: "The optimal learning rate is approximately independent of rank", definition: ", thanks to the $1/r$ scaling in the $W' = W + (\\alpha/r)BA$ parametrization. The optimal LR changes by less than a factor of 2 between rank 4 and rank 512, though rank 1 wants a somewhat lower LR. Early in training, the learning curves for different ranks are nearly identical." },
+          { term: "One caution", definition: "LoRA is in some settings less tolerant of large batch sizes than FullFT, with the loss penalty growing as batch size increases — and raising the rank does *not* fix it. They attribute this to the optimization dynamics of the $BA$ product parametrization rather than to a capacity limit." },
+        ],
+      },
+      {
+        list: [
+          "For their settings they used $\\alpha = 32$ and the standard Hugging Face PEFT initialization — a uniform distribution for $A$ scaled by $1/\\sqrt{d_{in}}$, zero initialization for $B$, the same learning rate for both matrices — and reported they couldn't improve on these. A useful simplification: although LoRA nominally has four hyperparameters ($\\alpha$, $LR_A$, $LR_B$, $\\text{init}_A$), invariances in the training dynamics mean only **two degrees of freedom** actually matter.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**The standout RL result.** The most striking finding for reinforcement learning: **LoRA fully matches FullFT for policy-gradient RL even at ranks as low as 1.** The reasoning is information-theoretic. Policy-gradient methods learn from the advantage function, which provides only $O(1)$ bits per episode — roughly 1000× less information per token than supervised learning. In their MATH example, training on ~10,000 problems with 32 samples each needs to absorb about 320,000 bits, while a rank-1 LoRA on Llama-3.1-8B already has 3M parameters — nearly 10× that capacity. They also observed that LoRA has a wider band of well-performing learning rates in RL. The lesson: when the learning signal is *thin* (as in RL), you barely need any adapter capacity at all.",
+        ],
+      },
+      {
+        diagram: { id: "tf-lora-without-regret-when-lora-matches-full-fine-tuning", caption: "Fig 5.33 — LoRA matches full fine-tuning if you cover all layers and keep enough capacity — and for RL, rank 1 is plenty." },
+      },
+      {
+        quiz: {
+          question: "Why does rank-1 LoRA suffice to match full fine-tuning for policy-gradient RL, but not always for supervised learning?",
+          answer: "It's about how much information the training signal carries. Policy-gradient RL learns from the advantage function, which delivers only about $O(1)$ bits per episode — roughly 1000× less information per token than supervised learning. So there's very little to \"store,\" and even a rank-1 adapter (a few million parameters, e.g. 3M on Llama-3.1-8B versus the ~320,000 bits needed in their MATH example) has ample capacity. Supervised fine-tuning pushes far more information into the weights, so it can exceed a tiny adapter's capacity and require higher rank.",
+        },
+      },
+      {
+        heading: "Scaling laws",
+        paragraphs: [
+          "Empirical research (Kaplan et al., and then Chinchilla) found that LLM performance follows predictable *power laws* in model size, dataset size, and compute. The **Chinchilla** scaling law is especially influential: for a given compute budget, the optimal model size and dataset size grow *together* at specific rates. Earlier models like GPT-3 were \"undertrained\" by Chinchilla standards — for their parameter count, they should have been trained on more data. Modern models (LLaMA, Mistral, and others) take this seriously, training smaller models on far more tokens. The practical upshot is that \"make it bigger\" isn't the whole story — you have to scale data alongside parameters to spend compute optimally.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What did the Chinchilla scaling law reveal about models like GPT-3?",
+          answer: "That they were *undertrained* for their size. Chinchilla showed that, for a fixed compute budget, model size and training-data size should grow together at specific rates — and GPT-3 had too many parameters relative to the number of tokens it saw. The takeaway reshaped modern training: prefer smaller models trained on far more data, rather than just inflating parameter counts.",
+        },
+      },
+      {
+        heading: "Constitutional AI and RLAIF",
+        paragraphs: [
+          "Human feedback (the \"HF\" in RLHF) is expensive and slow. **Constitutional AI** offers an alternative: instead of relying on humans to rate every output, you have the AI critique its *own* outputs against a written set of principles — a \"constitution.\" The model rewrites its responses to be more aligned, then trains on those rewrites. This is how Claude was trained, and the broader family of approaches — **RLAIF (RL from AI Feedback)** — is now common in modern alignment work. The idea scales feedback the way pretraining scaled supervision: let the model generate the signal it learns from, guided by principles rather than per-example human labels.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What does Constitutional AI replace in the standard RLHF recipe, and how?",
+          answer: "It replaces (much of) the expensive human feedback. Instead of humans rating outputs to train a reward model, the model critiques and revises its own responses against a written set of principles (a \"constitution\"), then trains on those self-revisions. This is the basis of RLAIF — RL from AI Feedback — and it's how Claude was trained.",
+        },
+      },
+      {
+        heading: "Multimodal models",
+        paragraphs: [
+          "Modern frontier models are no longer text-only. Vision is the most common extension: an image encoder (often a Vision Transformer) produces image tokens that get interleaved with text tokens in the same transformer. The model treats images as just another modality of input. Audio, video, and even more exotic modalities (proteins, code-execution traces) work the same way.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The unifying insight is genuinely deep: **anything you can tokenize and embed, a transformer can attend to.** The architecture is modality-agnostic — the same attention-over-a-sequence machinery you've now fully understood doesn't care whether the tokens came from words, image patches, or audio frames. That's why the vision side of these models is, as we noted earlier, an encoder feeding into the decoder LLM.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What makes the transformer architecture able to handle images, audio, and text with essentially the same machinery?",
+          answer: "The architecture only ever operates on a sequence of embedded tokens and attention between them — it doesn't care where those tokens came from. As long as you can tokenize and embed a modality (image patches via a Vision Transformer, audio frames, etc.) into vectors, the same self-attention machinery can mix them, even interleaved with text tokens. The transformer is modality-agnostic.",
+        },
+      },
+      {
+        heading: "Inference engines",
+        paragraphs: [
+          "Production LLM serving doesn't use raw PyTorch — it uses specialized inference engines. The big ones:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "vLLM", definition: "— PagedAttention, high throughput, dynamic batching." },
+          { term: "TensorRT-LLM", definition: "— NVIDIA's heavily optimized engine." },
+          { term: "SGLang", definition: "— flexible structured generation with constraint enforcement." },
+          { term: "llama.cpp", definition: "— runs quantized models on CPUs and consumer GPUs." },
+        ],
+      },
+      {
+        paragraphs: [
+          "These typically hit 5–10× the throughput of naive PyTorch inference, through continuous batching, paged KV cache, fused kernels, and quantization — which is to say, through exactly the optimizations we've been walking through this whole section, packaged up and engineered hard.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Production inference engines like vLLM get ~5–10× the throughput of naive PyTorch. Name two of the techniques (covered earlier) that get them there.",
+          answer: "Any two of: paged KV cache (PagedAttention — managing the cache like virtual memory so concurrent requests share GPU memory), continuous/dynamic batching, fused kernels (e.g. Flash Attention), and quantization. They're not new algorithms — they're the inference optimizations from this section, implemented carefully and combined.",
+        },
+      },
+      {
+        heading: "Generative Models (Beyond the Transformer)",
+        paragraphs: [
+          "The transformer isn't the only way to generate data — and the other major families are worth understanding, because they each take a fundamentally different angle on the same goal: *learn the structure of data well enough to produce new examples.* We'll cover three: GANs, autoencoders, and VAEs. They build on each other in a clean progression, much like the history section did.",
+        ],
+      },
+      {
+        heading: "Generative Adversarial Networks (GANs)",
+        paragraphs: [
+          "The cleanest way to understand a GAN is with an analogy. Imagine a counterfeiter trying to print fake banknotes and a detective trying to catch them. At first the counterfeiter is terrible and the detective spots every fake. But each time the detective rejects a note, the counterfeiter learns a little about what gave it away and improves. And each time the counterfeiter improves, the detective has to get sharper too. They improve *together*. If this arms race runs long enough, the counterfeiter's fakes become so good that the detective can do no better than flip a coin — at which point the fakes are, by definition, indistinguishable from real money.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's exactly what a GAN does: two neural networks locked in competition.",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. A **Generator** turns random noise into fake data, trying to fool its opponent.",
+          "2. A **Discriminator** looks at a sample and judges real or fake, trying not to be fooled.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The generator never sees a real image — it learns *entirely* from the discriminator's reactions. (And note: because it's not minimizing a reconstruction error against a target, there's none of the averaging-toward-blur that reconstruction losses tend to cause.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's make the two networks precise. The **generator $G$** is a function from noise to data: feed it a random vector $z$ (usually drawn from a simple Gaussian) and it outputs something the same shape as a real sample — an image, say. Different noise vectors give different outputs, so once trained, $G$ *is* your sampler: pick fresh noise, get a fresh image. The **discriminator $D$** is just a binary classifier. It takes a sample and outputs a single number between 0 and 1: the probability that the sample is real. The detail that makes it all work is the feedback path — the generator only ever improves by chasing the discriminator's verdict. It has no other teacher.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Training alternates between two phases, and keeping them straight is the key to understanding GANs. In each phase you *freeze one network and train the other*. Why freeze one at a time? Because they have opposite goals — if you moved both at once they'd fight over the same gradient and nothing would stabilize. Alternating lets each adapt to the other's current skill level. And notice the target: success isn't \"$D$ wins\" or \"$G$ wins,\" it's a *stalemate* where $D$ is reduced to a coin flip.",
+        ],
+      },
+      {
+        diagram: { id: "tf-gan-generator-vs-discriminator", caption: "Fig 5.34 — Two networks in an arms race; the goal is a stalemate where the detective can only guess." },
+      },
+      {
+        heading: "The mechanics of how GANs work",
+        paragraphs: [
+          "Everything above is captured by one equation — the **value function** that $D$ wants to push *up* and $G$ wants to push *down*:",
+        ],
+      },
+      {
+        equations: [
+          "\\min_{G}\\ \\max_{D}\\ V(D, G) = \\mathbb{E}_{x \\sim p_{\\text{data}}}\\big[\\log D(x)\\big] + \\mathbb{E}_{z \\sim p_z}\\big[\\log(1 - D(G(z)))\\big]",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's break down every symbol:",
+        ],
+      },
+      {
+        list: [
+          "$x \\sim p_{\\text{data}}$ — a real sample $x$ drawn from the true data distribution $p_{\\text{data}}$.",
+          "$z \\sim p_z$ — a random noise vector $z$ drawn from a simple prior $p_z$ (typically a Gaussian).",
+          "$G(z)$ — a fake sample, produced by running noise through the generator.",
+          "$D(\\cdot)$ — the discriminator's estimated probability that its input is real (between 0 and 1).",
+          "$\\mathbb{E}[\\cdot]$ — the expected value (the average over many samples).",
+          "$\\min_G \\max_D$ — out front, this just says \"$D$ tries to maximize $V$; $G$ tries to minimize it.\"",
+        ],
+      },
+      {
+        paragraphs: [
+          "The **first term**, $\\log D(x)$, is over *real* samples. $D$ wants $D(x)$ close to 1 here (it's real, so call it real), which makes $\\log D(x)$ close to 0 instead of very negative. So $D$ maximizes this term by correctly trusting real data.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The **second term**, $\\log(1 - D(G(z)))$, is over *fakes*. $D$ wants $D(G(z))$ close to 0 (it's fake, so call it fake), which again pushes the term up. But $G$ touches *only* this term, and $G$ wants the opposite: $D(G(z))$ close to 1 — fakes that pass as real. That single shared term, pulled in two directions, *is* the adversarial game.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Why does this converge to reality?** Goodfellow's 2014 paper proves the satisfying part. If you hold $G$ fixed and find the best possible discriminator, it turns out to be:",
+        ],
+      },
+      {
+        equations: [
+          "D^*(x) = \\frac{p_{\\text{data}}(x)}{p_{\\text{data}}(x) + p_g(x)}",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $p_g$ is the distribution of the generator's outputs. This is intuitive: the ideal detective's confidence at a point is just the fraction of stuff there that's genuinely real. Now substitute $D^*$ back into the value function, and the generator's objective simplifies to minimizing the **Jensen–Shannon divergence** between $p_g$ and $p_{\\text{data}}$ — a measure of how different two distributions are. That divergence hits its minimum at exactly one place:",
+        ],
+      },
+      {
+        equations: [
+          "p_g = p_{\\text{data}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The generator's distribution has *become* the real data distribution. And right there, $D^*(x) = \\tfrac{1}{2}$ everywhere — the coin flip. The math says that perfectly played, this game recovers the true data distribution.",
+        ],
+      },
+      {
+        diagram: { id: "tf-why-gan-training-converges", caption: "Fig 5.35 — The optimal discriminator becomes a coin flip exactly when the fakes match reality." },
+      },
+      {
+        heading: "Where GANs get hard",
+        paragraphs: [
+          "The clean theory assumes perfect play and infinite capacity. Reality is messier, and three issues are worth knowing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Vanishing gradient / saturation.** This shows up early in training. When $G$ is bad, $D$ rejects its fakes with total confidence, which means the term $\\log(1 - D(G(z)))$ flattens out and gives $G$ almost no gradient to learn from — the forger gets no useful feedback exactly when it needs it most. The standard fix is to train $G$ to *maximize* $\\log D(G(z))$ instead (the \"non-saturating\" loss). Same goal — fool $D$ — but with strong gradients when $G$ is struggling. (Notice this is our recurring vanishing-gradient villain again, in yet another costume.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Mode collapse** is the most famous GAN failure. $G$ discovers that one particular output reliably fools the current $D$, so it just keeps producing that one thing (or a few). It's \"winning\" the game while ignoring most of the data's variety — imagine a counterfeiter who only ever makes flawless \\$20 bills and never learns the other denominations. The samples look real but lack diversity.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Instability** comes from the fact that you're not minimizing a fixed loss — you're chasing a moving equilibrium between two networks. If $D$ gets too strong too fast, $G$'s gradients die; if $G$ overshoots, $D$ scrambles to catch up. Training can oscillate instead of settling. A lot of GAN research — Wasserstein GAN, spectral normalization, gradient penalties, careful learning-rate balancing — exists precisely to tame this.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What is \"mode collapse,\" and why does the standard GAN objective get swapped for the \"non-saturating\" loss?",
+          answer: "Mode collapse is when the generator finds one (or a few) outputs that reliably fool the current discriminator and just keeps producing those, ignoring the variety in the real data — realistic but not diverse. The non-saturating loss fix is a separate issue: with the original $\\log(1 - D(G(z)))$ term, when $G$ is bad and $D$ rejects everything confidently, that term flattens and gives $G$ almost no gradient (saturation). Training $G$ to *maximize* $\\log D(G(z))$ instead gives strong gradients precisely when $G$ is struggling, so it can actually learn early on.",
+        },
       },
       {
         heading: "Autoencoders",
         paragraphs: [
-          "Before VAEs, the plain autoencoder. It's a network trained to copy its input to its output through a bottleneck: an encoder $f$ compresses input $x$ into a latent code $z = f(x)$ much smaller than $x$, and a decoder $g$ reconstructs $\\hat{x} = g(z)$. The bottleneck is the whole point — if $z$ were as big as $x$ the network could copy numbers through and learn nothing, so forcing $z$ small makes it keep only the essential structure. Training just minimizes the reconstruction error, with no label at all — the input is its own target, which is why this is called self-supervised learning:",
+          "The goal of an autoencoder is all about *representation* — representation learning. It tries to find a way to squeeze data, like a 784-pixel image, down into a small set of numbers $z$ that capture what matters. That small set lives in a compact space called the **latent space**.",
         ],
+      },
+      {
+        paragraphs: [
+          "At a high level, an autoencoder is a neural network trained to copy its input to its output, through two halves:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Encoder $f$** — compresses input $x$ into a latent code $z = f(x)$, where $z$ is much smaller than $x$.",
+          "2. **Decoder $g$** — reconstructs the input from the code, $\\hat{x} = g(z)$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The *squeeze in the middle is the whole point.* If $z$ had the same size as $x$, the network could just copy numbers straight through and learn nothing. By forcing $z$ to be small, we make it keep only the *essential structure* of the data.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Training simply minimizes how different the reconstruction is from the original. For continuous data we use squared error:",
+        ],
+      },
+      {
         equations: [
-          "\\mathcal{L}(\\theta, \\phi) = \\frac{1}{N} \\sum_{i=1}^{N} \\big\\lVert\\, x_i - g_\\theta\\big(f_\\phi(x_i)\\big) \\big\\rVert^2",
+          "\\mathcal{L}(\\theta, \\phi) = \\frac{1}{N}\\sum_{i=1}^{N} \\big\\lVert\\, x_i - g_\\theta\\!\\big(f_\\phi(x_i)\\big) \\big\\rVert^2",
         ],
       },
       {
         paragraphs: [
-          "Autoencoders are good for dimensionality reduction (a nonlinear cousin of PCA), denoising (feed in corrupted $x$, train it to output clean $x$), and anomaly detection (things it can't reconstruct well are unusual). But here's the catch that motivates everything next: a plain autoencoder learns a code $z$ yet learns nothing about how $z$ is distributed. The latent space is full of holes — pick a random $z$ and decode it and you usually get garbage, because the decoder only ever saw the specific scattered points the encoder happened to produce. So a vanilla autoencoder cannot generate new data reliably. Fixing exactly this is the job of the VAE.",
-          "A VAE keeps the encoder–decoder shape but reframes it probabilistically: instead of mapping $x$ to a single point, the encoder maps $x$ to a distribution over $z$ — a Gaussian with a mean $\\mu$ and a spread $\\sigma$ — and you sample $z = \\mu + \\sigma\\,\\varepsilon$ and decode it. Training balances two pulls: a reconstruction term that wants each image precisely pinned so it rebuilds perfectly (which would recreate the scattered-dots problem), and a KL term that punishes each cloud for drifting off-center or shrinking to a sharp point, constantly nudging everything back toward a standard cloud at the center of the map. The compromise — clouds distinct enough to rebuild their own images but overlapping and centered enough to leave no gaps — fills the latent space in smoothly, so you can throw away the encoder and generate by decoding random points from the center. The one cost of all that softness is slightly blurry samples, which is the main reason sharper methods like GANs and diffusion exist.",
+          "The symbols:",
+        ],
+      },
+      {
+        list: [
+          "$x_i$ — the $i$-th training example.",
+          "$\\phi$ (phi) — the encoder's weights.",
+          "$\\theta$ (theta) — the decoder's weights.",
+          "$f_\\phi(x_i)$ — the encoder applied to $x_i$, producing the latent code $z$.",
+          "$g_\\theta(\\cdot)$ — the decoder applied to that code, producing the reconstruction $\\hat{x}$.",
+          "$\\lVert \\cdot \\rVert^2$ — the squared distance between the original and its reconstruction.",
+          "$\\frac{1}{N}\\sum$ — average this over all $N$ examples.",
         ],
       },
       {
         paragraphs: [
-          "And that's the takeaway worth leaving with. Every modern variant — RoPE, GQA, Flash Attention, MoE, million-token context — is an optimization of one specific piece of the 2017 design, not a replacement for it. Once the original architecture is solid in your head, every new paper starts to read the same way: \"here is the one part we improved.\"",
+          "We backpropagate this loss through both halves at once. That's it — there's no label, just the input acting as its own target, which is why this is called **self-supervised learning**.",
+        ],
+      },
+      {
+        diagram: { id: "tf-autoencoder", caption: "Fig 5.36 — Squeeze the input through a small code and rebuild it — the squeeze forces it to keep only what matters." },
+      },
+      {
+        paragraphs: [
+          "What's it good for? **Dimensionality reduction** (a nonlinear cousin of PCA), **denoising** (feed in a corrupted $x$, train it to output the clean $x$), and **anomaly detection** (things it can't reconstruct well are unusual).",
+        ],
+      },
+      {
+        paragraphs: [
+          "But here's the catch that motivates everything next. A plain autoencoder learns a code $z$, but it learns *nothing about how $z$ is distributed*. The latent space is full of holes. If you pick a random $z$ and decode it, you usually get garbage — because the decoder only ever saw the specific scattered points the encoder happened to produce. So a vanilla autoencoder **cannot generate** new data reliably. Fixing exactly that is the job of the VAE.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why can't a plain autoencoder reliably *generate* new data, even though it reconstructs its training data well?",
+          answer: "Because it only learns to map specific inputs to specific latent points and back — it learns nothing about how the latent codes are *distributed*. The latent space ends up as scattered points with large empty gaps between them. If you pick a random point (especially in a gap) and decode it, the decoder has never seen anything like it and produces garbage. Reconstruction works on points the encoder actually produced; generation requires the whole space to be meaningful, which a plain autoencoder doesn't guarantee.",
+        },
+      },
+      {
+        heading: "The Variational Autoencoder (VAE)",
+        paragraphs: [
+          "The VAE keeps the encoder–decoder shape but reframes everything *probabilistically*, so the latent space becomes smooth and samplable — which is exactly what plain autoencoders lacked.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The key change: instead of mapping $x$ to a single point $z$, the encoder maps $x$ to a *distribution* over $z$ — specifically a Gaussian with a mean $\\mu$ and a spread $\\sigma$. We then *sample* $z$ from that little cloud and decode it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the intuition, and it's worth picturing carefully. A plain autoencoder learns to squash each image down to a short code (a single point), then rebuild it. The trouble is what the *space of codes* looks like. Picture every training image getting assigned a dot on a map. The autoencoder only ever learns about the exact dots it placed — and there are huge empty gaps between them. If you stand in a gap and ask the decoder \"what's here?\", it has no idea, and you get garbage. That's why a plain autoencoder can't generate: there's nowhere safe to stand.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A VAE fixes this with one move: instead of placing each image at a single dot, it places each image as a little **fuzzy cloud**, and it forces all the clouds to crowd together into one tidy region with no gaps. Now every point on the map sits inside *some* cloud, so every point decodes to something sensible.",
+        ],
+      },
+      {
+        diagram: { id: "tf-why-a-vae-can-generate-dots-vs-clouds", caption: "Fig 5.37 — Dots leave gaps you can't generate from; overlapping clouds fill the space smoothly." },
+      },
+      {
+        heading: "How the VAE works",
+        paragraphs: [
+          "Now the only math you really need. The encoder, instead of outputting a code directly, outputs *two* things that describe a cloud:",
+        ],
+      },
+      {
+        list: [
+          "$\\mu$ (mu) — the **center** of the cloud, i.e. where this image roughly lives on the map.",
+          "$\\sigma$ (sigma) — the **width** of the cloud, i.e. how fuzzy or spread out it is.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Then the \"sample\" step picks one random point from that cloud. In symbols:",
+        ],
+      },
+      {
+        equations: [
+          "z \\sim \\mathcal{N}(\\mu,\\ \\sigma^2)",
+        ],
+      },
+      {
+        paragraphs: [
+          "which reads \"draw $z$ randomly from a bell-shaped (Gaussian) cloud centered at $\\mu$ with variance $\\sigma^2$.\" That's the entire mathematical content of the forward pass. (There's one small technical trick to make this trainable — the **reparameterization trick** — where you write the random point as $z = \\mu + \\sigma \\cdot \\varepsilon$, with $\\varepsilon$ being the random part drawn from a standard Gaussian. This pushes the randomness \"off to the side\" so gradients can still flow through $\\mu$ and $\\sigma$ during backpropagation.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Training balances **two pulls**, and the whole VAE is really just the tug-of-war between them.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Pull #1 — \"rebuild it correctly.\"** This is the same reconstruction goal as a plain autoencoder: the output $\\hat{x}$ should match the input $x$. On its own, this pull wants each image to get a very precise, tightly pinned location so it can be rebuilt perfectly — which would recreate the scattered-dots problem all over again.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Pull #2 — \"stay near the center and stay fuzzy.\"** This is a penalty whose formal name is the **KL term** (Kullback–Leibler divergence). It measures how far each cloud has drifted from a standard reference cloud sitting at the center of the map — a unit Gaussian, $\\mathcal{N}(0, 1)$. For a Gaussian encoder output, this term has a clean closed form:",
+        ],
+      },
+      {
+        equations: [
+          "D_{\\text{KL}}\\big(\\mathcal{N}(\\mu, \\sigma^2)\\ \\|\\ \\mathcal{N}(0, 1)\\big) = \\frac{1}{2}\\sum_{j=1}^{d}\\Big(\\mu_j^2 + \\sigma_j^2 - \\log \\sigma_j^2 - 1\\Big)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's read every piece, since this is the term that does the magic:",
+        ],
+      },
+      {
+        list: [
+          "$\\mu_j$ — the center of the cloud along latent dimension $j$. The $\\mu_j^2$ term *punishes the cloud for wandering away from the origin* — the farther off-center, the bigger the penalty. This is what crowds all the clouds toward the middle.",
+          "$\\sigma_j^2$ — the variance (width) of the cloud along dimension $j$. The $\\sigma_j^2 - \\log \\sigma_j^2$ combination is minimized when $\\sigma_j^2 = 1$: if the cloud shrinks toward a sharp point ($\\sigma_j^2 \\to 0$), the $-\\log \\sigma_j^2$ term blows up and punishes it; if it spreads too wide, the $+\\sigma_j^2$ term punishes it. So this *keeps every cloud puffy* — neither a sharp dot nor a smeared mess.",
+          "The $-1$ is just a constant that makes the whole expression equal exactly 0 when the cloud is a perfect match to the reference ($\\mu_j = 0$, $\\sigma_j^2 = 1$).",
+          "$\\sum_{j=1}^{d}$ — sum this over all $d$ latent dimensions; $\\frac{1}{2}$ is a scaling factor that falls out of the math.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So Pull #2, in one breath: it constantly nudges every cloud back toward the center of the map *and* keeps it from collapsing to a sharp point.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Put the two pulls together. Pull #1 wants distinct, precise locations; Pull #2 wants everything soft and piled at the center. The compromise they settle on is exactly the right picture — clouds different enough to rebuild their own images, but overlapping and centered enough to leave no gaps. The map fills in smoothly. That balancing act is the VAE's whole secret.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Once training is done, the encoder has served its purpose. To generate something brand new, you skip it entirely: pick a random point from the center of the map (sample from $\\mathcal{N}(0,1)$) and hand it to the decoder.",
+        ],
+      },
+      {
+        diagram: { id: "tf-vae-generation-and-the-two-pulls", caption: "Fig 5.38 — Encode to a cloud, balance reconstruction against the KL pull, then generate by decoding random center points." },
+      },
+      {
+        paragraphs: [
+          "The one cost of all this softness: VAE images tend to come out slightly **blurry**. Because each image is represented as a spread-out cloud rather than a precise point, the decoder is effectively averaging over a little neighborhood, which smooths out fine detail. That blurriness is the main reason sharper methods like GANs and diffusion exist.",
+        ],
+      },
+      {
+        quiz: {
+          question: "In the VAE's KL term, the $\\mu_j^2$ and the $\\sigma_j^2 - \\log\\sigma_j^2$ pieces each do a specific job. What are they, and why does this make generation possible?",
+          answer: "$\\mu_j^2$ penalizes a cloud for drifting away from the origin, so it pulls every cloud toward the center of the latent map. $\\sigma_j^2 - \\log\\sigma_j^2$ is minimized at $\\sigma_j^2 = 1$: it punishes clouds that collapse to a sharp point (via $-\\log\\sigma_j^2$ blowing up) and clouds that spread too wide (via $+\\sigma_j^2$), keeping each one appropriately \"puffy.\" Together they crowd overlapping, fuzzy clouds into one gap-free region, so any random point sampled from the center lands inside some cloud and decodes to something sensible — which is exactly what lets a VAE generate, where a plain autoencoder couldn't.",
+        },
+      },
+      {
+        heading: "Wrapping Up: The Whole Picture",
+        paragraphs: [
+          "Let's zoom all the way back out, because you've now traveled a long road and it's worth seeing it as one connected line.",
+        ],
+      },
+      {
+        paragraphs: [
+          "We started with the **feedforward network** — powerful for fixed inputs, helpless with sequences. To get memory and handle order, we added recurrence and got the **RNN** — which gave us memory but choked on the vanishing-gradient problem and couldn't reach far back. To protect the gradient, we built the **LSTM and GRU** with their gated memory highway — better, but still sequential (so slow) and still limited in range, and in translation setups still forced to cram everything through one fixed-size vector. To relieve that cram, we bolted **attention** onto Seq2Seq — and discovered that letting the decoder look anywhere it wanted was the real breakthrough. Then someone asked the obvious question: if attention is the good part, why keep the slow recurrence at all? And the **transformer** was born.",
+        ],
+      },
+      {
+        paragraphs: [
+          "From there we cracked the transformer open: tokenization and embeddings to get text into vectors; **self-attention** (Q, K, V, scaled dot product, softmax) as the core; **multi-head** attention to capture many relationships at once; **masked** attention to keep generation honest; **cross-attention** to connect decoder to encoder; the **FFN** to process what attention gathered; **layer norm** and **residual connections** to keep deep stacks trainable; and **positional encoding** to put order back in. Stack those layers, add a linear-plus-softmax head, and you can read or write any sequence.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Then we watched the architecture evolve without ever being replaced: **decoder-only** models that turned next-token prediction into a universal interface; **encoder-only** models (BERT) that specialized into representations, search, and RAG; better positional schemes (**RoPE**, **ALiBi**); cheaper normalization (**RMSNorm**); better activations (**SwiGLU**); cheaper attention (**sliding window**, **sparse**, **Flash Attention**); cheaper memory (**KV cache**, **GQA/MQA**, **quantization**); more capacity for less compute (**MoE**); faster generation (**speculative decoding**); grounding and capability (**RAG and tools**); and the training pipeline that turns raw next-token prediction into a helpful assistant (**pretraining → SFT → RLHF**, plus **LoRA** for cheap specialization and **Constitutional AI** for scalable alignment). Notice how often the *same villain* (vanishing gradients) and the *same hero* (attention, and the idea of adding cheap corrections instead of rebuilding from scratch) kept reappearing. That's not a coincidence — it's the connective tissue of the whole field.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Finally we stepped outside the transformer to the other generative families — **GANs** (an adversarial game that recovers the data distribution), **autoencoders** (squeeze and rebuild, great for representation, useless for generation), and **VAEs** (clouds instead of dots, so the latent space fills in and you *can* generate). Each one is, again, a specific fix for a specific limitation of the thing before it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's a compact comparison of the three generative families, since it's the kind of thing worth having on one screen:",
+        ],
+      },
+      {
+        diagram: { id: "tf-generative-model-tradeoffs-autoencoder-vs-vae-vs-gan", caption: "Fig 5.39 — Each family trades something: autoencoders give representation, VAEs give smooth generation, GANs give sharpness." },
+      },
+      {
+        paragraphs: [
+          "And that's the arc — from a network that couldn't even tell \"dog bites man\" from \"man bites dog,\" all the way to models that write code, hold conversations, see images, and generate worlds. Every step was someone looking at the previous model's weakest point and asking, \"what if we fixed just that?\" Now you can read any of those papers and know exactly which point they're fixing.",
         ],
       },
     ],
