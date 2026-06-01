@@ -29,6 +29,16 @@ import { ChainRuleWalk } from "./interactive/chain-rule-walk";
 import { NaiveVsBackprop } from "./interactive/NaiveVsBackprop";
 import { FourEquationsWalk } from "./interactive/four-equations-walk";
 import { OuterProduct } from "./interactive/OuterProduct";
+import { LinregFit } from "./interactive/linreg-fit";
+import { LogisticExplainer } from "./interactive/logistic-explainer";
+import { KnnPlayground } from "./interactive/KnnPlayground";
+import { SvmPlayground } from "./interactive/svm-playground";
+import { NaiveBayesSpam } from "./interactive/NaiveBayesSpam";
+import { DecisionTreeExplainer } from "./interactive/decision-tree-explainer";
+import { RandomForest } from "./interactive/RandomForest";
+import { BoostingRounds } from "./interactive/boosting-rounds";
+import { KmeansMotion } from "./interactive/KmeansMotion";
+import { PcaExplorer } from "./interactive/PcaExplorer";
 import {
   LinearRegression,
   KNN,
@@ -122,6 +132,17 @@ const registry: Record<string, Entry> = {
   "naive-vs-backprop": { Comp: NaiveVsBackprop, interactive: true },
   "four-equations-walk": { Comp: FourEquationsWalk, interactive: true },
   "outer-product": { Comp: OuterProduct, interactive: true },
+  // chapter 3 (Classical ML Algorithms) — interactive
+  "linreg-fit": { Comp: LinregFit, interactive: true },
+  "logistic-explainer": { Comp: LogisticExplainer, interactive: true },
+  "knn-playground": { Comp: KnnPlayground, interactive: true },
+  "svm-playground": { Comp: SvmPlayground, interactive: true },
+  "naive-bayes-spam": { Comp: NaiveBayesSpam, interactive: true },
+  "decision-tree-explainer": { Comp: DecisionTreeExplainer, interactive: true },
+  "random-forest": { Comp: RandomForest, interactive: true },
+  "boosting-rounds": { Comp: BoostingRounds, interactive: true },
+  "kmeans-motion": { Comp: KmeansMotion, interactive: true },
+  "pca-explorer": { Comp: PcaExplorer, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
