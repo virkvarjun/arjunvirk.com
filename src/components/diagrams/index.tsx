@@ -39,6 +39,12 @@ import { RandomForest } from "./interactive/RandomForest";
 import { BoostingRounds } from "./interactive/boosting-rounds";
 import { KmeansMotion } from "./interactive/KmeansMotion";
 import { PcaExplorer } from "./interactive/PcaExplorer";
+import { VonNeumannBottleneck } from "./interactive/von-neumann-bottleneck";
+import { CpuVsGpuRace } from "./interactive/cpu-vs-gpu-race";
+import { GpuHierarchy } from "./interactive/gpu-hierarchy";
+import { WarpDivergence } from "./interactive/warp-divergence";
+import { GemmTiling } from "./interactive/GemmTiling";
+import { PrecisionFormats } from "./interactive/precision-formats";
 import {
   LinearRegression,
   KNN,
@@ -143,6 +149,13 @@ const registry: Record<string, Entry> = {
   "boosting-rounds": { Comp: BoostingRounds, interactive: true },
   "kmeans-motion": { Comp: KmeansMotion, interactive: true },
   "pca-explorer": { Comp: PcaExplorer, interactive: true },
+  // chapter 4 (AI Hardware and Compute) — interactive
+  "von-neumann-bottleneck": { Comp: VonNeumannBottleneck, interactive: true },
+  "cpu-vs-gpu-race": { Comp: CpuVsGpuRace, interactive: true },
+  "gpu-hierarchy": { Comp: GpuHierarchy, interactive: true },
+  "warp-divergence": { Comp: WarpDivergence, interactive: true },
+  "gemm-tiling": { Comp: GemmTiling, interactive: true },
+  "precision-formats": { Comp: PrecisionFormats, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
