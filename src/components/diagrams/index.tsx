@@ -20,6 +20,15 @@ import { AdagradVsRmsprop } from "./interactive/AdagradVsRmsprop";
 import { AdamDecomposition } from "./interactive/AdamDecomposition";
 import { LrSchedule } from "./interactive/lr-schedule";
 import { OverUnderfitting } from "./interactive/OverUnderfitting";
+import { WeightIndexDecoder } from "./interactive/WeightIndexDecoder";
+import { JacobianBuilder } from "./interactive/JacobianBuilder";
+import { SumOverPathsGraph } from "./interactive/SumOverPathsGraph";
+import { JacobianChainShapes } from "./interactive/jacobian-chain-shapes";
+import { ForwardPassUnroller } from "./interactive/ForwardPassUnroller";
+import { ChainRuleWalk } from "./interactive/chain-rule-walk";
+import { NaiveVsBackprop } from "./interactive/NaiveVsBackprop";
+import { FourEquationsWalk } from "./interactive/four-equations-walk";
+import { OuterProduct } from "./interactive/OuterProduct";
 import {
   LinearRegression,
   KNN,
@@ -103,6 +112,16 @@ const registry: Record<string, Entry> = {
   "adam-decomposition": { Comp: AdamDecomposition, interactive: true },
   "lr-schedule": { Comp: LrSchedule, interactive: true },
   "over-underfitting": { Comp: OverUnderfitting, interactive: true },
+  // chapter 2 (Math of Neural Networks) — interactive
+  "weight-index-decoder": { Comp: WeightIndexDecoder, interactive: true },
+  "jacobian-builder": { Comp: JacobianBuilder, interactive: true },
+  "sum-over-paths-graph": { Comp: SumOverPathsGraph, interactive: true },
+  "jacobian-chain-shapes": { Comp: JacobianChainShapes, interactive: true },
+  "forward-pass-unroller": { Comp: ForwardPassUnroller, interactive: true },
+  "chain-rule-walk": { Comp: ChainRuleWalk, interactive: true },
+  "naive-vs-backprop": { Comp: NaiveVsBackprop, interactive: true },
+  "four-equations-walk": { Comp: FourEquationsWalk, interactive: true },
+  "outer-product": { Comp: OuterProduct, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
