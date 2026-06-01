@@ -23,6 +23,7 @@ export type RichSegment = string | { text: string; href: string };
 export const landing = {
   bullets: [
     "Software Engineering @ UWaterloo",
+    "Robotics Research Engineer @ BracketBot",
     "Computational Oncology Researcher @ UCLA BAIR",
     "Prev. Data and Transformer Researcher @ Triage Technologies ($50M)",
     "Named Top ML Researcher in Canada (0.1%)",
