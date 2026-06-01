@@ -63,7 +63,6 @@ function eigen(a: number, b: number, d: number) {
   const root = Math.sqrt(diff * diff + b * b);
   const l1 = half + root; // larger eigenvalue
   const l2 = half - root;
-  // Eigenvector for l1. If b ~ 0 the matrix is diagonal; pick axis.
   let v1: Point;
   if (Math.abs(b) > 1e-9) {
     v1 = { x: l1 - d, y: b };
@@ -90,19 +89,18 @@ function projectedVariance(u: Point): number {
   return s / DATA.length;
 }
 
-// --- Mapping data coords into the 320x300 viewport ------------------------
+// --- Mapping data coords into the viewport --------------------------------
 const VIEW_W = 320;
 const VIEW_H = 300;
-const SCALE = 22; // data units -> px
+const SCALE = 24; // data units -> px (1 unit of std ~ SCALE px)
 const ORIGIN_X = VIEW_W / 2;
-const ORIGIN_Y = VIEW_H / 2 + 8;
+const ORIGIN_Y = VIEW_H / 2;
 
 function mapX(x: number): number {
   return ORIGIN_X + (x - CENTROID.x) * SCALE;
 }
 function mapY(y: number): number {
-  // flip y so positive points up
-  return ORIGIN_Y - (y - CENTROID.y) * SCALE;
+  return ORIGIN_Y - (y - CENTROID.y) * SCALE; // flip y so positive points up
 }
 
 const CX = mapX(CENTROID.x);
@@ -111,37 +109,44 @@ const CY = mapY(CENTROID.y);
 // PC1 angle in degrees (0..180), measured the same way the slider angle is.
 const PC1_ANGLE = ((Math.atan2(v1.y, v1.x) * 180) / Math.PI + 180) % 180;
 
+// Arrow lengths scale with the standard deviation (sqrt of eigenvalue) so they
+// match the cloud's spread, with a floor so PC2 stays visible.
+const LEN1 = Math.max(Math.sqrt(l1) * SCALE, 24);
+const LEN2 = Math.max(Math.sqrt(l2) * SCALE, 16);
+
+// Small arrowhead helper (returns polygon points string).
+function head(x1: number, y1: number, x2: number, y2: number, s = 7): string {
+  const ang = Math.atan2(y2 - y1, x2 - x1);
+  const a1 = ang + Math.PI - 0.4;
+  const a2 = ang + Math.PI + 0.4;
+  return `${x2},${y2} ${x2 + s * Math.cos(a1)},${y2 + s * Math.sin(a1)} ${x2 + s * Math.cos(a2)},${y2 + s * Math.sin(a2)}`;
+}
+
 export function PcaExplorer() {
-  const [theta, setTheta] = useState(60);
+  const [theta, setTheta] = useState(95);
   const [projectOn, setProjectOn] = useState(false);
 
   const rad = (theta * Math.PI) / 180;
   const u = { x: Math.cos(rad), y: Math.sin(rad) };
   const candVar = projectedVariance(u);
 
-  // Arrow lengths scaled by eigenvalue (variance), in px.
-  const lenScale = 6;
-  const len1 = Math.sqrt(l1) * lenScale + 14;
-  const len2 = Math.sqrt(l2) * lenScale + 14;
-
-  // PC arrow endpoints (drawn in screen space; note y flips).
-  const pc1End = { x: CX + v1.x * len1, y: CY - v1.y * len1 };
-  const pc2End = { x: CX + v2.x * len2, y: CY - v2.y * len2 };
+  // PC arrow endpoints (screen space; y flips).
+  const pc1End = { x: CX + v1.x * LEN1, y: CY - v1.y * LEN1 };
+  const pc2End = { x: CX + v2.x * LEN2, y: CY - v2.y * LEN2 };
 
   // Candidate dashed line across the cloud (screen space).
-  const candLen = 130;
+  const candLen = 120;
   const candA = { x: CX + u.x * candLen, y: CY - u.y * candLen };
   const candB = { x: CX - u.x * candLen, y: CY + u.y * candLen };
 
-  const nearPc1 = Math.abs(theta - PC1_ANGLE) <= 4;
+  const nearPc1 = Math.min(
+    Math.abs(theta - PC1_ANGLE),
+    180 - Math.abs(theta - PC1_ANGLE),
+  ) <= 4;
 
-  // Small arrowhead helper (returns polygon points string).
-  const head = (x1: number, y1: number, x2: number, y2: number, s = 7) => {
-    const ang = Math.atan2(y2 - y1, x2 - x1);
-    const a1 = ang + Math.PI - 0.4;
-    const a2 = ang + Math.PI + 0.4;
-    return `${x2},${y2} ${x2 + s * Math.cos(a1)},${y2 + s * Math.sin(a1)} ${x2 + s * Math.cos(a2)},${y2 + s * Math.sin(a2)}`;
-  };
+  // Short tags sit a little beyond each arrow tip.
+  const tag1 = { x: CX + v1.x * (LEN1 + 14), y: CY - v1.y * (LEN1 + 14) };
+  const tag2 = { x: CX + v2.x * (LEN2 + 14), y: CY - v2.y * (LEN2 + 14) };
 
   return (
     <div>
@@ -151,7 +156,6 @@ export function PcaExplorer() {
         role="img"
         aria-label="Principal components"
       >
-        {/* frame */}
         <rect
           x={0.5}
           y={0.5}
@@ -161,12 +165,12 @@ export function PcaExplorer() {
           stroke={C.line}
         />
 
-        {/* connector segments + projected points (when toggle is ON) */}
+        {/* connector segments to PC1 (projection mode) */}
         {projectOn &&
           DATA.map((p, i) => {
             const dx = p.x - CENTROID.x;
             const dy = p.y - CENTROID.y;
-            const t = dx * v1.x + dy * v1.y; // coordinate along PC1
+            const t = dx * v1.x + dy * v1.y;
             const px = CENTROID.x + v1.x * t;
             const py = CENTROID.y + v1.y * t;
             return (
@@ -178,7 +182,7 @@ export function PcaExplorer() {
                 y2={mapY(py)}
                 stroke={C.coral}
                 strokeWidth={0.8}
-                opacity={0.55}
+                opacity={0.5}
               />
             );
           })}
@@ -195,7 +199,7 @@ export function PcaExplorer() {
           />
         ))}
 
-        {/* projected (1D) points sitting on the PC1 line */}
+        {/* projected (1D) points on the PC1 line */}
         {projectOn &&
           DATA.map((p, i) => {
             const dx = p.x - CENTROID.x;
@@ -224,93 +228,78 @@ export function PcaExplorer() {
           strokeWidth={1.6}
           strokeDasharray="5 4"
         />
+        <text
+          x={candA.x + (u.x >= 0 ? 5 : -5)}
+          y={candA.y + (u.y >= 0 ? -5 : 12)}
+          fontSize={10}
+          fill={C.green}
+          fontFamily={MONO}
+          textAnchor={u.x >= 0 ? "start" : "end"}
+        >
+          {`θ=${theta}°`}
+        </text>
 
         {/* PC2 arrow (blue) */}
         <g stroke={C.blue} fill={C.blue}>
           <line x1={CX} y1={CY} x2={pc2End.x} y2={pc2End.y} strokeWidth={2} />
-          <polygon
-            stroke="none"
-            points={head(CX, CY, pc2End.x, pc2End.y)}
-          />
+          <polygon stroke="none" points={head(CX, CY, pc2End.x, pc2End.y)} />
         </g>
+        <text
+          x={tag2.x}
+          y={tag2.y}
+          fontSize={10}
+          fill={C.blue}
+          fontFamily={MONO}
+          textAnchor="middle"
+        >
+          PC2
+        </text>
 
         {/* PC1 arrow (coral) */}
         <g stroke={C.coral} fill={C.coral}>
           <line x1={CX} y1={CY} x2={pc1End.x} y2={pc1End.y} strokeWidth={2.4} />
-          <polygon
-            stroke="none"
-            points={head(CX, CY, pc1End.x, pc1End.y, 8)}
-          />
+          <polygon stroke="none" points={head(CX, CY, pc1End.x, pc1End.y, 8)} />
         </g>
-
-        {/* centroid */}
-        <circle cx={CX} cy={CY} r={2.4} fill={C.ink} />
-
-        {/* labels */}
         <text
-          x={pc1End.x + 4}
-          y={pc1End.y - 4}
+          x={tag1.x}
+          y={tag1.y}
           fontSize={10}
           fill={C.coral}
           fontFamily={MONO}
-          textAnchor="start"
+          textAnchor="middle"
         >
-          {`PC1 (var = ${l1.toFixed(1)})`}
-        </text>
-        <text
-          x={pc2End.x + 4}
-          y={pc2End.y - 2}
-          fontSize={10}
-          fill={C.blue}
-          fontFamily={MONO}
-          textAnchor="start"
-        >
-          {`PC2 (var = ${l2.toFixed(2)})`}
-        </text>
-        <text
-          x={candA.x + 4}
-          y={candA.y}
-          fontSize={10}
-          fill={C.green}
-          fontFamily={MONO}
-          textAnchor="start"
-        >
-          {`θ = ${theta}°`}
+          PC1
         </text>
 
-        {/* readout */}
-        <text
-          x={10}
-          y={20}
-          fontSize={11}
-          fill={C.ink}
-          fontFamily={MONO}
-          textAnchor="start"
-        >
-          {`projected variance = ${candVar.toFixed(2)}`}
+        {/* centroid */}
+        <circle cx={CX} cy={CY} r={2.6} fill={C.ink} />
+
+        {/* readout, in the empty upper-left corner */}
+        <text x={12} y={22} fontSize={10} fill={C.coral} fontFamily={MONO}>
+          {`PC1 variance = ${l1.toFixed(2)}`}
+        </text>
+        <text x={12} y={37} fontSize={10} fill={C.blue} fontFamily={MONO}>
+          {`PC2 variance = ${l2.toFixed(2)}`}
+        </text>
+        <text x={12} y={52} fontSize={10} fill={C.green} fontFamily={MONO}>
+          {`candidate var = ${candVar.toFixed(2)}`}
         </text>
         {nearPc1 && (
-          <text
-            x={10}
-            y={34}
-            fontSize={10}
-            fill={C.green}
-            fontFamily={MONO}
-            textAnchor="start"
-          >
-            ≈ PC1: maximum variance
+          <text x={12} y={67} fontSize={10} fill={C.ink} fontFamily={MONO}>
+            ≈ PC1 — maximum variance
           </text>
         )}
+
         {projectOn && (
           <text
-            x={10}
-            y={VIEW_H - 10}
+            x={VIEW_W / 2}
+            y={VIEW_H - 12}
             fontSize={10}
-            fill={C.coral}
+            fill={C.muted}
             fontFamily={MONO}
-            textAnchor="start"
+            textAnchor="middle"
           >
-            2D → 1D: kept var = {l1.toFixed(1)}, lost = {l2.toFixed(2)}
+            {`2D → 1D onto PC1:  kept ${l1.toFixed(2)},  lost ${l2.toFixed(2)}`}
           </text>
         )}
       </svg>
@@ -331,13 +320,13 @@ export function PcaExplorer() {
         </label>
         <button
           type="button"
-          onClick={() => setProjectOn((v) => !v)}
+          onClick={() => setProjectOn((value) => !value)}
           className="rounded border border-[var(--border)] px-2.5 py-1 font-mono text-[var(--foreground)] transition-colors hover:bg-[var(--background)]"
         >
           {projectOn ? "show 2D cloud" : "project onto PC1"}
         </button>
         <span className="font-mono tabular-nums text-[var(--muted)]">
-          var = {candVar.toFixed(2)}
+          proj var = {candVar.toFixed(2)}
         </span>
       </div>
     </div>
