@@ -2,6 +2,13 @@ import type { ComponentType } from "react";
 import { DiagramFrame, InteractiveFrame } from "./frame";
 import { GradientDescentInteractive } from "./interactive/gradient-descent";
 import { ConvolutionInteractive } from "./interactive/convolution";
+import { NeuronPlayground } from "./interactive/neuron-playground";
+import { LinearCollapse } from "./interactive/linear-collapse";
+import { ActivationExplorer } from "./interactive/activation-explorer";
+import { SoftmaxConverter } from "./interactive/softmax-converter";
+import { LayerMatvec } from "./interactive/LayerMatvec";
+import { UniversalApproximation } from "./interactive/UniversalApproximation";
+import { LossExplorer } from "./interactive/loss-explorer";
 import {
   LinearRegression,
   KNN,
@@ -66,6 +73,14 @@ type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
 // Maps the `diagram.id` referenced in chapters.ts to a rendered component.
 const registry: Record<string, Entry> = {
+  // chapter 1 (Neural Networks) — interactive
+  "neuron-playground": { Comp: NeuronPlayground, interactive: true },
+  "linear-collapse": { Comp: LinearCollapse, interactive: true },
+  "activation-explorer": { Comp: ActivationExplorer, interactive: true },
+  "softmax-converter": { Comp: SoftmaxConverter, interactive: true },
+  "layer-matvec": { Comp: LayerMatvec, interactive: true },
+  "universal-approximation": { Comp: UniversalApproximation, interactive: true },
+  "loss-explorer": { Comp: LossExplorer, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
