@@ -143,10 +143,10 @@ export const workSection = {
     {
       title: "Wisp: Custom MCP for Daily Notion and Google Workspace",
       category: "Engineering",
-      date: "Nov 2026",
+      date: "Nov 2025",
       description:
         "Led the implementation of a custom MCP server that exposes Notion and Google Workspace as structured, machine-readable tools instead of unstructured text context.",
-      href: "https://drive.google.com/file/d/1iY6WqhUoQef0hN14b8RVFlftUAU0BiyM/view?resourcekey",
+      href: "https://drive.google.com/file/d/1iY6WqhUoQef0hN14b8RVFlftUAU0BiyM/view?usp=sharing",
       image: "/projects/wisp.png",
     },
     {
