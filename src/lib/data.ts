@@ -26,7 +26,7 @@ export const landing = {
     "Robotics Research Engineer @ BracketBot",
     "Computational Oncology Researcher @ UCLA BAIR",
     "Prev. Data and Transformer Researcher @ Triage Technologies ($50M)",
-    "Named Top ML Researcher in Canada (0.1%)",
+    "Silver Medalist at Canada’s National Science Fair",
     "ML Agents and Research Consulting Business",
     "Worked with Google, Microsoft, Verizon for ML/Datacentre Consulting",
   ],
