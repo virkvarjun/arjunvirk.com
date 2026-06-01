@@ -44,7 +44,12 @@ import { CpuVsGpuRace } from "./interactive/cpu-vs-gpu-race";
 import { GpuHierarchy } from "./interactive/gpu-hierarchy";
 import { WarpDivergence } from "./interactive/warp-divergence";
 import { GemmTiling } from "./interactive/GemmTiling";
+import { SystolicArrayAnim } from "./interactive/SystolicArrayAnim";
 import { PrecisionFormats } from "./interactive/precision-formats";
+import { MemoryPyramid } from "./interactive/MemoryPyramid";
+import { CudaTower } from "./interactive/cuda-tower";
+import { ParallelismStrategies } from "./interactive/parallelism-strategies";
+import { RooflineInteractive } from "./interactive/roofline";
 import {
   LinearRegression,
   KNN,
@@ -156,6 +161,10 @@ const registry: Record<string, Entry> = {
   "warp-divergence": { Comp: WarpDivergence, interactive: true },
   "gemm-tiling": { Comp: GemmTiling, interactive: true },
   "precision-formats": { Comp: PrecisionFormats, interactive: true },
+  "memory-pyramid": { Comp: MemoryPyramid, interactive: true },
+  "cuda-tower": { Comp: CudaTower, interactive: true },
+  "parallelism-strategies": { Comp: ParallelismStrategies, interactive: true },
+  "roofline-interactive": { Comp: RooflineInteractive, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
@@ -178,6 +187,7 @@ const registry: Record<string, Entry> = {
   "cpu-vs-gpu": { Comp: CpuVsGpu, viewBox: "0 0 420 205" },
   "memory-hierarchy": { Comp: MemoryHierarchy, viewBox: "0 0 400 225" },
   "systolic-array": { Comp: SystolicArray, viewBox: "0 0 400 235" },
+  "systolic-array-anim": { Comp: SystolicArrayAnim, interactive: true },
   roofline: { Comp: Roofline, viewBox: "0 0 400 235" },
   parallelism: { Comp: Parallelism, viewBox: "0 0 600 165" },
   // chapter 4
