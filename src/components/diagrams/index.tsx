@@ -12,6 +12,14 @@ import { LossExplorer } from "./interactive/loss-explorer";
 import { CostSurface } from "./interactive/cost-surface";
 import { ChainRule } from "./interactive/chain-rule";
 import { BackpropVisualizer } from "./interactive/backprop-visualizer";
+import { OptimizerRace } from "./interactive/optimizer-race";
+import { MomentumFocus } from "./interactive/momentum-focus";
+import { NesterovLookahead } from "./interactive/NesterovLookahead";
+import { AdagradRates } from "./interactive/AdagradRates";
+import { AdagradVsRmsprop } from "./interactive/AdagradVsRmsprop";
+import { AdamDecomposition } from "./interactive/AdamDecomposition";
+import { LrSchedule } from "./interactive/lr-schedule";
+import { OverUnderfitting } from "./interactive/OverUnderfitting";
 import {
   LinearRegression,
   KNN,
@@ -87,6 +95,14 @@ const registry: Record<string, Entry> = {
   "cost-surface": { Comp: CostSurface, interactive: true },
   "chain-rule": { Comp: ChainRule, interactive: true },
   "backprop-visualizer": { Comp: BackpropVisualizer, interactive: true },
+  "optimizer-race": { Comp: OptimizerRace, interactive: true },
+  "momentum-focus": { Comp: MomentumFocus, interactive: true },
+  "nesterov-lookahead": { Comp: NesterovLookahead, interactive: true },
+  "adagrad-rates": { Comp: AdagradRates, interactive: true },
+  "adagrad-vs-rmsprop": { Comp: AdagradVsRmsprop, interactive: true },
+  "adam-decomposition": { Comp: AdamDecomposition, interactive: true },
+  "lr-schedule": { Comp: LrSchedule, interactive: true },
+  "over-underfitting": { Comp: OverUnderfitting, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
