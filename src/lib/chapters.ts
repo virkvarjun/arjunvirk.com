@@ -161,6 +161,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "neuron-playground", caption: "Fig 1.1 — A neuron playground: drag each input, its weight, and the bias, and watch the weighted sum z respond." },
+      },
+      {
         paragraphs: [
           "So now we have something that takes inputs, weighs them, sums them, and adds an offset. Is that a neuron? Almost. There is one missing ingredient, and it turns out to be the ingredient that everything depends on. It gets its own section.",
         ],
@@ -208,6 +211,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "linear-collapse", caption: "Fig 1.2 — Two stacked linear layers collapse into a single line — until you insert a nonlinearity between them." },
+      },
+      {
         paragraphs: [
           "So which curve do we use for $\\sigma$? A few have been popular, and going through them in order is really a tour of the field correcting its own mistakes.",
         ],
@@ -238,6 +244,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "activation-explorer", caption: "Fig 1.3 — Activation explorer: each curve with its slope (derivative). The slope vanishes in the flat tails of sigmoid and tanh." },
+      },
+      {
         paragraphs: [
           "There's one more activation that lives in a special place, the output. When you classify among several classes, you don't want one number, you want a full set of probabilities, one per class, all positive and summing to exactly $1$ (because the answer is *some* class, with total certainty $1$ split across the options). The function that turns a raw vector of scores into exactly such a distribution is **softmax**:",
         ],
@@ -251,6 +260,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "Take it piece by piece. You have $K$ classes and a raw score $z_i$ for each. The $\\sum_{j=1}^{K}$ means \"add up the following over every class $j$ from $1$ to $K$.\" So for class $i$, you exponentiate its score, $e^{z_i}$, and divide by the sum of the exponentiated scores of all classes. Exponentiating makes every number positive (no negative probabilities) and exaggerates differences (so the network can express confidence), and dividing by the total forces the whole set to sum to $1$. Out comes a clean probability distribution. Softmax sits at the end of nearly every classifier.",
         ],
+      },
+      {
+        diagram: { id: "softmax-converter", caption: "Fig 1.4 — Softmax turns raw scores into probabilities that always sum to 1; temperature sharpens or flattens them." },
       },
       {
         quiz: {
@@ -280,6 +292,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "layer-matvec", caption: "Fig 1.5 — A layer as a matrix–vector product: each row of W is one neuron, and the product runs every neuron at once." },
+      },
+      {
         paragraphs: [
           "To build a deep network you feed the output of one layer in as the input to the next. The first layer reads the raw features, the last layer produces the final answer, and the layers between are called **hidden** layers, because you never directly observe what they compute; they're the network's private scratch space for inventing intermediate features. A network with $L$ layers strung together is the composition:",
         ],
@@ -298,6 +313,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "It's fair to ask how much this stacking actually buys us. Are there shapes a neural network *cannot* represent? The reassuring answer is a result called the **universal approximation theorem**, which says a network with even a single hidden layer, given enough neurons, can approximate essentially any continuous function to any accuracy you like. So expressiveness is not the bottleneck. Then why bother with depth, if one wide layer can in principle do anything? Because \"in principle\" hides a hard \"in practice.\" A shallow network might need an enormous number of neurons to capture a pattern a deep network captures with few. Depth lets the network reuse its intermediate features, building complex ideas out of simpler ones layer by layer, and that reuse is the difference between a model that's merely possible and one you can actually train. Depth buys efficiency, not new powers.",
         ],
+      },
+      {
+        diagram: { id: "universal-approximation", caption: "Fig 1.6 — Universal approximation: sum a handful of simple bent pieces to mold almost any target curve." },
       },
       {
         paragraphs: [
@@ -357,6 +375,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "loss-explorer", caption: "Fig 1.7 — Loss explorer: squared error punishes big misses quadratically; cross-entropy punishes confident wrong answers." },
+      },
+      {
         paragraphs: [
           "Whichever loss we use, the full training objective is to minimize its average over the entire training set:",
         ],
@@ -386,7 +407,7 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "The Cost Function, Seen as a Surface",
         paragraphs: [
-          "We already met this number in the last section as the loss. (People say \"loss\" and \"cost\" almost interchangeably. Loss usually means the wrongness on one example, cost the average over the whole training set, but it's the same idea, and from here on we'll use the cost.) Here is the change in viewpoint that makes gradient descent click, and it's the one 3Blue1Brown leans on.",
+          "We already met this number in the last section as the loss. (People say \"loss\" and \"cost\" almost interchangeably.",
         ],
       },
       {
@@ -398,6 +419,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "Now try to picture that function, and do it by climbing the dimensions one at a time. Suppose the network had a single weight. Then $C$ depends on one number, and you can draw it as an ordinary curve: the weight along the horizontal axis, the cost along the vertical. Making the network better is just finding the bottom of the curve. Now suppose it had two weights. Then $C$ depends on two numbers, and you draw it as a surface: a landscape floating above a flat plane of the two weights, where the height at each point is the cost there, full of hills and valleys. Making the network better is rolling a ball to the lowest point of that surface. A real network has not one or two weights but millions, so the true cost surface lives in a space with millions of directions, which nobody can draw or even imagine. And here is the leap worth making: you do not need to. The reasoning that works for the curve and the surface, find the downhill direction and step that way, works exactly the same with a million directions. Everything we figure out from the 2D and 3D pictures is literally what happens up in the enormous space; there are just more directions to choose a step in.",
         ],
+      },
+      {
+        diagram: { id: "cost-surface", caption: "Fig 1.8 — The cost as a surface over the weights: training is the search for the lowest valley." },
       },
       {
         paragraphs: [
@@ -445,6 +469,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "gradient-descent", caption: "Fig 1.9 — Gradient descent: drag the learning rate and step the ball downhill. Too large a rate overshoots and diverges." },
+      },
+      {
         quiz: {
           question: "What happens if the learning rate is set too large?",
           answer: "The steps overshoot the bottom of the valley, so instead of settling at a minimum the parameters bounce back and forth across it or diverge entirely toward infinity.",
@@ -470,6 +497,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "The escape rests on one idea from calculus, the **chain rule**, which is the rule for differentiating a function of a function. In plain terms: if a change in $x$ causes a change in $u$, and that change in $u$ causes a change in $y$, then the effect of $x$ on $y$ is the product of the two link-by-link effects. Sensitivities multiply along a chain. A neural network is one long chain (the input feeds layer 1, which feeds layer 2, on up to the loss), so the chain rule is exactly the right tool. It tells us we can find how the loss responds to an early weight by multiplying together the local sensitivities of each link along the way. What makes it fast is that those link sensitivities are shared across all the weights, so if we compute them in the right order and reuse them, we never redo work.",
         ],
+      },
+      {
+        diagram: { id: "chain-rule", caption: "Fig 1.10 — The chain rule: a nudge to x is scaled by each local derivative along the path to y." },
       },
       {
         paragraphs: [
@@ -547,6 +577,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "backprop-visualizer", caption: "Fig 1.11 — Backpropagation: the forward pass fills activations; the backward pass sends the error signal back, gated by each slope." },
+      },
+      {
         paragraphs: [
           "So one training step, in full: run the forward pass and store the intermediate values; compute the loss; compute $\\boldsymbol{\\delta}$ at the output; walk it backward layer by layer, reading off each layer's weight and bias gradients as you go; then hand all those gradients to gradient descent, which nudges every knob a little downhill. Repeat over many batches and the network learns. You'll rarely code this by hand, because every framework computes it automatically through **automatic differentiation**, where each basic operation knows its own local derivative and the framework chains them together for you. But knowing what's underneath is the difference between fixing a stuck network and staring at it.",
         ],
@@ -574,6 +607,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "optimizer-race", caption: "Fig 1.12 — An optimizer race down a ravine: plain SGD zig-zags while momentum and Adam glide along the floor." },
+      },
+      {
         paragraphs: [
           "The first repair is **momentum**, and the picture is exactly what the word suggests. Instead of each step depending only on the current gradient, give the optimizer inertia, like a heavy ball rolling downhill. The ball builds up speed in directions where the gradient consistently points, and the back-and-forth jitter across the ravine walls cancels out because it keeps reversing. We track a running velocity $v$ and step along it:",
         ],
@@ -587,6 +623,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "The velocity $v_{t+1}$ blends the old velocity (scaled by $\\beta$, typically $0.9$, so about $90\\%$ of the previous momentum carries over) with the current gradient $g_t$. Then we step along that accumulated velocity rather than the raw gradient. Consistent directions build speed; oscillating ones average to nearly nothing. The ravine problem largely goes away.",
         ],
+      },
+      {
+        diagram: { id: "momentum-focus", caption: "Fig 1.13 — Momentum builds velocity along the valley floor while the side-to-side oscillation cancels out." },
       },
       {
         paragraphs: [
@@ -604,6 +643,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "nesterov-lookahead", caption: "Fig 1.14 — Nesterov look-ahead: measure the gradient where momentum is about to land, then correct the step." },
+      },
+      {
         paragraphs: [
           "The next family attacks a different weakness: one global learning rate for all knobs is crude, because some knobs need large updates and others tiny ones. **AdaGrad** gives every parameter its own learning rate by tracking how much gradient each one has accumulated and shrinking the step for the busy ones:",
         ],
@@ -619,6 +661,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "adagrad-rates", caption: "Fig 1.15 — AdaGrad gives each parameter its own rate, but its accumulator only grows, so the rate decays toward zero." },
+      },
+      {
         paragraphs: [
           "**RMSProp** fixes that death by replacing the ever-growing sum with a decaying average that gently forgets old gradients, so it can't blow up forever:",
         ],
@@ -632,6 +677,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "Now $v_t$ is a weighted average leaning mostly on recent squared gradients (with $\\beta$ around $0.9$), so it stays responsive instead of grinding to a halt. (A small piece of history: RMSProp was never formally published. Geoff Hinton described it in an online lecture and it caught on anyway.)",
         ],
+      },
+      {
+        diagram: { id: "adagrad-vs-rmsprop", caption: "Fig 1.16 — AdaGrad keeps accumulating and freezes; RMSProp forgets old gradients and stays responsive." },
       },
       {
         paragraphs: [
@@ -650,6 +698,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "Two running averages: $m_t$ tracks the gradient itself (the momentum, the \"first moment\") and $v_t$ tracks the squared gradient (the scale, the \"second moment\"). The $\\hat{m}_t$ and $\\hat{v}_t$ are bias-corrected versions; the correction matters early in training because both averages start at zero and would otherwise be pulled toward zero for a while, and dividing by $1 - \\beta^t$ undoes that startup bias (note $\\beta^t$ shrinks to nothing as training proceeds, so the correction quietly switches itself off). The final step uses the momentum direction $\\hat{m}_t$ scaled per-parameter by $\\sqrt{\\hat{v}_t}$. Typical settings are $\\beta_1 = 0.9$, $\\beta_2 = 0.999$, $\\epsilon = 10^{-8}$, and they work across a wide range of problems with little tuning, which is why Adam is everywhere.",
         ],
+      },
+      {
+        diagram: { id: "adam-decomposition", caption: "Fig 1.17 — Adam = momentum (first moment) + RMSProp (second moment). Toggle each ingredient on and off." },
       },
       {
         paragraphs: [
@@ -682,6 +733,9 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
+        diagram: { id: "lr-schedule", caption: "Fig 1.18 — Learning-rate schedules shape the step size over training: bold early, gentle late." },
+      },
+      {
         quiz: {
           question: "What problem does momentum solve compared to plain SGD?",
           answer: "In a narrow ravine, plain SGD zig-zags across the steep walls and crawls along the floor. Momentum builds up velocity in the consistent downhill direction while the side-to-side oscillation cancels itself out, so it moves much faster toward the minimum.",
@@ -692,6 +746,9 @@ export const mlGuideChapters: Chapter[] = [
         paragraphs: [
           "The big idea: stop the model from memorizing. Recall the villain from the definitions, overfitting, where the model latches onto the noise in the training data and falls apart on anything new. Everything in this section works against it. The umbrella term is **regularization**: any technique that shrinks the gap between training performance and unseen-data performance, usually by discouraging the model from getting too complicated or too sure of itself.",
         ],
+      },
+      {
+        diagram: { id: "over-underfitting", caption: "Fig 1.19 — Underfitting vs overfitting: training error keeps falling while validation error bottoms out and turns back up." },
       },
       {
         paragraphs: [
