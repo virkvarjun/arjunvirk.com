@@ -28,203 +28,9 @@ export type Chapter = {
 
 export const mlGuideChapters: Chapter[] = [
   {
-    slug: "chapter-0-ml-algorithms",
-    number: "0",
-    title: "ML Algorithms",
-    summary:
-      "Before deep learning ate everything, classical ML algorithms quietly powered most of what worked in production.",
-    sections: [
-      {
-        paragraphs: [
-          "Before deep learning ate everything, classical ML algorithms quietly powered most of what actually worked in production — and on tabular data, they still do. Each one comes with its own assumptions about the world, its own ways of failing, and its own sweet spot.",
-          "We'll go through the canonical ones here: what each is really optimizing, the bit of math that makes it tick, and when you'd reach for it. At the end there's a quick cheat sheet for picking one.",
-        ],
-      },
-      {
-        heading: "Linear Regression",
-        paragraphs: [
-          "The simplest supervised algorithm there is. Linear regression fits a straight line — a hyperplane once you have more than one feature — through the data by picking the weights that make the squared error as small as possible:",
-        ],
-        equations: ["\\hat{y} = w_1 x_1 + w_2 x_2 + \\cdots + w_n x_n + b"],
-      },
-      {
-        paragraphs: [
-          "The loss is the mean squared error — the average of the squared vertical gaps (residuals) between each point and the line. A closed-form solution exists, the normal equation $\\theta = (X^\\top X)^{-1} X^\\top y$, though gradient descent is used on large datasets. Reach for it when you suspect a roughly linear relationship between the features and a continuous target.",
-        ],
-        diagram: {
-          id: "lin-reg",
-          caption:
-            "Fig 0.1 — Linear regression minimizes the sum of squared residuals (dashed) between each point and the fitted line.",
-        },
-      },
-      {
-        heading: "Logistic Regression",
-        paragraphs: [
-          "Despite the name, this is a classification algorithm. It computes a linear combination of features and squashes it through the sigmoid function to produce a probability:",
-        ],
-        equations: [
-          "P(y = 1 \\mid x) = \\sigma(w^\\top x + b) = \\frac{1}{1 + e^{-(w^\\top x + b)}}",
-        ],
-      },
-      {
-        paragraphs: [
-          "You train it with binary cross-entropy loss. The decision boundary is still a straight line, but now the output is a calibrated probability rather than a hard label. This is the workhorse of binary classification in industry — it's fast, you can actually read what it learned (each weight is that feature's contribution to the log-odds), and it's a strong baseline for basically any classification problem you'll meet.",
-        ],
-      },
-      {
-        heading: "K-Nearest Neighbours (KNN)",
-        paragraphs: [
-          "A non-parametric method that works for both classification and regression. To make a prediction it looks at the $k$ closest training examples and either takes a majority vote (classification) or averages their values (regression). There's no real training phase at all — KNN just memorizes the dataset and does all of its work at prediction time.",
-        ],
-        diagram: {
-          id: "knn",
-          caption:
-            "Fig 0.2 — With k = 5, the new point's neighborhood holds 3 blue and 2 coral points, so it is classified blue.",
-        },
-      },
-      {
-        paragraphs: [
-          "The choice of $k$ sets the bias–variance tradeoff. A small $k$ is sensitive to noise (it can carve an island around a single mislabeled point); a large $k$ smooths over genuine structure. KNN is surprisingly effective on small, low-dimensional datasets, but scales poorly: every prediction requires a pass over the entire training set.",
-        ],
-        diagram: {
-          id: "knn-fitting",
-          caption:
-            "Fig 0.3 — k controls model complexity: a huge k underfits, k = 1 overfits (memorizing noise), and a moderate k captures the real structure.",
-        },
-      },
-      {
-        heading: "Support Vector Machine (SVM)",
-        paragraphs: [
-          "An SVM finds not just any separating boundary but the one that maximally separates the two classes — the boundary with the widest possible margin between the closest points of each class. Those closest points are the support vectors, and they alone define the boundary.",
-        ],
-        diagram: {
-          id: "svm-margin",
-          caption:
-            "Fig 0.4 — The SVM maximizes the margin between classes; the circled support vectors sit on the margin and determine the boundary.",
-        },
-      },
-      {
-        paragraphs: ["For linearly separable data, the optimization problem is:"],
-        equations: [
-          "\\min_{w,\\, b}\\ \\tfrac{1}{2}\\lVert w \\rVert^2 \\quad \\text{subject to} \\quad y_i\\,(w^\\top x_i + b) \\ge 1",
-        ],
-      },
-      {
-        paragraphs: [
-          "For non-linearly separable data, SVMs use the kernel trick: implicitly map the data into a higher-dimensional space where it becomes separable, without ever explicitly computing the high-dimensional coordinates. Common kernels include the polynomial and RBF (radial basis function) kernels. SVMs dominated ML in the 1990s–2000s and remain strong for small-to-medium datasets with clear class boundaries.",
-        ],
-      },
-      {
-        heading: "Naive Bayes",
-        paragraphs: [
-          "A probabilistic classifier built on Bayes' theorem with one strong \"naive\" assumption: every feature is conditionally independent of every other feature given the class. That assumption is almost always false, yet the classifier works remarkably well anyway — especially for text.",
-        ],
-        equations: [
-          "P(y \\mid x_1, \\dots, x_n) \\;\\propto\\; P(y)\\prod_{i=1}^{n} P(x_i \\mid y)",
-        ],
-      },
-      {
-        paragraphs: [
-          "To classify, compute this quantity for each class and pick the largest. Training is just counting how often each feature value co-occurs with each class, which makes Naive Bayes extremely fast. It is the classic baseline for spam filtering and document classification.",
-        ],
-      },
-      {
-        heading: "Decision Trees",
-        paragraphs: [
-          "A tree-structured model that classifies or regresses by asking a sequence of yes/no questions about the features. Each internal node tests one feature; each leaf assigns a class or value. Trees are built greedily: at each node, choose the feature and threshold that best split the data according to some criterion — Gini impurity, entropy, or variance reduction.",
-        ],
-        diagram: {
-          id: "decision-tree",
-          caption:
-            "Fig 0.5 — A decision tree routes an example through a series of feature tests down to a leaf prediction.",
-        },
-      },
-      {
-        paragraphs: [
-          "Trees are about as interpretable as models get — you can literally read the decision rules off the diagram — and they happily take numerical and categorical features without any preprocessing. The catch is that a single deep tree overfits easily, memorizing the quirks of your training set. The fix is to stop relying on one tree and combine many of them, which is where ensemble methods come in.",
-        ],
-      },
-      {
-        heading: "Ensembles: Bagging and Random Forests",
-        paragraphs: [
-          "Bagging (bootstrap aggregating) trains each model on a different random sample of the training data, drawn with replacement, then averages (regression) or majority-votes (classification) their predictions. This reduces variance — wild individual predictions cancel out.",
-          "Random forests apply bagging to decision trees with one extra twist: at each split, a tree may only consider a random subset of features. This decorrelates the trees so they don't all latch onto the same dominant feature. Random forests are robust, need almost no tuning, and remain one of the best off-the-shelf algorithms for tabular data.",
-        ],
-      },
-      {
-        heading: "Ensembles: Boosting",
-        paragraphs: [
-          "Boosting trains models sequentially, each one trying to fix the errors of the ensemble so far; predictions are a weighted combination. Unlike bagging — which trains models in parallel and averages — boosting is intrinsically sequential and reduces bias more than variance.",
-          "The modern gradient-boosting libraries — XGBoost, LightGBM, CatBoost — are devastatingly good on tabular data. They've won an enormous share of Kaggle competitions and are the production default at countless companies. If you're working with structured data and aren't sure what to try, start here.",
-          "One term worth pinning down: variance is the error that comes from a model being too sensitive to small wiggles in the training data — usually because it's complex enough to fit the random noise instead of the underlying pattern.",
-        ],
-      },
-      {
-        heading: "K-Means Clustering",
-        paragraphs: [
-          "We now turn to unsupervised learning, where there are no labels. K-means is the classic clustering algorithm. Given a dataset and a chosen number of clusters $k$, it alternates two steps until convergence: an assignment step (assign each point to the nearest cluster centroid) and an update step (move each centroid to the mean of its assigned points).",
-        ],
-        diagram: {
-          id: "kmeans",
-          caption:
-            "Fig 0.6 — k-means partitions points into k clusters; each square marks a centroid, the mean of its cluster's points.",
-        },
-      },
-      {
-        paragraphs: [
-          "Mathematically, k-means minimizes the within-cluster sum of squared distances:",
-        ],
-        equations: [
-          "\\sum_{i=1}^{k} \\sum_{x \\in C_i} \\lVert x - \\mu_i \\rVert^2",
-        ],
-      },
-      {
-        paragraphs: [
-          "It is cheap, simple, and effective when clusters are roughly spherical and similar in size. Weaknesses: you must pick $k$ in advance, it is sensitive to initialization (use k-means++ for smarter starts), and it struggles with non-spherical clusters or very different cluster sizes.",
-        ],
-      },
-      {
-        heading: "Principal Component Analysis (PCA)",
-        paragraphs: [
-          "The classic linear dimensionality-reduction method. PCA finds the directions of maximum variance in the data and projects onto them. The first principal component is the direction along which the data varies most; the second is the direction of greatest remaining variance, orthogonal to the first; and so on. Projecting onto the top $k$ components gives the best $k$-dimensional linear approximation of the data in terms of preserved variance.",
-        ],
-        diagram: {
-          id: "pca",
-          caption:
-            "Fig 0.7 — PC1 captures the dominant direction of variation; PC2 is orthogonal. Projecting onto PC1 gives a 1-D representation.",
-        },
-      },
-      {
-        paragraphs: [
-          "Mathematically, PCA computes the eigenvectors of the covariance matrix (equivalently, the singular value decomposition of the centered data matrix). Each eigenvector is a principal component, and its eigenvalue is the variance captured along that direction. PCA assumes linear structure — for non-linear manifolds, t-SNE and UMAP are better choices, especially for visualization.",
-        ],
-      },
-      {
-        heading: "Choosing an Algorithm",
-        paragraphs: ["A rough mental decision tree for when to reach for what:"],
-        list: [
-          "Tabular data, want interpretability → linear/logistic regression or a small decision tree.",
-          "Tabular data, want maximum accuracy → gradient boosting (XGBoost, LightGBM).",
-          "Tabular data, low-effort solid baseline → random forest.",
-          "Small dataset with clean class boundaries → SVM.",
-          "Text classification baseline → Naive Bayes or logistic regression.",
-          "Just want to see what's similar to what → KNN.",
-          "Images, audio, language, or any unstructured data at scale → neural networks.",
-          "No labels, want to find groups → k-means.",
-          "No labels, want to visualize or compress → PCA (linear), UMAP / t-SNE (non-linear).",
-        ],
-      },
-      {
-        paragraphs: [
-          "The thing to take away: these classical algorithms haven't been replaced, they've been joined. For most tabular business data, gradient boosting still beats neural networks outright. Deep learning's dominance is concentrated in the places where the model has to learn its own representations — images, audio, language — which is exactly where we head next.",
-        ],
-      },
-    ],
-  },
-  {
     slug: "chapter-1-fundamentals",
     number: "1",
-    title: "ML Fundamentals",
+    title: "Neural Networks",
     summary:
       "The vocabulary and ground rules of machine learning — the terms every later chapter assumes you already know.",
     sections: [
@@ -690,7 +496,7 @@ export const mlGuideChapters: Chapter[] = [
   {
     slug: "chapter-2-advanced-math",
     number: "2",
-    title: "Advanced Math Behind Deep Learning",
+    title: "Math of Neural Networks",
     summary:
       "Matrix calculus and the four equations of backpropagation, derived from the ground up.",
     sections: [
@@ -886,8 +692,202 @@ export const mlGuideChapters: Chapter[] = [
     ],
   },
   {
-    slug: "chapter-3-inference-engineering-and-compute",
+    slug: "chapter-0-ml-algorithms",
     number: "3",
+    title: "Classical ML Algorithms",
+    summary:
+      "Before deep learning ate everything, classical ML algorithms quietly powered most of what worked in production.",
+    sections: [
+      {
+        paragraphs: [
+          "Before deep learning ate everything, classical ML algorithms quietly powered most of what actually worked in production — and on tabular data, they still do. Each one comes with its own assumptions about the world, its own ways of failing, and its own sweet spot.",
+          "We'll go through the canonical ones here: what each is really optimizing, the bit of math that makes it tick, and when you'd reach for it. At the end there's a quick cheat sheet for picking one.",
+        ],
+      },
+      {
+        heading: "Linear Regression",
+        paragraphs: [
+          "The simplest supervised algorithm there is. Linear regression fits a straight line — a hyperplane once you have more than one feature — through the data by picking the weights that make the squared error as small as possible:",
+        ],
+        equations: ["\\hat{y} = w_1 x_1 + w_2 x_2 + \\cdots + w_n x_n + b"],
+      },
+      {
+        paragraphs: [
+          "The loss is the mean squared error — the average of the squared vertical gaps (residuals) between each point and the line. A closed-form solution exists, the normal equation $\\theta = (X^\\top X)^{-1} X^\\top y$, though gradient descent is used on large datasets. Reach for it when you suspect a roughly linear relationship between the features and a continuous target.",
+        ],
+        diagram: {
+          id: "lin-reg",
+          caption:
+            "Fig 0.1 — Linear regression minimizes the sum of squared residuals (dashed) between each point and the fitted line.",
+        },
+      },
+      {
+        heading: "Logistic Regression",
+        paragraphs: [
+          "Despite the name, this is a classification algorithm. It computes a linear combination of features and squashes it through the sigmoid function to produce a probability:",
+        ],
+        equations: [
+          "P(y = 1 \\mid x) = \\sigma(w^\\top x + b) = \\frac{1}{1 + e^{-(w^\\top x + b)}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "You train it with binary cross-entropy loss. The decision boundary is still a straight line, but now the output is a calibrated probability rather than a hard label. This is the workhorse of binary classification in industry — it's fast, you can actually read what it learned (each weight is that feature's contribution to the log-odds), and it's a strong baseline for basically any classification problem you'll meet.",
+        ],
+      },
+      {
+        heading: "K-Nearest Neighbours (KNN)",
+        paragraphs: [
+          "A non-parametric method that works for both classification and regression. To make a prediction it looks at the $k$ closest training examples and either takes a majority vote (classification) or averages their values (regression). There's no real training phase at all — KNN just memorizes the dataset and does all of its work at prediction time.",
+        ],
+        diagram: {
+          id: "knn",
+          caption:
+            "Fig 0.2 — With k = 5, the new point's neighborhood holds 3 blue and 2 coral points, so it is classified blue.",
+        },
+      },
+      {
+        paragraphs: [
+          "The choice of $k$ sets the bias–variance tradeoff. A small $k$ is sensitive to noise (it can carve an island around a single mislabeled point); a large $k$ smooths over genuine structure. KNN is surprisingly effective on small, low-dimensional datasets, but scales poorly: every prediction requires a pass over the entire training set.",
+        ],
+        diagram: {
+          id: "knn-fitting",
+          caption:
+            "Fig 0.3 — k controls model complexity: a huge k underfits, k = 1 overfits (memorizing noise), and a moderate k captures the real structure.",
+        },
+      },
+      {
+        heading: "Support Vector Machine (SVM)",
+        paragraphs: [
+          "An SVM finds not just any separating boundary but the one that maximally separates the two classes — the boundary with the widest possible margin between the closest points of each class. Those closest points are the support vectors, and they alone define the boundary.",
+        ],
+        diagram: {
+          id: "svm-margin",
+          caption:
+            "Fig 0.4 — The SVM maximizes the margin between classes; the circled support vectors sit on the margin and determine the boundary.",
+        },
+      },
+      {
+        paragraphs: ["For linearly separable data, the optimization problem is:"],
+        equations: [
+          "\\min_{w,\\, b}\\ \\tfrac{1}{2}\\lVert w \\rVert^2 \\quad \\text{subject to} \\quad y_i\\,(w^\\top x_i + b) \\ge 1",
+        ],
+      },
+      {
+        paragraphs: [
+          "For non-linearly separable data, SVMs use the kernel trick: implicitly map the data into a higher-dimensional space where it becomes separable, without ever explicitly computing the high-dimensional coordinates. Common kernels include the polynomial and RBF (radial basis function) kernels. SVMs dominated ML in the 1990s–2000s and remain strong for small-to-medium datasets with clear class boundaries.",
+        ],
+      },
+      {
+        heading: "Naive Bayes",
+        paragraphs: [
+          "A probabilistic classifier built on Bayes' theorem with one strong \"naive\" assumption: every feature is conditionally independent of every other feature given the class. That assumption is almost always false, yet the classifier works remarkably well anyway — especially for text.",
+        ],
+        equations: [
+          "P(y \\mid x_1, \\dots, x_n) \\;\\propto\\; P(y)\\prod_{i=1}^{n} P(x_i \\mid y)",
+        ],
+      },
+      {
+        paragraphs: [
+          "To classify, compute this quantity for each class and pick the largest. Training is just counting how often each feature value co-occurs with each class, which makes Naive Bayes extremely fast. It is the classic baseline for spam filtering and document classification.",
+        ],
+      },
+      {
+        heading: "Decision Trees",
+        paragraphs: [
+          "A tree-structured model that classifies or regresses by asking a sequence of yes/no questions about the features. Each internal node tests one feature; each leaf assigns a class or value. Trees are built greedily: at each node, choose the feature and threshold that best split the data according to some criterion — Gini impurity, entropy, or variance reduction.",
+        ],
+        diagram: {
+          id: "decision-tree",
+          caption:
+            "Fig 0.5 — A decision tree routes an example through a series of feature tests down to a leaf prediction.",
+        },
+      },
+      {
+        paragraphs: [
+          "Trees are about as interpretable as models get — you can literally read the decision rules off the diagram — and they happily take numerical and categorical features without any preprocessing. The catch is that a single deep tree overfits easily, memorizing the quirks of your training set. The fix is to stop relying on one tree and combine many of them, which is where ensemble methods come in.",
+        ],
+      },
+      {
+        heading: "Ensembles: Bagging and Random Forests",
+        paragraphs: [
+          "Bagging (bootstrap aggregating) trains each model on a different random sample of the training data, drawn with replacement, then averages (regression) or majority-votes (classification) their predictions. This reduces variance — wild individual predictions cancel out.",
+          "Random forests apply bagging to decision trees with one extra twist: at each split, a tree may only consider a random subset of features. This decorrelates the trees so they don't all latch onto the same dominant feature. Random forests are robust, need almost no tuning, and remain one of the best off-the-shelf algorithms for tabular data.",
+        ],
+      },
+      {
+        heading: "Ensembles: Boosting",
+        paragraphs: [
+          "Boosting trains models sequentially, each one trying to fix the errors of the ensemble so far; predictions are a weighted combination. Unlike bagging — which trains models in parallel and averages — boosting is intrinsically sequential and reduces bias more than variance.",
+          "The modern gradient-boosting libraries — XGBoost, LightGBM, CatBoost — are devastatingly good on tabular data. They've won an enormous share of Kaggle competitions and are the production default at countless companies. If you're working with structured data and aren't sure what to try, start here.",
+          "One term worth pinning down: variance is the error that comes from a model being too sensitive to small wiggles in the training data — usually because it's complex enough to fit the random noise instead of the underlying pattern.",
+        ],
+      },
+      {
+        heading: "K-Means Clustering",
+        paragraphs: [
+          "We now turn to unsupervised learning, where there are no labels. K-means is the classic clustering algorithm. Given a dataset and a chosen number of clusters $k$, it alternates two steps until convergence: an assignment step (assign each point to the nearest cluster centroid) and an update step (move each centroid to the mean of its assigned points).",
+        ],
+        diagram: {
+          id: "kmeans",
+          caption:
+            "Fig 0.6 — k-means partitions points into k clusters; each square marks a centroid, the mean of its cluster's points.",
+        },
+      },
+      {
+        paragraphs: [
+          "Mathematically, k-means minimizes the within-cluster sum of squared distances:",
+        ],
+        equations: [
+          "\\sum_{i=1}^{k} \\sum_{x \\in C_i} \\lVert x - \\mu_i \\rVert^2",
+        ],
+      },
+      {
+        paragraphs: [
+          "It is cheap, simple, and effective when clusters are roughly spherical and similar in size. Weaknesses: you must pick $k$ in advance, it is sensitive to initialization (use k-means++ for smarter starts), and it struggles with non-spherical clusters or very different cluster sizes.",
+        ],
+      },
+      {
+        heading: "Principal Component Analysis (PCA)",
+        paragraphs: [
+          "The classic linear dimensionality-reduction method. PCA finds the directions of maximum variance in the data and projects onto them. The first principal component is the direction along which the data varies most; the second is the direction of greatest remaining variance, orthogonal to the first; and so on. Projecting onto the top $k$ components gives the best $k$-dimensional linear approximation of the data in terms of preserved variance.",
+        ],
+        diagram: {
+          id: "pca",
+          caption:
+            "Fig 0.7 — PC1 captures the dominant direction of variation; PC2 is orthogonal. Projecting onto PC1 gives a 1-D representation.",
+        },
+      },
+      {
+        paragraphs: [
+          "Mathematically, PCA computes the eigenvectors of the covariance matrix (equivalently, the singular value decomposition of the centered data matrix). Each eigenvector is a principal component, and its eigenvalue is the variance captured along that direction. PCA assumes linear structure — for non-linear manifolds, t-SNE and UMAP are better choices, especially for visualization.",
+        ],
+      },
+      {
+        heading: "Choosing an Algorithm",
+        paragraphs: ["A rough mental decision tree for when to reach for what:"],
+        list: [
+          "Tabular data, want interpretability → linear/logistic regression or a small decision tree.",
+          "Tabular data, want maximum accuracy → gradient boosting (XGBoost, LightGBM).",
+          "Tabular data, low-effort solid baseline → random forest.",
+          "Small dataset with clean class boundaries → SVM.",
+          "Text classification baseline → Naive Bayes or logistic regression.",
+          "Just want to see what's similar to what → KNN.",
+          "Images, audio, language, or any unstructured data at scale → neural networks.",
+          "No labels, want to find groups → k-means.",
+          "No labels, want to visualize or compress → PCA (linear), UMAP / t-SNE (non-linear).",
+        ],
+      },
+      {
+        paragraphs: [
+          "The thing to take away: these classical algorithms haven't been replaced, they've been joined. For most tabular business data, gradient boosting still beats neural networks outright. Deep learning's dominance is concentrated in the places where the model has to learn its own representations — images, audio, language — which is exactly where we head next.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "chapter-3-inference-engineering-and-compute",
+    number: "4",
     title: "AI Hardware and Compute",
     summary:
       "From the CPU up through GPUs and TPUs to how a model scales across thousands of chips.",
@@ -1033,7 +1033,7 @@ export const mlGuideChapters: Chapter[] = [
   },
   {
     slug: "chapter-4-transformers",
-    number: "4",
+    number: "5",
     title: "Transformers",
     summary:
       "Attention Is All You Need was published in 2017, and we're still living in its world.",
@@ -1360,7 +1360,7 @@ export const mlGuideChapters: Chapter[] = [
   },
   {
     slug: "chapter-5-vision",
-    number: "5",
+    number: "6",
     title: "Vision",
     summary:
       "From pixels to CNNs to YOLO, segmentation, SAM, and vision transformers — how machines learned to see.",
@@ -1739,7 +1739,7 @@ export const mlGuideChapters: Chapter[] = [
   },
   {
     slug: "chapter-6-agentic-engineering",
-    number: "6",
+    number: "7",
     title: "Agentic Engineering",
     summary:
       "When an LLM stops answering and starts acting — the agent loop, tools, MCP, and the security that has to come with it.",
