@@ -74,6 +74,12 @@ import { TfSwiglu } from "./interactive/tf-swiglu-ffn-vs-relu-ffn";
 import { TfSlidingWindow } from "./interactive/tf-sliding-window-attention-the-depth-trick";
 import { TfKvCache } from "./interactive/tf-kv-cache";
 import { TfPrefillDecode } from "./interactive/tf-prefill-vs-decode";
+import { TfMhaGqaMqa } from "./interactive/tf-mha-vs-gqa-vs-mqa";
+import { TfFlashAttention } from "./interactive/tf-flash-attention-tiling-online-softmax";
+import { TfMixtureOfExperts } from "./interactive/tf-mixture-of-experts-moe";
+import { TfQuantization } from "./interactive/tf-quantization";
+import { TfSpeculativeDecoding } from "./interactive/tf-speculative-decoding";
+import { TfRag } from "./interactive/tf-retrieval-augmented-generation-rag";
 import {
   LinearRegression,
   KNN,
@@ -214,6 +220,12 @@ const registry: Record<string, Entry> = {
   "tf-sliding-window-attention-the-depth-trick": { Comp: TfSlidingWindow, interactive: true },
   "tf-kv-cache": { Comp: TfKvCache, interactive: true },
   "tf-prefill-vs-decode": { Comp: TfPrefillDecode, interactive: true },
+  "tf-mha-vs-gqa-vs-mqa": { Comp: TfMhaGqaMqa, interactive: true },
+  "tf-flash-attention-tiling-online-softmax": { Comp: TfFlashAttention, interactive: true },
+  "tf-mixture-of-experts-moe": { Comp: TfMixtureOfExperts, interactive: true },
+  "tf-quantization": { Comp: TfQuantization, interactive: true },
+  "tf-speculative-decoding": { Comp: TfSpeculativeDecoding, interactive: true },
+  "tf-retrieval-augmented-generation-rag": { Comp: TfRag, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
