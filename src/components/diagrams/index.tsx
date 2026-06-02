@@ -86,6 +86,9 @@ import { TfLoraWithoutRegret } from "./interactive/tf-lora-without-regret-when-l
 import { TfGan } from "./interactive/tf-gan-generator-vs-discriminator";
 import { TfGanConvergence } from "./interactive/tf-why-gan-training-converges";
 import { TfAutoencoder } from "./interactive/tf-autoencoder";
+import { TfVaeDotsVsClouds } from "./interactive/tf-why-a-vae-can-generate-dots-vs-clouds";
+import { TfVaeTwoPulls } from "./interactive/tf-vae-generation-and-the-two-pulls";
+import { TfGenerativeTradeoffs } from "./interactive/tf-generative-model-tradeoffs-autoencoder-vs-vae-vs-gan";
 import {
   LinearRegression,
   KNN,
@@ -238,6 +241,9 @@ const registry: Record<string, Entry> = {
   "tf-gan-generator-vs-discriminator": { Comp: TfGan, interactive: true },
   "tf-why-gan-training-converges": { Comp: TfGanConvergence, interactive: true },
   "tf-autoencoder": { Comp: TfAutoencoder, interactive: true },
+  "tf-why-a-vae-can-generate-dots-vs-clouds": { Comp: TfVaeDotsVsClouds, interactive: true },
+  "tf-vae-generation-and-the-two-pulls": { Comp: TfVaeTwoPulls, interactive: true },
+  "tf-generative-model-tradeoffs-autoencoder-vs-vae-vs-gan": { Comp: TfGenerativeTradeoffs, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
