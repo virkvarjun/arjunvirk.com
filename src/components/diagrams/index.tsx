@@ -129,6 +129,14 @@ import { VisPromptableSegmentation } from "./interactive/vis-task-specific-vs-pr
 import { VisSamComponents } from "./interactive/vis-sam-s-three-components-and-their-cost-asymmetry";
 import { VisVitPatchTokenization } from "./interactive/vis-vit-patch-tokenization-sam-s-encoder";
 import { VisWindowedAttention } from "./interactive/vis-windowed-periodic-global-attention";
+import { VisRelativePositionBias } from "./interactive/vis-decomposed-relative-position-bias";
+import { VisPointPrompt } from "./interactive/vis-encoding-a-point-prompt";
+import { VisSparseVsDensePrompts } from "./interactive/vis-sparse-vs-dense-prompts";
+import { VisTwoWayAttention } from "./interactive/vis-sam-s-two-way-attention-decoder-block";
+import { VisHypernetworkMask } from "./interactive/vis-hypernetwork-mask-generation";
+import { VisSamDataEngine } from "./interactive/vis-sam-s-three-stage-data-engine";
+import { VisSam2Video } from "./interactive/vis-sam-2-streaming-video-segmentation-with-memory";
+import { VisInductiveBiasVsScale } from "./interactive/vis-inductive-bias-vs-scale-cnn-vs-vit";
 import {
   LinearRegression,
   KNN,
@@ -324,6 +332,14 @@ const registry: Record<string, Entry> = {
   "vis-sam-s-three-components-and-their-cost-asymmetry": { Comp: VisSamComponents, interactive: true },
   "vis-vit-patch-tokenization-sam-s-encoder": { Comp: VisVitPatchTokenization, interactive: true },
   "vis-windowed-periodic-global-attention": { Comp: VisWindowedAttention, interactive: true },
+  "vis-decomposed-relative-position-bias": { Comp: VisRelativePositionBias, interactive: true },
+  "vis-encoding-a-point-prompt": { Comp: VisPointPrompt, interactive: true },
+  "vis-sparse-vs-dense-prompts": { Comp: VisSparseVsDensePrompts, interactive: true },
+  "vis-sam-s-two-way-attention-decoder-block": { Comp: VisTwoWayAttention, interactive: true },
+  "vis-hypernetwork-mask-generation": { Comp: VisHypernetworkMask, interactive: true },
+  "vis-sam-s-three-stage-data-engine": { Comp: VisSamDataEngine, interactive: true },
+  "vis-sam-2-streaming-video-segmentation-with-memory": { Comp: VisSam2Video, interactive: true },
+  "vis-inductive-bias-vs-scale-cnn-vs-vit": { Comp: VisInductiveBiasVsScale, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
