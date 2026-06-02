@@ -228,6 +228,9 @@ import { AgtNXMVsNMTheIntegrationExplosion } from "./interactive/agt-n-x-m-vs-n-
 import { AgtMcpHostClientsAndServers } from "./interactive/agt-mcp-host-clients-and-servers";
 import { AgtFourMultiAgentPatterns } from "./interactive/agt-four-multi-agent-patterns";
 import { AgtKeepingTheContextWindowLean } from "./interactive/agt-keeping-the-context-window-lean";
+import { AgtTheLethalTrifecta } from "./interactive/agt-the-lethal-trifecta";
+import { AgtDefusingTheTrifectaArchitecturalDefenses } from "./interactive/agt-defusing-the-trifecta-architectural-defenses";
+import { AgtTheWholeAgentPicture } from "./interactive/agt-the-whole-agent-picture";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -459,6 +462,9 @@ const registry: Record<string, Entry> = {
   "agt-mcp-host-clients-and-servers": { Comp: AgtMcpHostClientsAndServers, interactive: true },
   "agt-four-multi-agent-patterns": { Comp: AgtFourMultiAgentPatterns, interactive: true },
   "agt-keeping-the-context-window-lean": { Comp: AgtKeepingTheContextWindowLean, interactive: true },
+  "agt-the-lethal-trifecta": { Comp: AgtTheLethalTrifecta, interactive: true },
+  "agt-defusing-the-trifecta-architectural-defenses": { Comp: AgtDefusingTheTrifectaArchitecturalDefenses, interactive: true },
+  "agt-the-whole-agent-picture": { Comp: AgtTheWholeAgentPicture, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
