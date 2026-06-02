@@ -137,6 +137,14 @@ import { VisHypernetworkMask } from "./interactive/vis-hypernetwork-mask-generat
 import { VisSamDataEngine } from "./interactive/vis-sam-s-three-stage-data-engine";
 import { VisSam2Video } from "./interactive/vis-sam-2-streaming-video-segmentation-with-memory";
 import { VisInductiveBiasVsScale } from "./interactive/vis-inductive-bias-vs-scale-cnn-vs-vit";
+import { VisImageToPatchTokens } from "./interactive/vis-image-to-patch-tokens";
+import { VisClsTokenPosEmbed } from "./interactive/vis-cls-token-learnable-positional-embeddings";
+import { VisVitEncoderBlock } from "./interactive/vis-the-vit-encoder-block";
+import { VisVitSizes } from "./interactive/vis-vit-sizes-base-large-huge";
+import { VisAttentionVsConv } from "./interactive/vis-all-to-all-attention-vs-a-3x3-convolution";
+import { VisPatchSizeCost } from "./interactive/vis-why-patch-size-matters-quadratic-attention-cost";
+import { VisSwinShiftedWindow } from "./interactive/vis-swin-s-shifted-window-attention";
+import { VisMaeDino } from "./interactive/vis-self-supervised-vits-mae-and-dino";
 import {
   LinearRegression,
   KNN,
@@ -340,6 +348,14 @@ const registry: Record<string, Entry> = {
   "vis-sam-s-three-stage-data-engine": { Comp: VisSamDataEngine, interactive: true },
   "vis-sam-2-streaming-video-segmentation-with-memory": { Comp: VisSam2Video, interactive: true },
   "vis-inductive-bias-vs-scale-cnn-vs-vit": { Comp: VisInductiveBiasVsScale, interactive: true },
+  "vis-image-to-patch-tokens": { Comp: VisImageToPatchTokens, interactive: true },
+  "vis-cls-token-learnable-positional-embeddings": { Comp: VisClsTokenPosEmbed, interactive: true },
+  "vis-the-vit-encoder-block": { Comp: VisVitEncoderBlock, interactive: true },
+  "vis-vit-sizes-base-large-huge": { Comp: VisVitSizes, interactive: true },
+  "vis-all-to-all-attention-vs-a-3x3-convolution": { Comp: VisAttentionVsConv, interactive: true },
+  "vis-why-patch-size-matters-quadratic-attention-cost": { Comp: VisPatchSizeCost, interactive: true },
+  "vis-swin-s-shifted-window-attention": { Comp: VisSwinShiftedWindow, interactive: true },
+  "vis-self-supervised-vits-mae-and-dino": { Comp: VisMaeDino, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
