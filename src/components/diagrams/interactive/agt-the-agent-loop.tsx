@@ -27,20 +27,33 @@ interface NodeDef {
   fill: string;
 }
 
-const VB_W = 480;
-const VB_H = 300;
+const VB_W = 460;
+const VB_H = 272;
 
 const NODES: NodeDef[] = [
-  { id: "goal", x: 24, y: 28, w: 150, h: 48, title: "User goal", sub: "initial instruction", color: C.muted, fill: "var(--card)" },
-  { id: "reason", x: 165, y: 118, w: 150, h: 56, title: "LLM reasoner", sub: "plans next step", color: C.blue, fill: C.blueFill },
-  { id: "tool", x: 330, y: 28, w: 126, h: 48, title: "Tool call", sub: "API, code, search", color: C.coral, fill: C.coralFill },
-  { id: "observe", x: 330, y: 200, w: 126, h: 48, title: "Observation", sub: "result fed back", color: C.green, fill: C.greenFill },
-  { id: "final", x: 24, y: 200, w: 150, h: 48, title: "Final answer", sub: "goal achieved", color: C.violet, fill: "var(--card)" },
+  { id: "goal", x: 20, y: 38, w: 140, h: 46, title: "User goal", sub: "initial instruction", color: C.muted, fill: "var(--card)" },
+  { id: "reason", x: 150, y: 110, w: 160, h: 52, title: "LLM reasoner", sub: "plans next step", color: C.blue, fill: C.blueFill },
+  { id: "tool", x: 300, y: 38, w: 140, h: 46, title: "Tool call", sub: "API, code, search", color: C.coral, fill: C.coralFill },
+  { id: "observe", x: 300, y: 196, w: 140, h: 46, title: "Observation", sub: "result fed back", color: C.green, fill: C.greenFill },
+  { id: "final", x: 20, y: 196, w: 140, h: 46, title: "Final answer", sub: "goal achieved", color: C.violet, fill: "var(--card)" },
 ];
 
 const POS = Object.fromEntries(NODES.map((n) => [n.id, n])) as Record<NodeId, NodeDef>;
-const cx = (n: NodeDef) => n.x + n.w / 2;
-const cy = (n: NodeDef) => n.y + n.h / 2;
+const ctrX = (n: NodeDef) => n.x + n.w / 2;
+const ctrY = (n: NodeDef) => n.y + n.h / 2;
+
+// Point on the border of rect `n` along the ray toward (tx,ty).
+function border(n: NodeDef, tx: number, ty: number): [number, number] {
+  const cx = ctrX(n);
+  const cy = ctrY(n);
+  const dx = tx - cx;
+  const dy = ty - cy;
+  if (dx === 0 && dy === 0) return [cx, cy];
+  const sx = dx === 0 ? Infinity : n.w / 2 / Math.abs(dx);
+  const sy = dy === 0 ? Infinity : n.h / 2 / Math.abs(dy);
+  const t = Math.min(sx, sy);
+  return [cx + dx * t, cy + dy * t];
+}
 
 // One simulated turn's flavor text, cycled as the loop runs.
 const TURN_FLAVOR = [
@@ -57,14 +70,14 @@ interface LogLine {
   text: string;
 }
 
+const GOAL_LINE: LogLine = { kind: "goal", text: 'goal: "check the NVDA price and summarize my notes"' };
+
 export function AgtTheAgentLoop() {
   const [active, setActive] = useState<NodeId>("goal");
   const [turn, setTurn] = useState(0);
   const [done, setDone] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [log, setLog] = useState<LogLine[]>([
-    { kind: "goal", text: "goal: \"check the NVDA price and summarize my notes\"" },
-  ]);
+  const [log, setLog] = useState<LogLine[]>([GOAL_LINE]);
 
   const push = (line: LogLine) => setLog((l) => [...l, line]);
 
@@ -110,25 +123,7 @@ export function AgtTheAgentLoop() {
     setTurn(0);
     setDone(false);
     setFinished(false);
-    setLog([{ kind: "goal", text: "goal: \"check the NVDA price and summarize my notes\"" }]);
-  };
-
-  // arrow helper between node edges
-  const edge = (a: NodeId, b: NodeId, dim: boolean) => {
-    const na = POS[a];
-    const nb = POS[b];
-    return (
-      <line
-        x1={cx(na)}
-        y1={cy(na)}
-        x2={cx(nb)}
-        y2={cy(nb)}
-        stroke={dim ? C.line : C.ink}
-        strokeWidth={dim ? 1.2 : 2}
-        opacity={dim ? 0.5 : 1}
-        markerEnd={dim ? "url(#al-head-dim)" : "url(#al-head)"}
-      />
-    );
+    setLog([GOAL_LINE]);
   };
 
   // is this directed edge currently "live" (just traversed)?
@@ -141,40 +136,74 @@ export function AgtTheAgentLoop() {
     return false;
   };
 
+  // Draw an arrow from box a to box b, clipped to both borders.
+  const edge = (a: NodeId, b: NodeId) => {
+    const na = POS[a];
+    const nb = POS[b];
+    const [x1, y1] = border(na, ctrX(nb), ctrY(nb));
+    const [x2, y2] = border(nb, ctrX(na), ctrY(na));
+    const live = liveEdge(a, b);
+    return (
+      <line
+        key={`${a}-${b}`}
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke={live ? C.ink : C.line}
+        strokeWidth={live ? 2.2 : 1.3}
+        markerEnd={live ? "url(#al-head)" : "url(#al-head-dim)"}
+      />
+    );
+  };
+
+  // midpoint of the border-to-border segment, for label placement
+  const mid = (a: NodeId, b: NodeId): [number, number] => {
+    const na = POS[a];
+    const nb = POS[b];
+    const [x1, y1] = border(na, ctrX(nb), ctrY(nb));
+    const [x2, y2] = border(nb, ctrX(na), ctrY(na));
+    return [(x1 + x2) / 2, (y1 + y2) / 2];
+  };
+
   const colorFor = (k: LogLine["kind"]) =>
     k === "tool" ? C.coral : k === "observe" ? C.green : k === "final" ? C.violet : k === "reason" ? C.blue : C.muted;
+
+  const [actX, actY] = mid("reason", "tool");
+  const [exitX, exitY] = mid("reason", "final");
+  const [obsX, obsY] = mid("observe", "reason");
 
   return (
     <div>
       <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="h-auto w-full" role="img" aria-label="The agent loop: think, act, observe, repeat">
         <defs>
-          <marker id="al-head" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <marker id="al-head" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
             <path d="M0,0 L6,3 L0,6 Z" fill={C.ink} />
           </marker>
-          <marker id="al-head-dim" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <marker id="al-head-dim" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
             <path d="M0,0 L6,3 L0,6 Z" fill={C.line} />
           </marker>
         </defs>
 
-        <text x={VB_W / 2} y={16} fontSize={13} fill={C.ink} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+        <text x={VB_W / 2} y={18} fontSize={13} fill={C.ink} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
           The Agent Loop
         </text>
 
-        {/* edges */}
-        {edge("goal", "reason", !liveEdge("goal", "reason"))}
-        {edge("reason", "tool", !liveEdge("reason", "tool"))}
-        {edge("tool", "observe", !liveEdge("tool", "observe"))}
-        {edge("observe", "reason", !liveEdge("observe", "reason"))}
-        {edge("reason", "final", !liveEdge("reason", "final"))}
+        {/* edges (drawn under nodes; arrowheads sit on the box borders) */}
+        {edge("goal", "reason")}
+        {edge("reason", "tool")}
+        {edge("tool", "observe")}
+        {edge("observe", "reason")}
+        {edge("reason", "final")}
 
-        {/* edge labels */}
-        <text x={cx(POS.reason) + 70} y={cy(POS.reason) - 28} fontSize={8.5} fill={C.coral} fontFamily={MONO} textAnchor="middle">
+        {/* edge labels at the open midpoints */}
+        <text x={actX + 6} y={actY - 4} fontSize={8.5} fill={C.coral} fontFamily={MONO} textAnchor="middle">
           act
         </text>
-        <text x={cx(POS.reason) - 78} y={cy(POS.reason) + 24} fontSize={8.5} fill={C.violet} fontFamily={MONO} textAnchor="middle">
+        <text x={exitX} y={exitY - 5} fontSize={8.5} fill={C.violet} fontFamily={MONO} textAnchor="middle">
           done? exit
         </text>
-        <text x={cx(POS.observe) + 6} y={cy(POS.observe) - 22} fontSize={8.5} fill={C.green} fontFamily={MONO} textAnchor="start">
+        <text x={obsX - 4} y={obsY - 4} fontSize={8.5} fill={C.green} fontFamily={MONO} textAnchor="middle">
           observe
         </text>
 
@@ -183,7 +212,7 @@ export function AgtTheAgentLoop() {
           const isActive = n.id === active;
           const isFinalDimmed = n.id === "final" && !done && !finished;
           return (
-            <g key={n.id} opacity={isFinalDimmed ? 0.45 : 1}>
+            <g key={n.id} opacity={isFinalDimmed ? 0.5 : 1}>
               <rect
                 x={n.x}
                 y={n.y}
@@ -194,10 +223,10 @@ export function AgtTheAgentLoop() {
                 stroke={isActive ? n.color : C.line}
                 strokeWidth={isActive ? 2.4 : 1.2}
               />
-              <text x={cx(n)} y={n.y + 21} fontSize={11} fill={n.color === C.muted ? C.ink : n.color} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+              <text x={ctrX(n)} y={n.y + 20} fontSize={11} fill={n.color === C.muted ? C.ink : n.color} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
                 {n.title}
               </text>
-              <text x={cx(n)} y={n.y + 36} fontSize={8.5} fill={C.muted} fontFamily={MONO} textAnchor="middle">
+              <text x={ctrX(n)} y={n.y + 35} fontSize={8.5} fill={C.muted} fontFamily={MONO} textAnchor="middle">
                 {n.sub}
               </text>
             </g>
