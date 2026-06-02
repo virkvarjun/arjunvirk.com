@@ -97,6 +97,14 @@ import { VisWorkedConvolution } from "./interactive/vis-worked-convolution-examp
 import { VisManyFilters } from "./interactive/vis-many-filters-many-feature-maps";
 import { VisConvVsFcParams } from "./interactive/vis-conv-vs-fully-connected-parameter-count";
 import { VisPaddingStride } from "./interactive/vis-padding-stride-and-output-size";
+import { VisReluBlock } from "./interactive/vis-relu-and-the-conv-batchnorm-relu-block";
+import { VisPooling } from "./interactive/vis-pooling-max-average-and-global";
+import { VisFeatureHierarchy } from "./interactive/vis-the-emergent-feature-hierarchy";
+import { VisReceptiveField } from "./interactive/vis-how-the-receptive-field-grows-with-depth";
+import { VisFullCnnShapes } from "./interactive/vis-a-full-cnn-tensor-shapes-from-input-to-logits";
+import { VisThreeCnnIdeas } from "./interactive/vis-the-three-ideas-that-made-cnns-dominate";
+import { VisDpmSlidingWindow } from "./interactive/vis-dpm-detection-by-sliding-window";
+import { VisRcnnTwoStage } from "./interactive/vis-r-cnn-two-stage-detection";
 import {
   LinearRegression,
   KNN,
@@ -260,6 +268,14 @@ const registry: Record<string, Entry> = {
   "vis-many-filters-many-feature-maps": { Comp: VisManyFilters, interactive: true },
   "vis-conv-vs-fully-connected-parameter-count": { Comp: VisConvVsFcParams, interactive: true },
   "vis-padding-stride-and-output-size": { Comp: VisPaddingStride, interactive: true },
+  "vis-relu-and-the-conv-batchnorm-relu-block": { Comp: VisReluBlock, interactive: true },
+  "vis-pooling-max-average-and-global": { Comp: VisPooling, interactive: true },
+  "vis-the-emergent-feature-hierarchy": { Comp: VisFeatureHierarchy, interactive: true },
+  "vis-how-the-receptive-field-grows-with-depth": { Comp: VisReceptiveField, interactive: true },
+  "vis-a-full-cnn-tensor-shapes-from-input-to-logits": { Comp: VisFullCnnShapes, interactive: true },
+  "vis-the-three-ideas-that-made-cnns-dominate": { Comp: VisThreeCnnIdeas, interactive: true },
+  "vis-dpm-detection-by-sliding-window": { Comp: VisDpmSlidingWindow, interactive: true },
+  "vis-r-cnn-two-stage-detection": { Comp: VisRcnnTwoStage, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
