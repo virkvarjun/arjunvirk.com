@@ -56,6 +56,12 @@ import { TfLstmCell } from "./interactive/tf-lstm-cell";
 import { TfSeq2seq } from "./interactive/tf-seq2seq-encoder-decoder-lstm";
 import { TfBahdanau } from "./interactive/tf-bahdanau-attention-added-to-seq2seq";
 import { TfTransformer } from "./interactive/tf-the-transformer-encoder-decoder";
+import { TfTokenization } from "./interactive/tf-tokenization";
+import { TfTokenEmbeddings } from "./interactive/tf-token-embeddings";
+import { TfSelfAttention } from "./interactive/tf-scaled-dot-product-self-attention";
+import { TfMultiHead } from "./interactive/tf-multi-head-attention";
+import { TfMaskedAttention } from "./interactive/tf-masked-self-attention";
+import { TfCrossAttention } from "./interactive/tf-cross-attention";
 import {
   LinearRegression,
   KNN,
@@ -178,6 +184,12 @@ const registry: Record<string, Entry> = {
   "tf-seq2seq-encoder-decoder-lstm": { Comp: TfSeq2seq, interactive: true },
   "tf-bahdanau-attention-added-to-seq2seq": { Comp: TfBahdanau, interactive: true },
   "tf-the-transformer-encoder-decoder": { Comp: TfTransformer, interactive: true },
+  "tf-tokenization": { Comp: TfTokenization, interactive: true },
+  "tf-token-embeddings": { Comp: TfTokenEmbeddings, interactive: true },
+  "tf-scaled-dot-product-self-attention": { Comp: TfSelfAttention, interactive: true },
+  "tf-multi-head-attention": { Comp: TfMultiHead, interactive: true },
+  "tf-masked-self-attention": { Comp: TfMaskedAttention, interactive: true },
+  "tf-cross-attention": { Comp: TfCrossAttention, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
