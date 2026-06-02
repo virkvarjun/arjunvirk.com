@@ -220,6 +220,9 @@ import { AgtOpenclawArchitecture } from "./interactive/agt-openclaw-architecture
 import { AgtAnInboundMessageSJourneyThroughOpenclaw } from "./interactive/agt-an-inbound-message-s-journey-through-openclaw";
 import { AgtSoulMdIsReadEveryTurn } from "./interactive/agt-soul-md-is-read-every-turn";
 import { AgtFileBasedMemoryVsAVectorDatabase } from "./interactive/agt-file-based-memory-vs-a-vector-database";
+import { AgtTheHeartbeatLoop } from "./interactive/agt-the-heartbeat-loop";
+import { AgtJustInTimeSkillLoading } from "./interactive/agt-just-in-time-skill-loading";
+import { AgtWhereDoesYourAgentLive } from "./interactive/agt-where-does-your-agent-live";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -443,6 +446,9 @@ const registry: Record<string, Entry> = {
   "agt-an-inbound-message-s-journey-through-openclaw": { Comp: AgtAnInboundMessageSJourneyThroughOpenclaw, interactive: true },
   "agt-soul-md-is-read-every-turn": { Comp: AgtSoulMdIsReadEveryTurn, interactive: true },
   "agt-file-based-memory-vs-a-vector-database": { Comp: AgtFileBasedMemoryVsAVectorDatabase, interactive: true },
+  "agt-the-heartbeat-loop": { Comp: AgtTheHeartbeatLoop, interactive: true },
+  "agt-just-in-time-skill-loading": { Comp: AgtJustInTimeSkillLoading, interactive: true },
+  "agt-where-does-your-agent-live": { Comp: AgtWhereDoesYourAgentLive, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
