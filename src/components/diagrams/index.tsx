@@ -223,6 +223,9 @@ import { AgtFileBasedMemoryVsAVectorDatabase } from "./interactive/agt-file-base
 import { AgtTheHeartbeatLoop } from "./interactive/agt-the-heartbeat-loop";
 import { AgtJustInTimeSkillLoading } from "./interactive/agt-just-in-time-skill-loading";
 import { AgtWhereDoesYourAgentLive } from "./interactive/agt-where-does-your-agent-live";
+import { AgtAnatomyOfAToolCall } from "./interactive/agt-anatomy-of-a-tool-call";
+import { AgtNXMVsNMTheIntegrationExplosion } from "./interactive/agt-n-x-m-vs-n-m-the-integration-explosion";
+import { AgtMcpHostClientsAndServers } from "./interactive/agt-mcp-host-clients-and-servers";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -449,6 +452,9 @@ const registry: Record<string, Entry> = {
   "agt-the-heartbeat-loop": { Comp: AgtTheHeartbeatLoop, interactive: true },
   "agt-just-in-time-skill-loading": { Comp: AgtJustInTimeSkillLoading, interactive: true },
   "agt-where-does-your-agent-live": { Comp: AgtWhereDoesYourAgentLive, interactive: true },
+  "agt-anatomy-of-a-tool-call": { Comp: AgtAnatomyOfAToolCall, interactive: true },
+  "agt-n-x-m-vs-n-m-the-integration-explosion": { Comp: AgtNXMVsNMTheIntegrationExplosion, interactive: true },
+  "agt-mcp-host-clients-and-servers": { Comp: AgtMcpHostClientsAndServers, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
