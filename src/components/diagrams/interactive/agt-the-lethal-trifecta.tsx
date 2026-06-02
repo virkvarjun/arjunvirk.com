@@ -12,14 +12,14 @@ import { C, MONO } from "../frame";
 type Leg = "data" | "comms" | "untrusted";
 
 const LEGS: { id: Leg; label: string; sub: string; cx: number; cy: number; color: string }[] = [
-  { id: "data", label: "Private data", sub: "email, files, secrets", cx: 192, cy: 108, color: C.blue },
-  { id: "comms", label: "External comms", sub: "HTTP, send messages", cx: 288, cy: 108, color: C.coral },
-  { id: "untrusted", label: "Untrusted content", sub: "web pages, emails read", cx: 240, cy: 178, color: C.green },
+  { id: "data", label: "Private data", sub: "email, files, secrets", cx: 180, cy: 126, color: C.blue },
+  { id: "comms", label: "External comms", sub: "HTTP, send messages", cx: 300, cy: 126, color: C.coral },
+  { id: "untrusted", label: "Untrusted content", sub: "web pages, emails read", cx: 240, cy: 194, color: C.green },
 ];
 
 const VB_W = 480;
-const VB_H = 280;
-const R = 78;
+const VB_H = 322;
+const R = 72;
 
 const btn =
   "rounded border border-[var(--border)] px-3 py-1 font-mono text-xs text-[var(--foreground)] transition-colors hover:bg-[var(--background)]";
@@ -54,16 +54,16 @@ export function AgtTheLethalTrifecta() {
           />
         ))}
 
-        {/* labels */}
+        {/* labels — placed outside each circle (top two above, bottom one below) */}
         {LEGS.map((l, i) => {
-          const lx = i === 0 ? l.cx - 70 : i === 1 ? l.cx + 70 : l.cx;
-          const ly = i === 2 ? l.cy + 64 : l.cy - 56;
+          // i=2 (untrusted) sits below its circle; the top two sit above theirs
+          const ly = i === 2 ? l.cy + R + 18 : l.cy - R - 14;
           return (
             <g key={`lbl-${l.id}`}>
-              <text x={lx} y={ly} fontSize={9.5} fill={on[l.id] ? l.color : C.muted} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+              <text x={l.cx} y={ly} fontSize={9.5} fill={on[l.id] ? l.color : C.muted} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
                 {l.label}
               </text>
-              <text x={lx} y={ly + 12} fontSize={7.5} fill={C.muted} fontFamily={MONO} textAnchor="middle">
+              <text x={l.cx} y={ly + 12} fontSize={7.5} fill={C.muted} fontFamily={MONO} textAnchor="middle">
                 {l.sub}
               </text>
             </g>
@@ -88,7 +88,7 @@ export function AgtTheLethalTrifecta() {
         )}
 
         {/* attack path note */}
-        <text x={VB_W / 2} y={262} fontSize={8.5} fill={allOn ? C.coral : C.green} fontFamily={MONO} textAnchor="middle">
+        <text x={VB_W / 2} y={314} fontSize={8} fill={allOn ? C.coral : C.green} fontFamily={MONO} textAnchor="middle">
           {allOn
             ? "injected instruction → reads private data → ships it to an attacker"
             : "remove any one leg and the attack can't complete"}

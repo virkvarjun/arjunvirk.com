@@ -13,9 +13,9 @@ import { C, MONO } from "../frame";
 type Leg = "data" | "comms" | "untrusted";
 
 const LEGS: { id: Leg; label: string; cx: number; cy: number; color: string }[] = [
-  { id: "data", label: "Private data", cx: 150, cy: 96, color: C.blue },
-  { id: "comms", label: "External comms", cx: 240, cy: 96, color: C.coral },
-  { id: "untrusted", label: "Untrusted content", cx: 195, cy: 162, color: C.green },
+  { id: "data", label: "Private data", cx: 108, cy: 112, color: C.blue },
+  { id: "comms", label: "External comms", cx: 218, cy: 112, color: C.coral },
+  { id: "untrusted", label: "Untrusted content", cx: 163, cy: 178, color: C.green },
 ];
 
 interface Defense {
@@ -39,8 +39,8 @@ const SIDE_CARDS = [
 ];
 
 const VB_W = 480;
-const VB_H = 250;
-const R = 70;
+const VB_H = 264;
+const R = 58;
 
 const btn =
   "rounded border border-[var(--border)] px-3 py-1 font-mono text-xs text-[var(--foreground)] transition-colors hover:bg-[var(--background)]";
@@ -92,12 +92,11 @@ export function AgtDefusingTheTrifectaArchitecturalDefenses() {
             </g>
           );
         })}
-        {/* leg labels */}
+        {/* leg labels — outside each circle (top two above, bottom one below) */}
         {LEGS.map((l, i) => {
-          const lx = i === 0 ? l.cx - 58 : i === 1 ? l.cx + 60 : l.cx;
-          const ly = i === 2 ? l.cy + 56 : l.cy - 50;
+          const ly = i === 2 ? l.cy + R + 16 : l.cy - R - 12;
           return (
-            <text key={`lbl-${l.id}`} x={lx} y={ly} fontSize={8.5} fill={legAlive(l.id) ? l.color : C.muted} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
+            <text key={`lbl-${l.id}`} x={l.cx} y={ly} fontSize={8.5} fill={legAlive(l.id) ? l.color : C.muted} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
               {l.label}
             </text>
           );

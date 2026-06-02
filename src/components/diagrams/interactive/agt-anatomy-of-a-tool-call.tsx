@@ -62,9 +62,9 @@ export function AgtAnatomyOfAToolCall() {
           Model
         </text>
 
-        {/* boundary line */}
-        <line x1={MID} y1={62} x2={MID} y2={228} stroke={C.coral} strokeWidth={1.4} strokeDasharray="4 3" />
-        <text x={MID} y={224} fontSize={7.5} fill={C.coral} fontFamily={MONO} textAnchor="middle">
+        {/* boundary line (stops above the labels so it doesn't strike through them) */}
+        <line x1={MID} y1={62} x2={MID} y2={196} stroke={C.coral} strokeWidth={1.4} strokeDasharray="4 3" />
+        <text x={MID} y={228} fontSize={7.5} fill={C.coral} fontFamily={MONO} textAnchor="middle">
           model never crosses
         </text>
 
@@ -110,7 +110,7 @@ export function AgtAnatomyOfAToolCall() {
 
         {/* tool_use_id link highlight when result returns */}
         {stage >= 4 && (
-          <text x={VB_W / 2} y={206} fontSize={8} fill={C.violet} fontFamily={MONO} textAnchor="middle">
+          <text x={VB_W / 2} y={212} fontSize={8} fill={C.violet} fontFamily={MONO} textAnchor="middle">
             tool_use_id &ldquo;toolu_01A&rdquo; links step 2 → step 4
           </text>
         )}

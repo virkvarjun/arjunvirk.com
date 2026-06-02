@@ -19,7 +19,7 @@ interface Sub {
 }
 
 const VB_W = 480;
-const VB_H = 320;
+const VB_H = 256;
 
 // gateway interior box
 const GW_X = 120;
@@ -103,8 +103,8 @@ export function AgtOpenclawArchitecture() {
 
         {/* local files strip */}
         <rect x={GW_X + 16} y={GW_Y + GW_H - 34} width={GW_W - 32} height={24} rx={5} fill={C.greenFill} stroke={C.green} strokeWidth={1.2} />
-        <text x={GW_X + GW_W / 2} y={GW_Y + GW_H - 18} fontSize={8} fill={C.green} fontFamily={MONO} textAnchor="middle">
-          Local files: workspace · memory · skills (Markdown + YAML on disk)
+        <text x={GW_X + GW_W / 2} y={GW_Y + GW_H - 18} fontSize={7} fill={C.green} fontFamily={MONO} textAnchor="middle">
+          Local files: workspace · memory · skills (on disk)
         </text>
 
         {/* external Model API */}
@@ -120,14 +120,8 @@ export function AgtOpenclawArchitecture() {
         </text>
         {/* runtime -> model link */}
         <line x1={SUBS[3].x + SUB_W} y1={SUBS[3].y + SUB_H / 2} x2={410} y2={GW_Y + 75} stroke={C.coral} strokeWidth={1.6} markerEnd="url(#oc-head)" />
-        <text x={400} y={GW_Y + 40} fontSize={7.5} fill={C.coral} fontFamily={MONO} textAnchor="end">
+        <text x={441} y={GW_Y + 112} fontSize={7} fill={C.coral} fontFamily={MONO} textAnchor="middle">
           only external dep
-        </text>
-
-        {/* selected job readout */}
-        <rect x={GW_X} y={GW_Y + GW_H + 14} width={GW_W} height={44} rx={6} fill="var(--card)" stroke={C.blue} strokeWidth={1.2} />
-        <text x={GW_X + 10} y={GW_Y + GW_H + 30} fontSize={9.5} fill={C.blue} fontFamily={MONO} fontWeight={600}>
-          {active.title}
         </text>
       </svg>
 

@@ -31,9 +31,9 @@ const AGENTS: AgentInfo[] = [
 
 const VB_W = 480;
 const VB_H = 300;
-const PX = 56; // plot left
+const PX = 74; // plot left (leaves room for the y-axis labels)
 const PY = 40; // plot top
-const PW = 360;
+const PW = 348;
 const PH = 200;
 const mapX = (x: number) => PX + x * PW;
 const mapY = (y: number) => PY + y * PH;

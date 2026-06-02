@@ -27,7 +27,7 @@ const SERVERS: Server[] = [
 ];
 
 const VB_W = 480;
-const VB_H = 250;
+const VB_H = 264;
 
 // row centers, evenly spaced and aligned across clients and servers
 const rowY = (i: number) => 92 + i * 48;
@@ -128,8 +128,8 @@ export function AgtMcpHostClientsAndServers() {
           );
         })}
 
-        {/* lifecycle note */}
-        <text x={VB_W / 2} y={236} fontSize={7.5} fill={C.muted} fontFamily={MONO} textAnchor="middle">
+        {/* lifecycle note (below the host box so it doesn't cross the border) */}
+        <text x={VB_W / 2} y={256} fontSize={7.5} fill={C.muted} fontFamily={MONO} textAnchor="middle">
           lifecycle: initialize → list capabilities → invoke → shutdown
         </text>
       </svg>
