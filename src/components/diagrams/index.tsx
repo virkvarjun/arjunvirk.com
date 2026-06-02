@@ -68,6 +68,12 @@ import { TfResidual } from "./interactive/tf-residual-connection-add-norm";
 import { TfPositionalEncoding } from "./interactive/tf-sinusoidal-positional-encoding";
 import { TfFullTrace } from "./interactive/tf-one-encoder-layer-one-decoder-layer-full-trace";
 import { TfDecoderOnly } from "./interactive/tf-decoder-only-transformer-gpt-style";
+import { TfEncoderOnly } from "./interactive/tf-encoder-only-transformer-masked-language-modeling-bert";
+import { TfRope } from "./interactive/tf-rope-rotary-positional-embedding";
+import { TfSwiglu } from "./interactive/tf-swiglu-ffn-vs-relu-ffn";
+import { TfSlidingWindow } from "./interactive/tf-sliding-window-attention-the-depth-trick";
+import { TfKvCache } from "./interactive/tf-kv-cache";
+import { TfPrefillDecode } from "./interactive/tf-prefill-vs-decode";
 import {
   LinearRegression,
   KNN,
@@ -202,6 +208,12 @@ const registry: Record<string, Entry> = {
   "tf-sinusoidal-positional-encoding": { Comp: TfPositionalEncoding, interactive: true },
   "tf-one-encoder-layer-one-decoder-layer-full-trace": { Comp: TfFullTrace, interactive: true },
   "tf-decoder-only-transformer-gpt-style": { Comp: TfDecoderOnly, interactive: true },
+  "tf-encoder-only-transformer-masked-language-modeling-bert": { Comp: TfEncoderOnly, interactive: true },
+  "tf-rope-rotary-positional-embedding": { Comp: TfRope, interactive: true },
+  "tf-swiglu-ffn-vs-relu-ffn": { Comp: TfSwiglu, interactive: true },
+  "tf-sliding-window-attention-the-depth-trick": { Comp: TfSlidingWindow, interactive: true },
+  "tf-kv-cache": { Comp: TfKvCache, interactive: true },
+  "tf-prefill-vs-decode": { Comp: TfPrefillDecode, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
