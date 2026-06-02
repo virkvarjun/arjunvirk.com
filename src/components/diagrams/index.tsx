@@ -105,6 +105,14 @@ import { VisFullCnnShapes } from "./interactive/vis-a-full-cnn-tensor-shapes-fro
 import { VisThreeCnnIdeas } from "./interactive/vis-the-three-ideas-that-made-cnns-dominate";
 import { VisDpmSlidingWindow } from "./interactive/vis-dpm-detection-by-sliding-window";
 import { VisRcnnTwoStage } from "./interactive/vis-r-cnn-two-stage-detection";
+import { VisYoloPipeline } from "./interactive/vis-yolo-one-shot-detection-pipeline";
+import { VisYoloGrid } from "./interactive/vis-yolo-s-s-x-s-grid-and-the-responsible-cell";
+import { VisOneByOneConv } from "./interactive/vis-1x1-convolution-cheap-channel-mixing";
+import { VisYoloArchitecture } from "./interactive/vis-yolo-architecture-448x448x3-7x7x30";
+import { VisLeakyRelu } from "./interactive/vis-leaky-relu-vs-relu";
+import { VisYoloBoxEncoding } from "./interactive/vis-how-a-yolo-box-is-encoded";
+import { VisIou } from "./interactive/vis-intersection-over-union-iou";
+import { VisCellPredictionsToScores } from "./interactive/vis-from-cell-predictions-to-final-scores";
 import {
   LinearRegression,
   KNN,
@@ -276,6 +284,14 @@ const registry: Record<string, Entry> = {
   "vis-the-three-ideas-that-made-cnns-dominate": { Comp: VisThreeCnnIdeas, interactive: true },
   "vis-dpm-detection-by-sliding-window": { Comp: VisDpmSlidingWindow, interactive: true },
   "vis-r-cnn-two-stage-detection": { Comp: VisRcnnTwoStage, interactive: true },
+  "vis-yolo-one-shot-detection-pipeline": { Comp: VisYoloPipeline, interactive: true },
+  "vis-yolo-s-s-x-s-grid-and-the-responsible-cell": { Comp: VisYoloGrid, interactive: true },
+  "vis-1x1-convolution-cheap-channel-mixing": { Comp: VisOneByOneConv, interactive: true },
+  "vis-yolo-architecture-448x448x3-7x7x30": { Comp: VisYoloArchitecture, interactive: true },
+  "vis-leaky-relu-vs-relu": { Comp: VisLeakyRelu, interactive: true },
+  "vis-how-a-yolo-box-is-encoded": { Comp: VisYoloBoxEncoding, interactive: true },
+  "vis-intersection-over-union-iou": { Comp: VisIou, interactive: true },
+  "vis-from-cell-predictions-to-final-scores": { Comp: VisCellPredictionsToScores, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
