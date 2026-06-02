@@ -226,6 +226,8 @@ import { AgtWhereDoesYourAgentLive } from "./interactive/agt-where-does-your-age
 import { AgtAnatomyOfAToolCall } from "./interactive/agt-anatomy-of-a-tool-call";
 import { AgtNXMVsNMTheIntegrationExplosion } from "./interactive/agt-n-x-m-vs-n-m-the-integration-explosion";
 import { AgtMcpHostClientsAndServers } from "./interactive/agt-mcp-host-clients-and-servers";
+import { AgtFourMultiAgentPatterns } from "./interactive/agt-four-multi-agent-patterns";
+import { AgtKeepingTheContextWindowLean } from "./interactive/agt-keeping-the-context-window-lean";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -455,6 +457,8 @@ const registry: Record<string, Entry> = {
   "agt-anatomy-of-a-tool-call": { Comp: AgtAnatomyOfAToolCall, interactive: true },
   "agt-n-x-m-vs-n-m-the-integration-explosion": { Comp: AgtNXMVsNMTheIntegrationExplosion, interactive: true },
   "agt-mcp-host-clients-and-servers": { Comp: AgtMcpHostClientsAndServers, interactive: true },
+  "agt-four-multi-agent-patterns": { Comp: AgtFourMultiAgentPatterns, interactive: true },
+  "agt-keeping-the-context-window-lean": { Comp: AgtKeepingTheContextWindowLean, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
