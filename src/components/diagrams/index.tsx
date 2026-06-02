@@ -89,6 +89,14 @@ import { TfAutoencoder } from "./interactive/tf-autoencoder";
 import { TfVaeDotsVsClouds } from "./interactive/tf-why-a-vae-can-generate-dots-vs-clouds";
 import { TfVaeTwoPulls } from "./interactive/tf-vae-generation-and-the-two-pulls";
 import { TfGenerativeTradeoffs } from "./interactive/tf-generative-model-tradeoffs-autoencoder-vs-vae-vs-gan";
+import { VisImageIsATensor } from "./interactive/vis-an-image-is-just-a-tensor";
+import { VisNormalizationPipeline } from "./interactive/vis-image-normalization-pipeline";
+import { VisWhyMlpFails } from "./interactive/vis-why-an-mlp-fails-on-images";
+import { VisConvolutionSlide } from "./interactive/vis-the-convolution-slide-and-dot-product";
+import { VisWorkedConvolution } from "./interactive/vis-worked-convolution-example-5x5-input-3x3-edge-filter";
+import { VisManyFilters } from "./interactive/vis-many-filters-many-feature-maps";
+import { VisConvVsFcParams } from "./interactive/vis-conv-vs-fully-connected-parameter-count";
+import { VisPaddingStride } from "./interactive/vis-padding-stride-and-output-size";
 import {
   LinearRegression,
   KNN,
@@ -244,6 +252,14 @@ const registry: Record<string, Entry> = {
   "tf-why-a-vae-can-generate-dots-vs-clouds": { Comp: TfVaeDotsVsClouds, interactive: true },
   "tf-vae-generation-and-the-two-pulls": { Comp: TfVaeTwoPulls, interactive: true },
   "tf-generative-model-tradeoffs-autoencoder-vs-vae-vs-gan": { Comp: TfGenerativeTradeoffs, interactive: true },
+  "vis-an-image-is-just-a-tensor": { Comp: VisImageIsATensor, interactive: true },
+  "vis-image-normalization-pipeline": { Comp: VisNormalizationPipeline, interactive: true },
+  "vis-why-an-mlp-fails-on-images": { Comp: VisWhyMlpFails, interactive: true },
+  "vis-the-convolution-slide-and-dot-product": { Comp: VisConvolutionSlide, interactive: true },
+  "vis-worked-convolution-example-5x5-input-3x3-edge-filter": { Comp: VisWorkedConvolution, interactive: true },
+  "vis-many-filters-many-feature-maps": { Comp: VisManyFilters, interactive: true },
+  "vis-conv-vs-fully-connected-parameter-count": { Comp: VisConvVsFcParams, interactive: true },
+  "vis-padding-stride-and-output-size": { Comp: VisPaddingStride, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
