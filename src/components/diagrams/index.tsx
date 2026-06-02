@@ -212,6 +212,10 @@ import {
   AgentPatterns,
   LethalTrifecta,
 } from "./ch6";
+import { AgtTheAgentLoop } from "./interactive/agt-the-agent-loop";
+import { AgtTheFourLevelsOfAiUsage } from "./interactive/agt-the-four-levels-of-ai-usage";
+import { AgtLevel2ASingleToolRoundTrip } from "./interactive/agt-level-2-a-single-tool-round-trip";
+import { AgtLevel3AFixedWorkflow } from "./interactive/agt-level-3-a-fixed-workflow";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -426,6 +430,11 @@ const registry: Record<string, Entry> = {
   "mcp-nxm": { Comp: McpNxM, viewBox: "0 0 440 220" },
   "agent-patterns": { Comp: AgentPatterns, viewBox: "0 0 330 185" },
   "lethal-trifecta": { Comp: LethalTrifecta, viewBox: "0 0 380 260" },
+  // chapter 7 (Agentic Engineering) — interactive
+  "agt-the-agent-loop": { Comp: AgtTheAgentLoop, interactive: true },
+  "agt-the-four-levels-of-ai-usage": { Comp: AgtTheFourLevelsOfAiUsage, interactive: true },
+  "agt-level-2-a-single-tool-round-trip": { Comp: AgtLevel2ASingleToolRoundTrip, interactive: true },
+  "agt-level-3-a-fixed-workflow": { Comp: AgtLevel3AFixedWorkflow, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
