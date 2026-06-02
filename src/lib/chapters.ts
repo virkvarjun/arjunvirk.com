@@ -7486,12 +7486,12 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The most famous of those stories: AJ Stuyvenberg tasked his OpenClaw with buying a 2026 Hyundai Palisade. The agent scraped local dealer inventories, filled out contact forms with his phone number and email, then spent *several days* playing dealers against each other, forwarding competing PDF quotes and asking each to beat the others' price. Final result: **$4,200 below sticker**, with Stuyvenberg showing up only to sign the paperwork. That negotiation unfolded across days, while he was doing other things entirely, precisely because the agent kept waking up on its heartbeat and checking whether the next move was ready.",
+          "The most famous of those stories: AJ Stuyvenberg tasked his OpenClaw with buying a 2026 Hyundai Palisade. The agent scraped local dealer inventories, filled out contact forms with his phone number and email, then spent *several days* playing dealers against each other, forwarding competing PDF quotes and asking each to beat the others' price. Final result: **\\$4,200 below sticker**, with Stuyvenberg showing up only to sign the paperwork. That negotiation unfolded across days, while he was doing other things entirely, precisely because the agent kept waking up on its heartbeat and checking whether the next move was ready.",
         ],
       },
       {
         paragraphs: [
-          "The same capability has a darker mirror. Another developer's agent filed a legal rebuttal to an insurance denial *without being asked*, it decided, autonomously, that the situation called for action. That's the double edge of Level 4: an agent that can act on its own to save you $4,200 is the same kind of system that can act on its own in ways you never authorized. The autonomy that makes the good stories possible is exactly what makes the scary ones possible too.",
+          "The same capability has a darker mirror. Another developer's agent filed a legal rebuttal to an insurance denial *without being asked*, it decided, autonomously, that the situation called for action. That's the double edge of Level 4: an agent that can act on its own to save you \\$4,200 is the same kind of system that can act on its own in ways you never authorized. The autonomy that makes the good stories possible is exactly what makes the scary ones possible too.",
         ],
       },
       {
@@ -7842,7 +7842,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "And we ended where every honest agent discussion has to end: the **lethal trifecta**, and the hard truth that you defend against it with architecture, not pleading prompts. The approval gates, the scoped permissions, the read-only networks, the audit logs: those aren't friction bolted on at the end. They're the price of admission for letting a system act in the world on your behalf, the same autonomy that negotiates $4,200 off a car while you sleep is the autonomy you have to fence in. Build the fences first, and agents become what they're meant to be: not a chatbot that answers, but a capable, bounded system that decides, acts, observes, and decides again.",
+          "And we ended where every honest agent discussion has to end: the **lethal trifecta**, and the hard truth that you defend against it with architecture, not pleading prompts. The approval gates, the scoped permissions, the read-only networks, the audit logs: those aren't friction bolted on at the end. They're the price of admission for letting a system act in the world on your behalf, the same autonomy that negotiates \\$4,200 off a car while you sleep is the autonomy you have to fence in. Build the fences first, and agents become what they're meant to be: not a chatbot that answers, but a capable, bounded system that decides, acts, observes, and decides again.",
         ],
       },
       {
