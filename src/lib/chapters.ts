@@ -18,6 +18,8 @@ export type ChapterSection = {
   // (src/components/diagrams). Replaces the old text-only `image`.
   diagram?: { id: string; caption?: string };
   image?: { label: string; caption: string };
+  // A verbatim code / file-contents block rendered in a monospace <pre>.
+  code?: { language?: string; content: string };
 };
 
 export type Chapter = {
@@ -7206,167 +7208,647 @@ export const mlGuideChapters: Chapter[] = [
     number: "7",
     title: "Agentic Engineering",
     summary:
-      "When an LLM stops answering and starts acting — the agent loop, tools, MCP, and the security that has to come with it.",
+      "The four levels of AI usage, then a deep tour of a real Level-4 agent (OpenClaw): the Markdown-file workspace, the anatomy of a tool call, the N×M problem and MCP, multi-agent patterns, context management, and the lethal trifecta.",
     sections: [
       {
         paragraphs: [
-          "An AI agent is what you get when an LLM stops merely generating text and starts operating in a loop — deciding what to do next, executing it through a tool call, looking at the result, and going around again until the goal is met. The cleanest way to hold the distinction: a chatbot answers you; an agent decides, acts, observes, and then decides again. And once you've seen this loop, you've basically seen every framework, because the architecture barely changes between them.",
+          "Good news: this chapter should be an easier read than the last few. We're stepping back from the heavy architectural machinery, attention matrices, convolutions, loss functions, and looking at how all of that gets *put to work*. The models we've been building are about to stop being things you talk to and start being things that go and *do*.",
         ],
-        diagram: {
-          id: "agent-loop",
-          caption:
-            "Fig 6.1 — The agent loop. The model plans the next step, calls a tool, observes the result, and repeats until it emits a final answer.",
+      },
+      {
+        paragraphs: [
+          "So what's an AI agent? Here's the one-sentence version: an **AI agent** is a system where an LLM doesn't just generate text, it runs in a loop, deciding which action to take, executing it through a tool call, observing the result, and deciding again, until the goal is met. Put even more plainly: a chatbot *answers*; an agent *decides, acts, observes, and decides again*.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That loop is the whole idea, and the beautiful part is that it looks nearly identical across every agent framework you'll ever encounter. A user goal comes in, the LLM (the reasoner) plans the next step, it either calls a tool or emits a final answer, the tool's result gets fed back in as an observation, and around it goes. The loop only stops when the model decides it's done and produces a final answer instead of another tool call.",
+        ],
+      },
+      {
+        diagram: { id: "agt-the-agent-loop", caption: "Fig 7.1 — Think, act, observe, repeat - the loop ends only when the model emits a final answer instead of a tool call." },
+      },
+      {
+        paragraphs: [
+          "That's the engine. The rest of this chapter is about everything you bolt around it, the levels of autonomy you can dial in, a real agent you can run on your own laptop, the protocol that lets agents talk to the world, the patterns that keep them working over long tasks, and the security problem you absolutely cannot ignore. Let's go.",
+        ],
+      },
+      {
+        quiz: {
+          question: "In one line, how does an agent differ from a chatbot?",
+          answer: "A chatbot produces a single response to your message and stops. An agent runs in a loop, it decides on an action, executes it via a tool call, observes the result, and feeds that back to decide its next move, repeating until the goal is met. The defining feature is the loop with tool calls and observations, not the quality of any one reply.",
         },
       },
       {
-        heading: "The four levels of AI usage",
+        heading: "The Four Levels of AI Usage",
         paragraphs: [
-          "It helps to picture a ladder running from passive to fully autonomous, where each rung buys you more capability and hands you more risk. Level 1 (Chat) — you ask, you copy, you paste; the human is the integration layer. Level 2 (Tools) — the model can act inside the conversation, searching, running code, reading files, so its answers are grounded in something real. Level 3 (Workflows) — a human lays out a fixed chain of steps and the AI fills specific slots; the structure is locked, and the AI is just a smart component inside it. Level 4 (Agents) — the structure disappears entirely: you hand over a goal and some tools, and the model figures out what to do, in what order, and for how long, looping on itself and sometimes acting on a schedule while you're not even watching.",
+          "Before we get into agents proper, it helps to see them as the top of a ladder. There are roughly four levels of how you can use an LLM, and each rung adds capability, but it also adds *risk you now have to manage*. That tradeoff is the whole story of the ladder: the more you let the model do on its own, the more it can accomplish for you and the more ways things can go sideways.",
         ],
-        diagram: {
-          id: "four-levels",
-          caption:
-            "Fig 6.2 — The four levels. Each step up trades human control for autonomy — and adds risk you have to manage.",
+      },
+      {
+        diagram: { id: "agt-the-four-levels-of-ai-usage", caption: "Fig 7.2 — Each rung hands more of the work to the model - and more of the risk to you." },
+      },
+      {
+        heading: "Level 1: Chat",
+        paragraphs: [
+          "This is the one everybody knows. You open ChatGPT or Claude, type a question, get an answer, and copy it somewhere. The model has no memory across sessions (unless you opt into one), no access to your files, and no ability to do anything except produce text.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is exactly the right tool when the hard part is *thinking*, not *doing*, drafting an email, debugging an idea, explaining a concept, writing a first pass of something you'll edit yourself. The cost is that *you* are the integration layer. Every piece of context the model needs, you paste in by hand. Every action it suggests, you carry out. The model is brilliant and completely stranded, it can tell you what to do but can't lift a finger to do it.",
+        ],
+      },
+      {
+        quiz: {
+          question: "At Level 1, what's the human's role in the system?",
+          answer: "The human is the integration layer. Because the model can't fetch its own context or take any action, you manually feed it everything it needs and manually execute everything it proposes. It's ideal when the hard part is thinking rather than doing, but every connection to the real world runs through you.",
         },
       },
       {
-        heading: "Levels 3 and 4, made concrete",
+        heading: "Level 2: Tools",
         paragraphs: [
-          "A classic Level-3 setup makes the \"fixed structure\" idea concrete: a Zapier or n8n flow triggers when a new email lands in a support inbox, hands it to Claude to classify (bug report / billing question / feature request), routes it to the right Slack channel, and calls Claude again to draft a first-pass reply. The structure is fixed and human-designed; the AI is a smart component, not the driver.",
-          "Level 4 is where the structure goes away. A good example: an agent that researches a topic, builds a landing page, and deploys it — all from a single instruction. That's a genuine Level-4 task because there's no fixed sequence: the agent has to figure out what \"research\" means here, what to put on the page, how to deploy it, and what to do when something fails along the way. A workflow can't do this, because you can't enumerate the steps in advance.",
+          "Same chat interface, but now the model can *do things* inside the conversation: web search, code execution, file analysis, image generation, browsing. You ask \"what's the price of NVDA,\" the model calls a search tool, gets the live price, and answers with it.",
         ],
       },
       {
-        heading: "A Level-4 agent in practice",
         paragraphs: [
-          "Take an open-source personal agent that runs on your machine, connects through the messaging apps you already use, and acts on your behalf — shell, browser, email, calendar. Most personal agents converge on the same five subsystems, and it's worth seeing them because the pattern recurs everywhere:",
+          "The unlock here is **grounding**: the model's answer is anchored to something real instead of to its training data. This kills off a whole class of hallucinations (stale facts, invented sources), but it introduces new failure modes in exchange: the model can pick the wrong tool, write a bad search query, or misread the results it gets back. It's a single round trip, the model decides, the tool runs, the model speaks, but that round trip is the seed of everything agentic.",
         ],
-        list: [
-          "Channel adapters — one per platform, normalizing inbound messages into a common format so you can swap Telegram for Slack without touching the agent.",
-          "Session manager — resolves who is talking and which conversation it belongs to, so different people don't clobber each other's context.",
-          "Queue — serializes runs per session; a message arriving mid-run is held or injected rather than causing a race.",
-          "Agent runtime — assembles context (the Markdown files below, history) and runs the loop: call model → execute tool calls → feed results back → repeat.",
-          "Control plane — a single API surface that the CLI, app, and web UI all connect to.",
+      },
+      {
+        diagram: { id: "agt-level-2-a-single-tool-round-trip", caption: "Fig 7.3 — One round trip: the model decides, the tool runs, the model answers - now anchored to something real." },
+      },
+      {
+        quiz: {
+          question: "Tools eliminate one big class of errors but create another. Name both.",
+          answer: "Tools provide grounding, which eliminates hallucinations that come from stale or invented information, the answer is anchored to real, fetched data. But they introduce tool-use failure modes that didn't exist before: picking the wrong tool, forming a bad query, or misreading the results that come back. You trade \"confidently wrong from memory\" for \"wrong because the tool step went sideways.\"",
+        },
+      },
+      {
+        heading: "Level 3: Workflows",
+        paragraphs: [
+          "A **workflow** is a predefined chain of steps where the AI sits in *fixed slots*. The key word is *predefined*: you, the human, designed the structure up front. The AI fills in the parts a human would be too slow or too expensive to do, but it isn't choosing the shape of the work, it's a component inside a pipeline you built.",
         ],
+      },
+      {
+        paragraphs: [
+          "The classic example: a Zapier or n8n flow that fires when a new email lands in a support inbox. It sends the email to Claude to classify (bug report / billing question / feature request), routes it to the right Slack channel based on that label, then calls Claude again to draft a first-pass reply. The structure is fixed, trigger, classify, route, draft, always in that order. The AI is a smart cog, not the driver.",
+        ],
+      },
+      {
+        diagram: { id: "agt-level-3-a-fixed-workflow", caption: "Fig 7.4 — The human designs the chain; the AI fills fixed slots. Smart component, not driver." },
+      },
+      {
+        quiz: {
+          question: "What's the defining difference between a Level 3 workflow and a Level 4 agent?",
+          answer: "In a workflow, the *human* fixes the sequence of steps in advance and the AI just fills predetermined slots, the structure never changes regardless of input. The AI is a component, not the decision-maker about what happens next. (As we'll see, an agent removes that fixed structure entirely and lets the model decide the steps itself.)",
+        },
+      },
+      {
+        heading: "Level 4: Agents",
+        paragraphs: [
+          "Now the structure goes away. You give the model a goal, a set of tools, and the freedom to decide *what* to do, *in what order*, and *for how long*. It loops on itself, think, act, observe, think again, and can run for minutes or hours. It can call itself, spawn sub-agents, persist state to disk, and act on a schedule even while you're asleep.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Picture an agent that, from a single instruction, researches a topic, builds a landing page, and deploys it. That's a genuine Level 4 task. There's no fixed sequence to follow: the agent has to figure out what \"research\" even means here, decide what belongs on the page, work out how to deploy it, and recover when something breaks. A workflow simply *can't* do this, because you can't enumerate the steps in advance, and that's precisely the line between Level 3 and Level 4. A workflow executes a plan you wrote. An agent writes the plan.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is where the autonomy becomes real, and so does the risk. An agent that can act unprompted, on a schedule, with real tools, is enormously powerful, and it's also a system you now have to supervise rather than operate. Keep that tension in mind; it comes back hard when we reach security.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why can't a workflow handle \"research this topic, build a landing page, and deploy it\" from one instruction?",
+          answer: "Because the steps can't be enumerated in advance. The agent has to interpret a vague goal (\"research\"), decide what to put on the page, figure out a deployment method, and handle unexpected failures along the way, all choices that depend on what it discovers as it goes. A workflow executes a fixed sequence the human wrote ahead of time; this task needs the model to *generate* the sequence dynamically, which is the Level 4 jump.",
+        },
+      },
+      {
+        heading: "OpenClaw: A Real Level 4 Agent",
+        paragraphs: [
+          "Abstractions are nice, but let's look at something concrete you could actually run. **OpenClaw** (formerly known as Moltbot and Clawdbot) is an open-source AI agent that runs on *your* machine, connects through messaging apps you already use (WhatsApp, Telegram, Slack, Signal, and others), and takes action on your behalf, shell commands, browser automation, email, calendar, and file operations. It's a clean illustration of the Level 4 idea because it's autonomous, it's local, and its design is the template most personal agents end up converging on.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's how it's put together. OpenClaw runs as a single **gateway process** with five subsystems inside it (and this is the elegant part), the model is the *only* external dependency. Everything else (channels, tools, memory, state) stays on your hardware.",
+        ],
+      },
+      {
+        diagram: { id: "agt-openclaw-architecture", caption: "Fig 7.5 — Five subsystems in one local process. The model is the only thing that lives off your machine." },
+      },
+      {
+        paragraphs: [
+          "Let's walk the five subsystems, because this is the architectural template worth internalizing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Channel adapters**: one per platform (Baileys for WhatsApp, grammY for Telegram, and so on). Each one normalizes inbound messages into a common internal format and serializes replies back out to the right platform. Decoupling the channels from the agent is what lets you swap Telegram for Slack without touching anything else, the agent never knows or cares which app a message came from.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Session manager**: resolves *who's talking* and *in what context*. Direct messages collapse into one main session; group chats each get their own. This sounds trivial but isn't: without it, your boss and your spouse messaging the same agent from different apps would clobber each other's context, and the agent would blend two unrelated conversations into mush.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Queue**: serializes runs per session. Real agent turns take seconds to minutes, so if a new message arrives mid-run, the queue decides whether to hold it, inject it, or collect it for a follow-up turn. Without a queue, two messages landing at once cause race conditions, the agent trips over itself.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Agent runtime**: the heart. It assembles context (we'll meet the cast of files in a moment: AGENTS.md, SOUL.md, TOOLS.md, MEMORY.md, the daily log, conversation history) and then runs *the agent loop* from the start of the chapter: call model → execute tool calls → feed results back → repeat until done. Every agent uses this loop; OpenClaw's particular flavor is that it persists its context as plain Markdown files between turns.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Control plane**: a WebSocket API (on port 18789) that everything else connects to: the CLI, the macOS app, the web UI, the iOS and Android clients. One control surface for the whole system.",
+        ],
+      },
+      {
+        diagram: { id: "agt-an-inbound-message-s-journey-through-openclaw", caption: "Fig 7.6 — Normalize, identify the conversation, serialize the run, loop - then reply back through the same adapter." },
+      },
+      {
+        quiz: {
+          question: "Why does OpenClaw need a session manager and a queue, what specifically breaks without each?",
+          answer: "Without the **session manager**, the agent can't tell whose conversation a message belongs to, so different people (or different group chats) talking to the same agent would overwrite each other's context and the agent would merge unrelated threads. Without the **queue**, messages that arrive while a turn is still running (turns take seconds to minutes) would execute concurrently and cause race conditions. The session manager keeps contexts *separate*; the queue keeps runs within a context *ordered*.",
+        },
       },
       {
         heading: "Everything is a Markdown file",
         paragraphs: [
-          "In traditional software, configuration lives in JSON or a database. Agents flipped this: because the agent is a language model, its \"configuration\" is mostly plain English in Markdown files it reads natively. The popular conventions:",
+          "Here's a genuinely interesting design decision. In traditional software, configuration lives in JSON, YAML, or a database. Agents flipped this on its head: their \"configuration\" is mostly written in *plain English*, in Markdown files, because the agent itself is a language model, and Markdown is what it reads most naturally. The config isn't compiled or parsed into behavior; it's *read* by the model every turn and shapes what it does. Let's meet the main characters.",
         ],
+      },
+      {
+        heading: "AGENTS.md: the cast of characters",
+        paragraphs: [
+          "This file defines *who the agents are*. OpenClaw can run multiple agents in one gateway, maybe one handles your inbox, another your calendar, another a side project. AGENTS.md lists them, says what each is responsible for, and describes how messages get routed between them.",
+        ],
+      },
+      {
+        code: { language: "markdown", content: "# Agents\n\n## inbox-agent\nHandles email triage, calendar coordination, and contact management.\nRoutes urgent items to me on Telegram. Defers shopping receipts to\nweekly digest.\n\n## research-agent\nLong-running research tasks. Lives in /workspace/research.\nCan spawn sub-agents for parallel sub-questions.\nHands off final write-ups to inbox-agent for delivery.\n\n## ops-agent\nServer monitoring, deploy notifications, on-call alerts.\nHas restricted tool access, read-only on production." },
+      },
+      {
+        paragraphs: [
+          "The router reads this to decide which agent should handle an incoming message; the agents themselves read it to know who *else* exists and what they're allowed to delegate. And here's a nice bit of continuity, this same `AGENTS.md` convention is used by Claude Code and a growing list of other tools. Drop an AGENTS.md at the root of a project and any compatible agent knows what's going on. It's quietly becoming a de facto standard.",
+        ],
+      },
+      {
+        heading: "SOUL.md: personality and values",
+        paragraphs: [
+          "This is the file that gives an agent its *character*: tone, defaults, the things it cares about, the things it flatly refuses to do. Think of it as the constitution for that particular agent instance.",
+        ],
+      },
+      {
+        code: { language: "markdown", content: "# Soul\n\nI am Molty. I help my human with personal automation tasks.\n\n## Personality\n- Direct. No \"I'd be happy to help!\"\n- Honest when I'm uncertain. I'd rather ask than guess wrong.\n- Dry humor is fine. Saccharine is not.\n\n## Defaults\n- All times in PT unless specified.\n- Currency in USD unless context dictates otherwise.\n- Code blocks use Python unless the project says otherwise.\n\n## Hard rules\n- Never send money or sign anything without explicit human approval.\n- Never delete files outside the workspace directory.\n- If I'm not sure whether an action is reversible, ask first." },
+      },
+      {
+        paragraphs: [
+          "That \"Hard rules\" section is doing real safety work, not decoration. The model re-reads SOUL.md every turn, so even if some later tool output tries to slip in a malicious instruction (hold that thought, it's the security section), the constraints stay parked right in front of the model the whole time. This file is also why two people running the *identical* software with the *identical* skills end up with wildly different agents: the personality lives in configuration, not code.",
+        ],
+      },
+      {
+        diagram: { id: "agt-soul-md-is-read-every-turn", caption: "Fig 7.7 — Because the constitution is re-read every turn, a constraint stays in front of the model even when an attacker tries to talk it out of one." },
+      },
+      {
+        heading: "TOOLS.md: the available actions",
+        paragraphs: [
+          "A list of what the agent can actually *do*. Not the implementation, just the names, what each tool is for, when to use it, and importantly, when *not* to.",
+        ],
+      },
+      {
+        code: { language: "markdown", content: "# Tools\n\n## shell\nRun a shell command in the workspace directory.\nUse for: file operations, git, running scripts.\nAvoid for: anything destructive on /home outside the workspace.\n\n## web_search\nSearch the web. Returns top 10 results.\nUse for: news, current facts, looking up specifics.\nSkip for: things I already know, wastes a call.\n\n## send_email\nSends email via the configured SMTP server.\nREQUIRES APPROVAL. Always show the draft and wait for confirmation.\n\n## read_calendar / write_calendar\nRead or modify Google Calendar.\nwrite_calendar requires approval for events with external attendees." },
+      },
+      {
+        paragraphs: [
+          "Notice the pattern in those descriptions, they aren't just \"what does this do,\" they're \"*when* should I use this and what are the constraints.\" That's where you encode operational *policy* in language the model actually pays attention to. And there's a subtle thing worth calling out: these tools are *also* registered programmatically with the model's tool-use API, so the model gets a structured JSON schema for each one (we'll see exactly what that looks like soon). TOOLS.md is the *narrative* companion to that schema, it carries the intent and the policy that a bare JSON schema can't express.",
+        ],
+      },
+      {
+        heading: "MEMORY.md: what the agent has learned",
+        paragraphs: [
+          "The long-term factual store: things the agent has been told or has figured out that should persist across sessions.",
+        ],
+      },
+      {
+        code: { language: "markdown", content: "# Memory\n\n## About my human\n- Name: Alex. Pronouns: they/them.\n- Time zone: America/Los_Angeles.\n- Spouse: Jamie. Don't schedule things on their date nights (Thursdays).\n- Allergic to penicillin (mention in any medical context).\n\n## Preferences\n- Hates morning meetings. Default to afternoon when possible.\n- Reads in markdown, not PDFs. Convert when sending docs.\n- Coffee order: oat milk latte, no sugar.\n\n## Projects\n- Currently building a course on AI agents. Deadline: end of June.\n- Side gig: consulting for a fintech, 10 hrs/week, NDA in effect." },
+      },
+      {
+        paragraphs: [
+          "This is the file you'd `cat` if you wanted to know what the agent thinks it knows about you. And you can *edit it directly*, delete a fact, add one, fix a mistake. That's a surprisingly big deal compared to a vector database, where forgetting one thing means hunting down which embedding corresponds to \"Jamie's date nights\" and surgically deleting it. The downside is that this approach doesn't scale: at a few hundred facts you're fine, but at ten thousand, dumping the whole file into every prompt is wasteful and the model loses focus. Heavy users layer on a *semantic memory plugin* that retrieves only the relevant chunks each turn, which, you'll notice, is exactly the retrieval idea we'll come back to under context management.",
+        ],
+      },
+      {
+        diagram: { id: "agt-file-based-memory-vs-a-vector-database", caption: "Fig 7.8 — Plain files are auditable and editable by hand - until you have thousands of facts and need real retrieval." },
+      },
+      {
+        quiz: {
+          question: "Why store memory as an editable Markdown file, and where does that choice start to hurt?",
+          answer: "The win is transparency and control: you can `cat` the file to see exactly what the agent believes about you, edit a fact by hand, version it in git, or delete one memory by removing a line, versus a vector DB where you'd have to find and surgically delete the right embeddings. The cost is scale: the whole file gets read into context, so once you have thousands of facts it becomes wasteful and the model loses focus, at which point you add a semantic-memory plugin that retrieves only the relevant chunks per turn.",
+        },
+      },
+      {
+        heading: "HEARTBEAT.md: the recurring checklist",
+        paragraphs: [
+          "This is the file that makes OpenClaw *autonomous*, the thing that lets it act when nobody messaged it. A regular tool-using assistant only does something when you poke it. OpenClaw acts on a *clock*.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The gateway runs as a background daemon (systemd on Linux, a LaunchAgent on macOS) with a configurable **heartbeat**: every 30 minutes by default, every hour with Anthropic OAuth. On each heartbeat the agent reads HEARTBEAT.md, decides whether any item needs attention *right now*, and either messages you or responds with the literal string `HEARTBEAT_OK`.",
+        ],
+      },
+      {
+        code: { language: "markdown", content: "# Heartbeat checklist\n\nEvery wake, check:\n- [ ] Any unread urgent email? If yes, summarize and ping me on Telegram.\n- [ ] Is it Monday 9am PT? If yes, post weekly digest to #team channel.\n- [ ] Any GitHub issues assigned to me opened in last hour? Triage and tag.\n- [ ] Is rent due in the next 3 days? Remind me.\n- [ ] Any calendar events without an agenda for tomorrow? Draft one.\n\nIf none of these need action, respond exactly: HEARTBEAT_OK" },
+      },
+      {
+        paragraphs: [
+          "That `HEARTBEAT_OK` is a sentinel string the gateway watches for. If the agent replies with exactly that, the gateway *silently drops it*, nothing reaches you, the agent goes back to sleep. But if the response is anything *else*, it gets delivered to you. That's the whole mechanism by which the agent surfaces things proactively: silence means \"nothing to do,\" any other output means \"you should see this.\"",
+        ],
+      },
+      {
+        diagram: { id: "agt-the-heartbeat-loop", caption: "Fig 7.9 — On every tick the agent reads its checklist and decides. Silence (HEARTBEAT_OK) is dropped; anything else reaches you." },
+      },
+      {
+        paragraphs: [
+          "This file is where most of the \"my agent did something while I slept\" stories come from, and you can change the behavior radically just by editing it. Add a checklist item and the agent starts doing that thing on the very next tick.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The most famous of those stories: AJ Stuyvenberg tasked his OpenClaw with buying a 2026 Hyundai Palisade. The agent scraped local dealer inventories, filled out contact forms with his phone number and email, then spent *several days* playing dealers against each other, forwarding competing PDF quotes and asking each to beat the others' price. Final result: **$4,200 below sticker**, with Stuyvenberg showing up only to sign the paperwork. That negotiation unfolded across days, while he was doing other things entirely, precisely because the agent kept waking up on its heartbeat and checking whether the next move was ready.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The same capability has a darker mirror. Another developer's agent filed a legal rebuttal to an insurance denial *without being asked*, it decided, autonomously, that the situation called for action. That's the double edge of Level 4: an agent that can act on its own to save you $4,200 is the same kind of system that can act on its own in ways you never authorized. The autonomy that makes the good stories possible is exactly what makes the scary ones possible too.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What does the agent do when its heartbeat fires and nothing needs attention, and why is that string special?",
+          answer: "It responds with the exact sentinel string `HEARTBEAT_OK`, which the gateway is watching for and silently drops, so nothing reaches you and the agent goes back to sleep. The string is special because it's the agreed \"all clear\" signal: any response *other* than `HEARTBEAT_OK` gets delivered to the user, which is the mechanism the agent uses to surface things proactively. Silence is \"nothing to do\"; anything else is \"look at this.\"",
+        },
+      },
+      {
+        heading: "SKILL.md: reusable expertise",
+        paragraphs: [
+          "A **skill** is a folder containing a SKILL.md plus any supporting files (templates, helper scripts, reference data). Where MEMORY.md stores *facts*, a skill stores *how to do a specific task well*, written so the model can read it mid-conversation, right when the task comes up. A real example structure:",
+        ],
+      },
+      {
+        code: { language: "text", content: "skills/\n  car-negotiation/\n    SKILL.md                 # the instructions\n    email-templates/         # supporting templates\n      initial-inquiry.md\n      counter-offer.md\n    pricing-data.md          # reference info" },
+      },
+      {
+        paragraphs: [
+          "And the SKILL.md itself opens with YAML frontmatter, then natural-language instructions:",
+        ],
+      },
+      {
+        code: { language: "markdown", content: "---\nname: car-negotiation\ndescription: Negotiate vehicle purchase via email with multiple dealers\ntriggers: [buy car, negotiate vehicle, dealer quote]\ntools_required: [send_email, read_email, web_search]\nrequires_approval: [send_email]\n---\n\n# Car negotiation skill\n\n## When to use this skill\nThe user wants to buy a specific vehicle and minimize price.\nNOT for leases, that's a different skill.\n\n## Procedure\n1. Confirm target vehicle: year, make, model, trim, color preferences.\n2. Search local dealer inventories within 100mi.\n3. Get initial quote from each (use email-templates/initial-inquiry.md).\n4. Wait 24h for responses. Heartbeat will check inbox.\n5. Once 3+ quotes received, send each the lowest competing quote and ask them to beat it.\n6. Continue until no dealer will go lower.\n7. Surface final winner to user for approval before committing.\n\n## Critical rules\n- NEVER agree to a purchase. Surface for human approval.\n- Don't share dealer A's quote with dealer A.\n- If asked for a deposit, stop and ask the user." },
+      },
+      {
+        paragraphs: [
+          "Two things about this format are worth pulling out. First, **the frontmatter is machine-readable; the body is for the model.** The router uses the `triggers` and `description` to figure out *when* to load this skill; the body is what the model actually reads to *execute* it once loaded. Second, and this is the important one, **skills are loaded just-in-time.** The agent does *not* hold every skill in context at all times; that would blow the context window wide open. Instead it keeps only a directory listing of available skills (names and descriptions), and when a task matches, it reads that one SKILL.md into its working context.",
+        ],
+      },
+      {
+        paragraphs: [
+          "If that pattern rings a bell, it should: it's the exact same just-in-time loading that Claude Code uses for its built-in skills, and it's the same principle behind the semantic-memory retrieval we mentioned earlier. Don't carry everything; keep a lightweight index, and pull the full thing into context only when it's relevant. Notice how the car-negotiation example even leans on the *heartbeat* (\"Wait 24h... Heartbeat will check inbox\"), the files compose with each other.",
+        ],
+      },
+      {
+        diagram: { id: "agt-just-in-time-skill-loading", caption: "Fig 7.10 — Keep a lightweight index of skills; pull the full SKILL.md into context only when a task matches - the same trick Claude Code uses." },
+      },
+      {
+        quiz: {
+          question: "Why does an agent keep only a skill *index* in context instead of all its skills, and what triggers a full skill to load?",
+          answer: "Holding every skill in context at once would consume the whole context window, leaving no room for the actual work (and degrading the model's focus). So the agent keeps just a lightweight listing of skill names and descriptions; when an incoming task matches a skill's `triggers`/`description`, it loads *that* SKILL.md's full body into working context just in time to execute it. It's the same just-in-time pattern Claude Code uses and the same idea as retrieving only relevant memory chunks per turn.",
+        },
+      },
+      {
+        heading: "The whole workspace, and why files",
+        paragraphs: [
+          "Step back and look at the whole layout. OpenClaw's distinctive choice is that *everything is a Markdown file on disk*, no vector database, no proprietary store, just text files in a workspace directory you can `cat` and `grep` like anything else:",
+        ],
+      },
+      {
+        code: { language: "text", content: "~/.openclaw/\n  workspace/\n    AGENTS.md            # who the agents are, their roles\n    SOUL.md              # personality, values, defaults\n    TOOLS.md             # what tools are available\n    MEMORY.md            # long-term facts learned\n    HEARTBEAT.md         # the recurring checklist\n    skills/\n      car-negotiation/\n        SKILL.md         # how to do this task\n      inbox-triage/\n        SKILL.md\n    daily-log/\n      2026-05-27.md" },
+      },
+      {
+        paragraphs: [
+          "A SKILL.md is just YAML frontmatter plus natural-language instructions, and the format is portable, compatible with Claude Code and Cursor conventions. If a skill doesn't exist yet, you can describe the task to your agent and have it draft one; it can also search ClawHub (the community skill registry) and install new skills at runtime.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The advantages of file-based memory are real and worth stating plainly. You can **audit** it (open any file and read what the agent \"knows\"). You can **version** it (commit the workspace to git and track how its knowledge changed). You can **delete** a specific memory by removing one file or line. Compare that to a vector DB, where forgetting one thing means working out which embeddings to delete. The cost, again, is **scale**: past a few thousand memories, full-text reading over Markdown stops being enough and you need real retrieval layered on top, which is why most heavy OpenClaw users end up adding a semantic-memory plugin.",
+        ],
+      },
+      {
+        heading: "How OpenClaw stacks up against other Level 4 agents",
+        paragraphs: [
+          "OpenClaw is one option among several, and the differences are mostly about *where the agent lives* and *who owns what it learns*. Here's the lay of the land:",
+        ],
+      },
+      {
+        paragraphs: [
+          "| | OpenClaw | Claude Code | ChatGPT Agent | Manus |",
+          "|---|---|---|---|---|",
+          "| Open source | Yes (MIT) | No | No | No |",
+          "| Where it runs | Your machine | Your machine | OpenAI cloud | Manus cloud |",
+          "| Where you talk to it | Messaging apps | Terminal, IDE | ChatGPT app | Web dashboard |",
+          "| Who owns state | You (files on disk) | Anthropic account | OpenAI account | Manus account |",
+          "| Autonomy mode | Heartbeat daemon | On-demand only | Per-task | Per-task |",
+        ],
+      },
+      {
+        paragraphs: [
+          "The axis that matters most is *where the agent lives and who owns the memory*. Hosted agents (ChatGPT Agent, Manus) are easier to get started with, but you're trusting a third party with everything the agent learns about you. Local agents (OpenClaw, Claude Code) put that on your own hardware, which is more private and more controllable, but now *you're* the sysadmin. There's no free lunch; it's a genuine tradeoff between convenience and control.",
+        ],
+      },
+      {
+        diagram: { id: "agt-where-does-your-agent-live", caption: "Fig 7.11 — The real axis isn't features - it's where the agent runs and who owns what it learns about you." },
+      },
+      {
+        quiz: {
+          question: "What's the core tradeoff between a hosted agent (ChatGPT Agent, Manus) and a local one (OpenClaw, Claude Code)?",
+          answer: "Convenience versus control. Hosted agents are easier to start with, no setup, the vendor runs everything, but you trust a third party with all the private context the agent accumulates about you. Local agents keep that data and execution on your own hardware, which is more private and controllable, but you take on the burden of being the sysadmin (installing, updating, securing it). OpenClaw also differs on autonomy: it runs a heartbeat daemon, while most others act only on demand or per task.",
+        },
+      },
+      {
+        heading: "The Anatomy of a Tool Call",
+        paragraphs: [
+          "We keep saying the model \"calls a tool,\" so let's strip the magic off that phrase, because it's central to everything. When the model calls a tool, it is **not** actually running code. It outputs *structured JSON describing the call*, and your runtime, your code, your harness, executes it. The model just says what it wants; something else does it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "(Quick vocabulary, since the distinction matters here: **runtime** is the period when your compiled program is actually executing. **Compile time** is the earlier phase when source code is converted to bytecode and syntax errors get caught. Tool calls happen at runtime, the model emits a request and your running program acts on it.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the entire dance for \"what's the weather in Tokyo?\":",
+        ],
+      },
+      {
+        code: { language: "python", content: "# 1. You give the model a tool schema\ntools = [{\n    \"name\": \"get_weather\",\n    \"description\": \"Get current weather for a city\",\n    \"input_schema\": {\n        \"type\": \"object\",\n        \"properties\": {\"city\": {\"type\": \"string\"}},\n        \"required\": [\"city\"]\n    }\n}]\n\n# 2. Model returns a structured tool_use block\n{\n    \"type\": \"tool_use\",\n    \"id\": \"toolu_01A\",\n    \"name\": \"get_weather\",\n    \"input\": {\"city\": \"Tokyo\"}\n}\n\n# 3. YOUR code executes the actual function\nresult = get_weather(city=\"Tokyo\")   # -> \"18°C, cloudy\"\n\n# 4. You send the result back as a tool_result\n{\"type\": \"tool_result\", \"tool_use_id\": \"toolu_01A\", \"content\": \"18°C, cloudy\"}\n\n# 5. Model continues with that context" },
+      },
+      {
+        paragraphs: [
+          "Read those five steps carefully, because the key insight is in the gaps between them. You hand the model a *schema* (what tools exist and what arguments they take). The model replies not with prose but with a `tool_use` block, a structured request naming the tool and its inputs. *Your* code runs the real function. You hand the answer back as a `tool_result`, tagged with the matching `tool_use_id` so the model knows which request it answers. Then the model continues, now grounded in that result.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The model never touches your APIs directly. It only ever *describes* what it wants, and your harness arbitrates every actual action. That indirection is exactly what makes tool use safe and auditable, there's a checkpoint, owned by your code, between the model's intent and any real-world effect. (Tuck that away; it's the foundation the entire security section is built on.) And it's precisely the thing that the Model Context Protocol, MCP, was created to standardize. More on that right now.",
+        ],
+      },
+      {
+        diagram: { id: "agt-anatomy-of-a-tool-call", caption: "Fig 7.12 — The model only describes the call as JSON; your runtime executes it. That gap is what makes tool use safe and auditable." },
+      },
+      {
+        quiz: {
+          question: "When a model \"calls a tool,\" what does it actually produce, and who runs the real code?",
+          answer: "The model produces a structured `tool_use` JSON block naming the tool and its input arguments (plus an id), it does *not* execute anything itself. Your runtime/harness reads that block, runs the actual function, and returns the output as a `tool_result` tagged with the matching `tool_use_id`. The model never touches your APIs directly; it only describes what it wants, and your code arbitrates, which is what makes the whole thing auditable and safe to gate.",
+        },
+      },
+      {
+        heading: "The N×M Problem: Why MCP Exists",
+        paragraphs: [
+          "Tool calls are great, but they created a mess at scale. Before MCP existed, every AI application needed its *own* custom integration for every system it wanted to touch. Say you had 5 different LLM apps and wanted each to talk to 10 systems (GitHub, Slack, Google Drive, and so on). That's $5 \\times 10 = 50$ separate integrations to build and maintain, every app re-implementing the GitHub connection, the Slack connection, all of it. This is the **N×M problem**: $N$ apps times $M$ tools means $N \\times M$ bespoke integrations, and the duplication is staggering.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The fix is to insert a *standard* in the middle. If every app speaks one common protocol and every system exposes itself through that same protocol, you go from $N \\times M$ integrations to $N + M$: each app implements the protocol once ($N$), each system implements it once ($M$), and now any app works with any system for free. For the 3×3 case that's 9 custom integrations collapsing to 6; at real scale, 10 apps × 50 tools, it's **500 custom integrations versus 60**. The savings compound hard.",
+        ],
+      },
+      {
+        diagram: { id: "agt-n-x-m-vs-n-m-the-integration-explosion", caption: "Fig 7.13 — Standardize the connector and N x M bespoke integrations collapse to N + M - the savings compound at scale." },
+      },
+      {
+        quiz: {
+          question: "Why does a shared protocol turn $N \\times M$ integrations into $N + M$?",
+          answer: "Without a standard, every one of the $N$ apps needs a custom connector to every one of the $M$ systems, so you build $N \\times M$ integrations. With a shared protocol, each app implements the protocol once ($N$ implementations) and each system exposes itself through the protocol once ($M$ implementations); after that, any app can reach any system through the common interface with no extra work. The total drops from a product ($N \\times M$) to a sum ($N + M$), and any new server built once is instantly usable by every compatible client.",
+        },
+      },
+      {
+        heading: "MCP: The Model Context Protocol",
+        paragraphs: [
+          "So what is this standard? **Model Context Protocol (MCP)** is an open standard introduced by Anthropic in late 2024. The tagline people use is \"USB-C for AI\", one connector spec, and any compliant device works with any compliant host. Under the hood it's a **JSON-RPC 2.0** protocol with three roles:",
+        ],
+      },
+      {
         list: [
-          "AGENTS.md — who the agents are, what each is responsible for, and how messages route between them. The same convention Claude Code and several other tools use; it's becoming a de facto standard.",
-          "SOUL.md — personality, defaults, and hard rules. The hard-rules section does real safety work: the model reads it every turn, so a constraint stays in front of it even if a later prompt injection suggests otherwise.",
-          "TOOLS.md — the available actions, described not just as \"what does this do\" but \"when to use it and what the constraints are\" — operational policy in language the model attends to. The tools are also registered programmatically with the model's tool-use API, so each one has a structured JSON schema; TOOLS.md is the narrative version of that, explaining the intent and policy the schema can't capture.",
-          "MEMORY.md — long-term facts the agent has learned. You can audit, version, and delete a memory by editing one file — far easier than surgically removing an embedding from a vector DB. The cost is scale: past thousands of facts you need real retrieval.",
-          "HEARTBEAT.md — a recurring checklist. Every interval the agent reads it and decides whether anything needs action, which is what makes it autonomous — \"it did something while I slept.\"",
-          "SKILL.md — reusable, just-in-time expertise: a folder with a SKILL.md (YAML frontmatter plus natural-language instructions) and supporting files, loaded into context only when a task matches its triggers. The format is portable — compatible with Claude Code and Cursor conventions. If a skill doesn't exist, you can describe the task to your agent and have it draft one; the agent can also search ClawHub, the community skill registry, and install new skills at runtime.",
+          "A **host** is the application the user interacts with, Claude Desktop, an IDE, your custom agent.",
+          "A **client** lives *inside* the host and manages a single connection. One client, one connection.",
+          "A **server** is a separate process that exposes capabilities over the protocol.",
         ],
       },
       {
-        heading: "The heartbeat: acting on a clock",
         paragraphs: [
-          "A regular tool-using assistant only acts when you message it. A Level-4 personal agent acts on a clock. The gateway runs as a background daemon (systemd on Linux, a LaunchAgent on macOS) with a configurable heartbeat — every 30 minutes by default, or every hour when you're on Anthropic OAuth. On each heartbeat the agent reads the checklist in HEARTBEAT.md, decides whether any item needs action right now, and either messages you or responds with the literal sentinel HEARTBEAT_OK — a string the gateway watches for and silently drops. Anything other than HEARTBEAT_OK gets delivered to you, and that's how the agent surfaces things proactively.",
-          "The heartbeat is what produces the agent stories that go viral. AJ Stuyvenberg tasked his agent with buying a 2026 Hyundai Palisade: it scraped local dealer inventories, filled out contact forms with his phone and email, then spent several days playing dealers against each other — forwarding competing PDF quotes and asking each to beat the other's price — and landed about $4,200 below sticker, with Stuyvenberg showing up only to sign the paperwork. That negotiation unfolded across days, while he did other things, because the agent kept waking up and checking whether the next move was ready. The same capability has a dark mirror: another developer's agent filed a legal rebuttal to an insurance denial without being asked — it decided autonomously that the situation called for action.",
+          "One host can run *many* clients, each connected to a different server. So Claude Desktop (host) might have one client talking to a filesystem server and another talking to a GitHub server, simultaneously.",
         ],
       },
       {
-        heading: "How Level-4 agents compare",
         paragraphs: [
-          "Not every Level-4 agent makes the same architectural choices. Lining up a file-based personal agent like OpenClaw against Claude Code, ChatGPT Agent, and Manus makes the tradeoffs visible:",
+          "What does a server actually expose? Three primitive types, and it's worth knowing all three because most people only use the first:",
         ],
+      },
+      {
         definitions: [
-          {
-            term: "Open source",
-            definition: "OpenClaw — Yes (MIT). Claude Code — No. ChatGPT Agent — No. Manus — No.",
-          },
-          {
-            term: "Where it runs",
-            definition: "OpenClaw — your machine. Claude Code — your machine. ChatGPT Agent — OpenAI cloud. Manus — Manus cloud.",
-          },
-          {
-            term: "Where you talk to it",
-            definition: "OpenClaw — messaging apps. Claude Code — terminal, IDE. ChatGPT Agent — the ChatGPT app. Manus — a web dashboard.",
-          },
-          {
-            term: "Who owns state",
-            definition: "OpenClaw — you (files on disk). Claude Code — your Anthropic account. ChatGPT Agent — your OpenAI account. Manus — your Manus account.",
-          },
-          {
-            term: "Autonomy mode",
-            definition: "OpenClaw — heartbeat daemon. Claude Code — on-demand only. ChatGPT Agent — per-task. Manus — per-task.",
-          },
+          { term: "Tools", definition: ": functions the model can call (`create_issue`, `run_query`). This is where most agent work happens." },
+          { term: "Resources", definition: ": read-only data the model can pull into context (a file, a database row, a webpage). These are the underused power feature, think of them as the model's filing cabinet." },
+          { term: "Prompts", definition: ": reusable templates the user can invoke (like `/summarize-pr`)." },
         ],
       },
       {
+        diagram: { id: "agt-mcp-host-clients-and-servers", caption: "Fig 7.14 — One host, many 1:1 clients, each wired to a server that exposes tools, resources, and prompts." },
+      },
+      {
         paragraphs: [
-          "The architectural axis that matters most is where the agent lives and who owns the memory. Hosted agents (ChatGPT Agent, Manus) are easier to start with, but you're trusting a third party with everything the agent learns about you. Local agents (OpenClaw, Claude Code) put that on your own hardware — the cost being that you become the sysadmin.",
+          "How do clients and servers actually talk? Two transport types come up. **stdio** is for *local* servers: the host spawns the server as a subprocess and they exchange JSON-RPC over stdin/stdout. This is the default for something like a filesystem server running on your laptop. **HTTP with Server-Sent Events (SSE)** is for *remote* servers, useful for SaaS integrations where the server runs somewhere else and the host connects over the network, usually with OAuth for authentication. Same protocol either way; only the pipe differs.",
         ],
       },
       {
-        heading: "The anatomy of a tool call",
+        heading: "Building a mini MCP server",
         paragraphs: [
-          "Here's a detail people consistently get wrong: when a model \"calls a tool,\" it is not running any code. All it does is output structured JSON describing the call it wants. Your runtime is what actually executes the real function and feeds the result back as a tool result, and the model picks up from there with that new context. The model never touches your APIs directly — it only ever describes what it wants, and your harness sits in the middle as the arbiter. That separation is precisely what makes tool use safe and auditable.",
+          "Talk is cheap, here's the shortest meaningful MCP server in Python. It exposes a single tool that *any* MCP client can call:",
         ],
-        diagram: {
-          id: "tool-call",
-          caption:
-            "Fig 6.3 — A tool call. The model emits a structured request, your code runs the real function, and the result is fed back for the model to continue.",
+      },
+      {
+        code: { language: "python", content: "from mcp.server.fastmcp import FastMCP\n\nmcp = FastMCP(\"weather-server\")\n\n@mcp.tool()\ndef get_weather(city: str) -> str:\n    \"\"\"Get the current weather for a city.\"\"\"\n    # In reality you'd call a weather API here\n    return f\"It's 18°C and cloudy in {city}\"\n\nif __name__ == \"__main__\":\n    mcp.run(transport=\"stdio\")" },
+      },
+      {
+        paragraphs: [
+          "That's it. To use it with Claude Desktop you'd add an entry to the config file pointing at this script. The host launches it, calls `initialize`, asks for the tool list, and from that moment the model can invoke `get_weather` like any other tool. The thing to appreciate: **the server never had to know anything about Claude specifically.** Any MCP client could use it identically, that's the entire point of standardizing. For TypeScript the pattern is the same, register tools with schemas, return results, expose over a transport. The *protocol* is what's standardized; the SDK is just a friendly wrapper over JSON-RPC.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What are MCP's three server primitives, and which transport would a filesystem server on your laptop use?",
+          answer: "The three primitives are **tools** (functions the model can call, like `create_issue`), **resources** (read-only data the model can pull into context, like a file or webpage, the underused one), and **prompts** (reusable user-invoked templates like `/summarize-pr`). A local filesystem server uses the **stdio** transport: the host spawns it as a subprocess and they speak JSON-RPC over stdin/stdout. (Remote servers instead use HTTP with Server-Sent Events, typically with OAuth.)",
         },
       },
       {
-        heading: "The N×M problem and MCP",
+        heading: "Going Beyond a Single Loop",
         paragraphs: [
-          "Before any standard existed, every AI app had to build its own integration for every system it touched — 5 apps times 10 systems meant 50 bespoke connectors, and the math only gets uglier from there. The Model Context Protocol (MCP), an open standard Anthropic introduced in late 2024, is the \"USB-C for AI\" that fixes this — one connector spec, so any compliant client just works with any compliant server. It's a JSON-RPC 2.0 protocol with three roles: a host the user interacts with (Claude Desktop, an IDE, your custom agent), a client living inside the host that manages a single connection, and a server — a separate process that exposes capabilities over the protocol. One host can run many clients, each connected to a different server. Servers expose three primitives: tools the model can call (create_issue, run_query), resources it can read into context (a file, a database row, a webpage), and prompts the user can invoke (/summarize-pr). Most agent work happens through tools — but resources are the underused power feature. Build a server once and every MCP client gets it for free.",
+          "The single-agent loop from the start of the chapter is wonderful, but it hits a wall pretty quickly. A long task piles up context, every tool result, every observation, every retry, and as the context fills, the model loses focus and its tool-call accuracy degrades. The field has converged on a handful of patterns to push past this, and they fall into two buckets: *structuring* multiple agents, and *managing* the context of any one of them.",
         ],
-        diagram: {
-          id: "mcp-nxm",
-          caption:
-            "Fig 6.4 — MCP collapses N×M custom integrations into N+M: each app and each system speaks one protocol.",
+      },
+      {
+        heading: "Multi-agent patterns",
+        paragraphs: [
+          "There are four patterns you'll see again and again. None is \"best\", each fits a different shape of problem.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**ReAct (reason + act)** is the plain single-agent loop: one agent interleaves reasoning with tool calls, think then act then think again. Fewest moving parts, easiest to debug. It's the right default for *simple tasks*.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Orchestrator + workers** has a lead agent that decomposes a goal and hands sub-tasks to several worker sub-agents running in parallel, then merges their results. This shines for *research and broad search*, many independent threads explored at once, each in its own fresh context.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Evaluator + optimizer** pairs a generator with a critic: one agent produces output, another critiques it, and they loop until the critic approves. This is the one to reach for when *quality matters* and you can judge it, translation, writing, code review.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Planner + executor** splits planning from doing: one pass plans all the steps up front, then an executor carries them out in order. Use it when the task has a *known structure* you can decompose ahead of time.",
+        ],
+      },
+      {
+        diagram: { id: "agt-four-multi-agent-patterns", caption: "Fig 7.15 — Pick the structure that fits the task: one loop, parallel workers, a critic loop, or plan-then-execute." },
+      },
+      {
+        quiz: {
+          question: "You need to translate a document where quality really matters, and separately you need to research a broad topic fast. Which pattern fits each?",
+          answer: "Quality-critical translation fits **evaluator + optimizer**: a generator produces the translation and a critic agent reviews it, looping until the critique passes, exactly the case where having a judge improves output. Broad, fast research fits **orchestrator + workers**: a lead agent splits the topic into sub-questions handed to parallel worker sub-agents, each exploring in its own fresh context, then merges the findings. (Simple tasks would just use ReAct; well-structured tasks you can decompose up front fit planner + executor.)",
         },
       },
       {
-        heading: "MCP transports",
+        heading: "Context management",
         paragraphs: [
-          "There are two transport types you'll run into. stdio is for local servers: the host spawns the server as a subprocess and the two speak JSON-RPC over stdin/stdout — the default for something like a filesystem server running on your laptop. HTTP with Server-Sent Events is for remote servers, useful for SaaS integrations where the server runs somewhere else and the host connects over the network, often with OAuth for authentication. Either way the protocol is what's standardized; the SDK is just a convenience wrapper over JSON-RPC, so a server you write doesn't have to know anything about a specific client — any MCP client can use it identically.",
+          "This is the unglamorous work that makes a long-running agent usable in production. A long-running agent's context window fills up *fast*: every tool result, observation, and retry adds to it. And once you cross roughly **50–80% utilization**, performance degrades noticeably: longer time-to-first-token, worse instruction-following, and hallucinated tool calls. (This is the practical face of the context-window limits we ran into back in the language chapters: attention has to work over everything in the window, and a bloated, noisy window is a worse place to think.) Four techniques keep it under control.",
         ],
       },
       {
-        heading: "Beyond a single loop",
         paragraphs: [
-          "A single agent loop eventually slams into a wall. Long tasks fill up the context window, the model starts losing the thread, and tool-call accuracy quietly degrades. There's even a rough threshold: once you cross 50–80% context-window utilization, performance degrades noticeably — longer time-to-first-token, worse instruction following, hallucinated tool calls. Production agents fight this on several fronts: compaction (summarize the old turns and replace them with the summary — Claude Code does this automatically around the 95% mark, and the art is deciding what to preserve verbatim, like file paths and exact errors, versus what to compress), sub-agents for isolation (spin up a fresh context for some focused piece of work and return only a summary — far and away the most powerful technique for long horizons), external memory (persist state to disk between turns), and just-in-time retrieval (hand the agent search and read tools instead of dumping everything in up front — which is exactly why MCP resources matter: they're the model's filing cabinet, not its desk).",
+          "**Compaction.** When the context gets large, summarize the conversation so far and replace the old turns with that summary. Claude Code does this automatically around the 95% mark. The art is in deciding what to preserve *verbatim*, file paths, exact error messages, recent tool outputs, versus what to compress into a sentence.",
         ],
-        diagram: {
-          id: "agent-patterns",
-          caption:
-            "Fig 6.5 — Common multi-agent shapes: ReAct, orchestrator + workers, an evaluator loop, and planner + executor.",
+      },
+      {
+        paragraphs: [
+          "**Sub-agents for isolation.** Spawning a sub-agent gives it its *own clean context*. The sub-agent does focused work, returns just a summary, and the main agent never sees the noise of how it got there. This is the single most powerful technique for long horizons, and notice it's the same \"orchestrator + workers\" idea from above, now reframed as a context tool: parallelism *and* context hygiene come from the same move.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**External memory.** Persist state to disk between turns, scratchpad files, a todo list, a notes directory. The model writes to it and reads from it as needed, so the working context stays lean while the *durable* state lives on disk. (Which is exactly what OpenClaw's Markdown workspace was doing the whole time, MEMORY.md and the daily log are external memory.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Just-in-time retrieval.** Don't dump everything into context up front. Give the agent search and read tools and let it *pull* what it needs, when it needs it. This is why MCP resources matter so much, they're the model's filing cabinet, not its desk. (And it's the same just-in-time principle as skill loading: keep an index, fetch the full thing on demand.)",
+        ],
+      },
+      {
+        diagram: { id: "agt-keeping-the-context-window-lean", caption: "Fig 7.16 — Past ~50-80% full, agents get worse. Compact, spin off sub-agents, offload to disk, and retrieve just in time." },
+      },
+      {
+        quiz: {
+          question: "Why is spawning a sub-agent called the most powerful technique for long-horizon tasks?",
+          answer: "Because it isolates context. A sub-agent gets its own clean window to do a focused piece of work and returns only a short summary to the main agent, so all the intermediate tool results, retries, and reasoning noise never pollute the main agent's context. That keeps the main agent's window lean and on-task over a long horizon, which directly avoids the 50–80% degradation cliff. It's the same orchestrator-and-workers structure doing double duty as a context-hygiene tool.",
         },
       },
       {
+        heading: "The Lethal Trifecta",
         paragraphs: [
-          "A few orchestration patterns recur. ReAct interleaves reasoning and acting in one loop — simplest, easiest to debug. Orchestrator + workers fans out parallel sub-agents and merges their results — good for broad research. Evaluator + optimizer loops a generator against a critic until quality passes — good for writing or code review. Planner + executor plans once up front, then executes — good when the structure is known in advance.",
+          "We've built up to the most important safety idea in the whole chapter, and it's been lurking since we said an agent \"can act on its own in ways you never authorized.\" Here it is, sharply: any agent that combines three capabilities has the ingredients for **data exfiltration**. Those three legs, a framing coined by Simon Willison as the **lethal trifecta**, are:",
         ],
       },
       {
-        heading: "The lethal trifecta",
         paragraphs: [
-          "Now for the part that should keep you up at night. Any agent that combines three particular things — access to private data, the ability to communicate externally, and exposure to untrusted content — is holding all the ingredients for data exfiltration. Simon Willison named this the lethal trifecta: a malicious instruction hidden inside a web page the agent happens to read can hijack the whole thing into quietly sending your private data off to an attacker.",
+          "1. **Access to private data**: your email, files, secrets.",
+          "2. **The ability to communicate externally**: making HTTP requests, sending messages.",
+          "3. **Exposure to untrusted content**: web pages, emails, documents it reads.",
         ],
-        diagram: {
-          id: "lethal-trifecta",
-          caption:
-            "Fig 6.6 — The lethal trifecta. Where private data, external communication, and untrusted content overlap, exfiltration becomes possible. Remove any one leg to defuse it.",
+      },
+      {
+        paragraphs: [
+          "Put all three together and you have a working attack. A malicious instruction hidden inside a webpage the agent reads (leg 3) can hijack the agent into taking your private data (leg 1) and shipping it off to an attacker (leg 2). The agent dutifully follows the injected instruction because, to a language model, text that arrives in a tool result looks an awful lot like text that arrives from you, which is exactly why we made such a point earlier that tool output must be treated as *data*, not as instructions.",
+        ],
+      },
+      {
+        diagram: { id: "agt-the-lethal-trifecta", caption: "Fig 7.17 — Private data + external comms + untrusted content = exfiltration. Remove any one leg and the risk collapses." },
+      },
+      {
+        paragraphs: [
+          "The most important thing to understand about the defenses is that they're **architectural, not prompt-based.** You cannot reliably tell a model \"ignore any future instructions you read\", prompt-injection bypasses keep getting discovered, and \"please don't get hacked\" has never been a security control. What actually works is removing a leg of the triangle. Concretely: use a **read-only network** for any task that touches untrusted content (kill leg 2 for that task), run **separate agents with different permissions** so the one reading the web can't reach your secrets (separate legs 1 and 3), require **human-in-the-loop confirmation for irreversible actions** (the approval gates we saw all over SOUL.md and TOOLS.md), and **treat all tool output as data, not instructions**. Notice that those approval gates in the config files weren't bureaucratic box-checking, they were defusing this exact attack the whole time.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Beyond the trifecta, three more security categories are worth teaching. **MCP server trust**: when you install an MCP server you're running arbitrary code from a third party, so vet it like any other dependency (that lovely \"install a skill from ClawHub at runtime\" convenience is also an attack surface). **Scope minimization**: give each tool the narrowest permissions that still work, read-only whenever possible, so a compromised tool can do less damage. **Audit logging**: record every tool call so you can reconstruct exactly what an agent did, which is only possible *because* of that model-describes / runtime-executes split from the anatomy section: the checkpoint where your code arbitrates is also the natural place to log.",
+        ],
+      },
+      {
+        diagram: { id: "agt-defusing-the-trifecta-architectural-defenses", caption: "Fig 7.18 — Don't ask the model not to get hacked - remove a leg, separate permissions, gate actions, and log everything." },
+      },
+      {
+        quiz: {
+          question: "Why are the defenses against the lethal trifecta \"architectural, not prompt-based,\" and name two concrete ones.",
+          answer: "Because you can't reliably instruct a model to \"ignore future malicious instructions\", prompt-injection bypasses keep getting found, so a prompt-level rule isn't a real control. The robust fix is to remove a leg of the triangle structurally. Two concrete defenses: use a **read-only network** for tasks that touch untrusted content (so a hijacked agent can't send data out), and **require human-in-the-loop approval for irreversible actions** (so the agent can't complete a damaging step alone). Others include running separate agents with different permissions, treating all tool output as data not instructions, scope minimization, and audit logging.",
         },
       },
       {
+        heading: "Wrapping Up",
         paragraphs: [
-          "The defenses here are architectural, not prompt-based — and that distinction matters. You cannot reliably just tell a model to \"ignore any future instructions,\" because people keep finding new ways around exactly that. What genuinely works is removing one leg of the triangle: a read-only network for any task that touches untrusted content, separate agents carrying different permissions, a human in the loop to confirm irreversible actions, and a firm rule that all tool output is data, never instructions. And beyond the trifecta itself, the usual hygiene applies: vet MCP servers like any other dependency (you are running third-party code, after all), give each tool the narrowest permissions it can get away with (scope minimization), and log every tool call so you can reconstruct exactly what an agent did (audit logging).",
+          "Let's tie the whole chapter together, because it told one continuous story.",
         ],
       },
       {
         paragraphs: [
-          "And that's the whole shape of agentic engineering. Strip it down and it's a simple loop wrapped in real software — routing, queues, memory, orchestration — with security treated as a first-class concern from the start rather than something you bolt on later. The model is the stochastic core at the center; everything built around it is the engineering that turns it into something reliable.",
+          "We started with the **agent loop** (think, act, observe, repeat), the single engine underneath every agent framework. Then we climbed the **four levels of AI usage**: Chat (the model thinks, you do everything else), Tools (the model acts inside one round trip and gets grounded), Workflows (the model fills fixed slots in a pipeline *you* designed), and finally Agents (the structure dissolves and the model decides the steps itself). Each rung added capability and an equal measure of risk to manage.",
         ],
+      },
+      {
+        paragraphs: [
+          "We made Level 4 concrete with **OpenClaw**, and in doing so met the architectural template most personal agents converge on: a gateway process with channel adapters, a session manager, a queue, an agent runtime, and a control plane, with the model as the only external dependency. Its defining choice, that *everything is a Markdown file* (AGENTS, SOUL, TOOLS, MEMORY, HEARTBEAT, and just-in-time SKILL files), turned out to be a recurring theme in disguise: keep durable state on disk, keep a lightweight index, and pull the full thing into context only when it's needed, the same just-in-time principle behind skills, retrieval, and external memory.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Then we stripped the magic off a **tool call** (the model only ever emits JSON describing what it wants, and your runtime executes it), and saw that this exact indirection is what makes agents auditable and gate-able. That checkpoint is also the seam where **MCP** plugs in, collapsing the N×M integration explosion into N+M with a single standard of hosts, clients, and servers exposing tools, resources, and prompts. We pushed a single loop further with **multi-agent patterns** (ReAct, orchestrator+workers, evaluator+optimizer, planner+executor) and the **context-management** techniques that keep any one agent sharp over a long horizon.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And we ended where every honest agent discussion has to end: the **lethal trifecta**, and the hard truth that you defend against it with architecture, not pleadinging prompts. The approval gates, the scoped permissions, the read-only networks, the audit logs: those aren't friction bolted on at the end. They're the price of admission for letting a system act in the world on your behalf, the same autonomy that negotiates $4,200 off a car while you sleep is the autonomy you have to fence in. Build the fences first, and agents become what they're meant to be: not a chatbot that answers, but a capable, bounded system that decides, acts, observes, and decides again.",
+        ],
+      },
+      {
+        diagram: { id: "agt-the-whole-agent-picture", caption: "Fig 7.19 — One loop, four levels of autonomy, a files-on-disk agent, a standardized tool layer, and the security you build before you trust it." },
+      },
+      {
+        quiz: {
+          question: "Two ideas recurred throughout this chapter. Name them, and give two places each appeared.",
+          answer: "First, **the agent loop** (think → act → observe → repeat). It's the opening definition, it's literally what OpenClaw's agent runtime executes each turn, it's the ReAct pattern, and it's what fires on every heartbeat tick. Second, **\"keep an index, load just in time / state lives on disk.\"** It shows up as just-in-time SKILL.md loading (only the matched skill enters context), as OpenClaw's Markdown files (MEMORY.md and the daily log as external memory), as just-in-time retrieval via MCP resources, and as the sub-agent / external-memory context-management techniques. Together they're the backbone: a simple loop, fed a lean context that pulls in durable, on-disk knowledge only when it's relevant.",
+        },
       },
     ],
   },

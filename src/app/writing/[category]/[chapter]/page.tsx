@@ -166,6 +166,13 @@ export default async function ChapterPage({
                   caption={section.image.caption}
                 />
               )}
+              {section.code && (
+                <pre className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-xs leading-relaxed">
+                  <code className="font-mono text-[var(--foreground)] whitespace-pre">
+                    {section.code.content}
+                  </code>
+                </pre>
+              )}
             </section>
           ))}
         </div>
