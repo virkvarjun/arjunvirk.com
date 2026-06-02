@@ -4961,377 +4961,2243 @@ export const mlGuideChapters: Chapter[] = [
     number: "6",
     title: "Vision",
     summary:
-      "From pixels to CNNs to YOLO, segmentation, SAM, and vision transformers — how machines learned to see.",
+      "From pixels and tensors through convolutions and CNNs, to object detection (YOLO), segmentation (FCN, U-Net, Mask R-CNN, SAM), Vision Transformers, and vision-language models.",
     sections: [
       {
         paragraphs: [
-          "Strip away the abstraction and an image, to a computer, is just a grid of pixels — each one a few numbers describing intensity. A color image is a 3-D tensor of height, width, and channels (3 of them for RGB), and a whole batch of images is 4-D: $(N, C, H, W)$. Here's the part that trips people up, though: after the very first convolutional layer, \"channels\" stop meaning colors entirely. They turn into learned features — one channel might fire on horizontal edges, another on red blobs — and their count climbs from 3 at the input to hundreds deep inside the network.",
-          "Raw pixel values in $[0, 255]$ are poor inputs — too large and not zero-centered — so the standard preprocessing divides by 255 and then subtracts the dataset mean and divides by the standard deviation, per channel. Always normalize the same way at inference as in training.",
+          "Everything we've built so far — the whole transformer story — was about sequences of words. Now we point the same machinery at the visual world, and a surprising amount of it carries straight over: the same vanishing-gradient villain, the same residual-connection hero, the same \"tokenize everything and let attention sort it out\" punchline. But vision also has its own beautiful set of ideas, built around one operation — the convolution — that was purpose-designed for images.",
         ],
-        diagram: {
-          id: "image-tensor",
-          caption:
-            "Fig 5.1 — An image as a (C, H, W) tensor. Channels start as colors and become learned feature maps deeper in the network.",
+      },
+      {
+        paragraphs: [
+          "Here's the road we'll travel, and like last time, every step is a fix for the thing before it. We start with what an image even *is* to a computer. Then we ask the obvious question — \"can't I just feed pixels to a regular neural network?\" — watch it fail, and that failure gives us the **CNN**. We stack CNNs into a feature hierarchy, then put them to work: first detecting objects with **YOLO**, then labeling every pixel with **segmentation** (FCN → U-Net → Mask R-CNN), then the foundation model that segments *anything* (**SAM**). Finally we come full circle: drop the convolution entirely, chop the image into patches, and feed them to a transformer — the **Vision Transformer** — which leads straight to **vision-language models**, where images and text live in the same stream of tokens.",
+        ],
+      },
+      {
+        paragraphs: [
+          "I'm assuming you know what a neural network is and roughly how a GPU works, and that you've seen the transformer (we'll lean on it once we reach ViTs). Everything else, we build from the ground up — and since this is the visual chapter, we'll lean hard on diagrams. Let's go.",
+        ],
+      },
+      {
+        heading: "Image Fundamentals",
+        paragraphs: [
+          "Before any neural network can touch an image, we have to agree on what an image *is* to a computer. Spoiler: it's just a big grid of numbers. Once you see that clearly, everything else clicks into place.",
+        ],
+      },
+      {
+        heading: "Pixels, channels, and tensors",
+        paragraphs: [
+          "A digital image is a grid of **pixels**. Each pixel is a tiny block of color described by numbers — usually three of them: the red, green, and blue (**RGB**) intensities. Each one is an integer from 0 to 255 (that's 8 bits per channel). So a single pixel is a 3-number vector like (200, 50, 80) — a pinkish red.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Stack that grid up and an image becomes a **3D tensor** with three axes:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Height (H)", definition: "— the number of pixel rows." },
+          { term: "Width (W)", definition: "— the number of pixel columns." },
+          { term: "Channels (C)", definition: "— 3 for RGB, 1 for grayscale, 4 if there's an alpha (transparency) channel." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's the thing that trips people up, and it's worth getting straight right now: the *channel* dimension is conceptually way more important than just \"RGB.\" For the input image, sure, channels are colors. But after the very first convolutional layer, channels stop meaning colors and start meaning **learned features** — maybe one channel lights up on horizontal edges, another on red blobs, another on diagonal stripes. By the time you're deep in a CNN, each channel stands for some abstract pattern the network taught itself to look for, and the channel count typically grows from 3 at the input to hundreds or thousands deep in. Hold onto that — it's the heart of how CNNs work.",
+        ],
+      },
+      {
+        paragraphs: [
+          "A concrete example: a 1024×768 RGB image is a tensor of shape (3, 768, 1024) in PyTorch's convention (*channels first*) or (768, 1024, 3) in TensorFlow/NumPy's convention (*channels last*). Same data, different bookkeeping.",
+        ],
+      },
+      {
+        paragraphs: [
+          "When you stack multiple images into a batch for training, you add a fourth axis:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**(N, C, H, W)** — N images, C channels, height H, width W.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's the input tensor shape your CNN expects, and basically every other shape in this chapter eventually traces back to it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Let's see all of that in one picture:",
+        ],
+      },
+      {
+        diagram: { id: "vis-an-image-is-just-a-tensor", caption: "Fig 6.1 — Pixels -> channels -> a 3D tensor; batch them and you get the 4D (N, C, H, W) a CNN eats." },
+      },
+      {
+        quiz: {
+          question: "What does the shape (32, 3, 224, 224) describe, and which number will balloon as the image moves deeper into a CNN?",
+          answer: "It's a batch of 32 images, each with 3 channels (RGB), 224 pixels tall and 224 wide — the (N, C, H, W) layout. As the image flows deeper into a CNN, the **channel** count (the 3) grows — to 64, 128, 256, and beyond — because each layer adds more learned feature detectors, while the spatial H and W usually shrink. After the first layer those channels no longer mean colors; they mean learned patterns.",
         },
       },
       {
+        heading: "Normalization",
         paragraphs: [
-          "A couple of details worth pinning down before we go further. Channel order matters: PyTorch stores tensors channels-first as $(C, H, W)$, while TensorFlow and numpy store them channels-last as $(H, W, C)$. A 1024×768 RGB image is therefore $(3, 768, 1024)$ in PyTorch's convention and $(768, 1024, 3)$ in TensorFlow's — same image, transposed layout — and mixing the two up is one of the most common shape bugs you'll hit.",
-          "And when people say \"normalize,\" they usually mean a specific recipe. For ImageNet-trained models the constants are fixed by convention: subtract the per-channel mean $(0.485, 0.456, 0.406)$ and divide by the per-channel standard deviation $(0.229, 0.224, 0.225)$, after first scaling pixels into $[0, 1]$. The exact numbers matter — a model trained with these will quietly degrade if you feed it images normalized any other way.",
+          "Raw pixel values in [0, 255] make terrible inputs to a neural network. They're too large and not centered around zero, which makes optimization jumpy and unstable. So we always preprocess, in two steps:",
         ],
       },
       {
-        heading: "Why not just an MLP?",
         paragraphs: [
-          "The obvious thing to try is to flatten a 224×224×3 image into a 150,528-element vector and feed it to a fully connected layer — and it fails, for two reasons worth understanding. First, parameter explosion: the first weight matrix alone would carry around 150M parameters. Second, no translation invariance: a dog in the top-left corner and the exact same dog in the bottom-right corner light up completely different neurons, so the network is forced to relearn \"dog\" separately for every position. CNNs are built precisely around the two facts an MLP throws away — locality (nearby pixels are correlated) and translation invariance (a feature means the same thing no matter where it shows up).",
+          "1. **Divide by 255** to squeeze every value into [0, 1].",
+          "2. **Subtract the dataset mean and divide by the dataset standard deviation**, computed per channel. This re-centers the data around zero with a consistent spread.",
         ],
+      },
+      {
+        paragraphs: [
+          "For models trained on ImageNet, the standard normalization uses mean = (0.485, 0.456, 0.406) and std = (0.229, 0.224, 0.225) — one number per RGB channel. The golden rule: **normalize the exact same way at inference as you did at training.** If you trained on normalized inputs and then feed raw pixels at test time, the model sees garbage.",
+        ],
+      },
+      {
+        diagram: { id: "vis-image-normalization-pipeline", caption: "Fig 6.2 — Scale to [0,1], then center and rescale per channel - and do it identically at train and test time." },
+      },
+      {
+        paragraphs: [
+          "If that felt a little abstract — why these numbers matter, why zero-centering helps — hang tight. The next sections wire it all back into the network, and it should click.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why subtract the mean and divide by the standard deviation instead of just dividing by 255?",
+          answer: "Dividing by 255 fixes the *scale* (values land in [0, 1]) but leaves the data sitting at large positive averages, not centered on zero. Subtracting the per-channel mean re-centers the inputs around zero, and dividing by the per-channel standard deviation gives them a consistent spread. Zero-centered, unit-ish-variance inputs make the loss surface better behaved, so optimization is more stable and can use higher learning rates. And you must use the same mean/std at inference, or the model sees a distribution it never trained on.",
+        },
+      },
+      {
+        heading: "Convolutional Neural Networks",
+        paragraphs: [
+          "So: how do we actually feed images to a neural network? Your first instinct is probably the natural one — an image is just numbers, so why not flatten it and pour it into a plain fully-connected network (an MLP), like any other input? Let's try exactly that and watch it fall apart, because the way it fails tells us precisely what to build instead.",
+        ],
+      },
+      {
+        heading: "Why a plain MLP doesn't work",
+        paragraphs: [
+          "Take a 224×224×3 image. Flatten it into one long vector and you get 150,528 numbers. Feed that to a fully-connected network. Two problems make this a disaster.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Parameter explosion.** The first layer's weight matrix would be 150,528 × hidden_dim. For even a modest hidden_dim of 1,000, that's **150 million parameters in the first layer alone.** Networks that big do train, but you'd be burning your entire parameter budget just learning to look at individual pixels.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**No translation invariance.** A dog in the top-left corner and the *same* dog in the bottom-right corner would activate completely different input neurons. The network would have to learn \"what a dog looks like\" separately for every possible position in the image. With any finite amount of training data, that's hopeless.",
+        ],
+      },
+      {
+        diagram: { id: "vis-why-an-mlp-fails-on-images", caption: "Fig 6.3 — Flattening throws away spatial structure: too many parameters, and the same object looks brand-new at every position." },
+      },
+      {
+        paragraphs: [
+          "The fix is a specialized architecture: the **Convolutional Neural Network**. CNNs are built around two facts about images that the MLP ignored:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Locality", definition: "— pixels near each other are correlated and form meaningful patterns; far-apart pixels mostly aren't. A nose is a local arrangement of pixels, not a relationship between opposite corners." },
+          { term: "Translation invariance", definition: "— a feature (an edge, a texture, an eye) means the same thing no matter where it appears." },
+        ],
+      },
+      {
+        paragraphs: [
+          "The convolution operation is engineered around exactly these two facts. Let's build it.",
+        ],
+      },
+      {
+        quiz: {
+          question: "The two MLP failures map onto the two facts CNNs exploit. Which fix addresses which failure?",
+          answer: "Reusing one small filter across all positions (the locality + weight-sharing idea) fixes the *parameter explosion* — instead of 150M weights you have a few dozen, reused everywhere. And sliding that same filter across the whole image gives *translation invariance* — the detector responds to a feature identically wherever it appears, so the network doesn't have to relearn \"dog\" for each corner.",
+        },
       },
       {
         heading: "The convolution operation",
         paragraphs: [
-          "So here's what a convolution actually does. It slides a small filter — a 3×3 or 5×5 tensor of weights, with the same depth as the input — across the image. At each stop, it multiplies the filter element-wise against the patch it's sitting on, sums everything up, adds a bias, and writes out a single value. Do that across the whole input and you've got a 2-D feature map showing how strongly that filter's pattern shows up at each position:",
+          "A convolution slides a small **filter** (also called a **kernel**) across the image, computing a dot product at each position. A filter is a small tensor of weights — typically 3×3 or 5×5 in spatial size — with the *same number of channels as its input*. At each spatial position you run this little algorithm:",
         ],
+      },
+      {
+        paragraphs: [
+          "1. Multiply the filter element-wise with the patch of input it's sitting on.",
+          "2. Sum all those products.",
+          "3. Add a bias.",
+          "4. Write the result to that position in the output.",
+          "5. Slide the filter one step over and repeat, until you've covered the whole input.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The output is a 2D **feature map** showing how strongly that filter's pattern is detected at each location. Mathematically, for an input $I$ and filter $K$:",
+        ],
+      },
+      {
         equations: [
-          "y(i, j) = \\sum_{m}\\sum_{n}\\sum_{c} x(i+m,\\, j+n,\\, c)\\,w(m, n, c) + b",
+          "\\text{output}(i, j) = \\sum_{m}\\sum_{n}\\sum_{c} I(i+m, j+n, c) \\cdot K(m, n, c) + b",
         ],
-        diagram: {
-          id: "convolution",
-          caption:
-            "Fig 5.2 — A filter slides over the input; each placement produces one output value. The output shrinks unless you pad.",
+      },
+      {
+        paragraphs: [
+          "Reading the symbols:",
+        ],
+      },
+      {
+        list: [
+          "$\\text{output}(i, j)$ — the value written at output position $(i, j)$.",
+          "$I(i+m, j+n, c)$ — the input pixel at row $i+m$, column $j+n$, channel $c$ (the patch under the filter).",
+          "$K(m, n, c)$ — the filter weight at offset $(m, n)$ in channel $c$.",
+          "$b$ — a single scalar bias added at the end.",
+          "The triple sum runs over the filter's spatial dimensions $(m, n)$ and across all input channels $(c)$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That triple sum *is* the whole operation. Here's the slide-and-multiply in motion:",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-convolution-slide-and-dot-product", caption: "Fig 6.4 — One filter slides over the image, dotting itself with each patch, painting a feature map of where its pattern appears." },
+      },
+      {
+        paragraphs: [
+          "Two quick notes for completeness. In full generality, with explicit kernel size $k$ and input channels $C_{in}$:",
+        ],
+      },
+      {
+        equations: [
+          "y(i, j) = \\sum_{m=0}^{k-1}\\sum_{n=0}^{k-1}\\sum_{c=0}^{C_{in}-1} x(i+m, j+n, c) \\cdot w(m, n, c) + b",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $y(i,j)$ is the output, $x$ the input, $w$ the filter (kernel size $k \\times k$ with the same channel count $C_{in}$ as the input), and $b$ a single learned bias added to every output position.",
+        ],
+      },
+      {
+        paragraphs: [
+          "And a technical aside worth knowing: what we just described is technically **cross-correlation**, not true convolution. A real mathematical convolution would *flip* the filter before applying it. In deep learning everyone calls it convolution anyway, because the filter is *learned* — flipping or not flipping makes no difference, the network just learns whatever weights work either way.",
+        ],
+      },
+      {
+        quiz: {
+          question: "A filter has the same number of channels as its input. For an RGB input, how many weights does one 3×3 filter have (ignoring bias)?",
+          answer: "$3 \\times 3 \\times 3 = 27$ weights. The filter is 3×3 in space and must match the input's 3 channels in depth, so it's a (3, 3, 3) tensor. Adding the single bias makes 28 learned numbers for that one filter — and those same 28 numbers get reused at *every* spatial position, which is exactly where the parameter savings and translation invariance come from.",
         },
       },
       {
+        heading: "A convolution worked out from scratch",
         paragraphs: [
-          "One pedantic but worth-knowing footnote: what's described above is technically cross-correlation, not true convolution. A true mathematical convolution flips the filter before applying it. In deep learning nobody bothers — because the filter weights are learned, flipping or not flipping makes no difference at all; the network simply learns whatever weights work. So everyone calls it \"convolution\" and moves on.",
+          "Let's make this concrete with real numbers. Take a tiny 5×5 grayscale input:",
         ],
       },
       {
         paragraphs: [
-          "One filter detects one pattern, so a layer uses many in parallel — $K$ filters produce $K$ output channels. The payoff is parameter sharing: a 3×3 filter over a 3-channel input is just 28 parameters, reused at every one of the ~50,000 spatial positions — an 80,000× reduction versus the dense layer, with translation invariance for free. Padding (adding a zero border) keeps the spatial size from shrinking; stride (how far the filter jumps) downsamples. The output size along each axis is $\\lfloor (n + 2p - k)/s \\rfloor + 1$.",
+          "And this 3×3 filter — roughly a horizontal-edge detector:",
         ],
       },
       {
         paragraphs: [
-          "After every conv layer comes a nonlinearity, almost always ReLU — without it, stacked convolutions collapse to one linear map. The canonical block is Conv → BatchNorm → ReLU. To downsample and focus on what matters, networks pool: max pooling slides a small window and keeps the maximum, preserving the strongest response and giving a little translation invariance for free; global average pooling collapses each feature map to a single number at the very end.",
+          "To get the output at position (0,0) — the top-left output cell — overlay the filter on the top-left 3×3 patch:",
         ],
-        equations: ["\\mathrm{ReLU}(x) = \\max(0,\\, x)"],
       },
       {
         paragraphs: [
-          "ReLU is the default, but you'll meet a few smoother cousins: Leaky ReLU keeps a small negative slope instead of flatlining at zero, GELU is the smooth version transformers use, and SiLU/Swish shows up in some recent CNNs. For classical CNN work, plain ReLU is still what you reach for first.",
+          "Multiply element-wise and sum:",
         ],
+      },
+      {
+        equations: [
+          "(3 \\cdot -1) + (0 \\cdot -1) + (1 \\cdot -1) + (2 \\cdot 0) + (6 \\cdot 0) + (2 \\cdot 0) + (1 \\cdot 1) + (1 \\cdot 1) + (7 \\cdot 1) = -3 - 0 - 1 + 0 + 0 + 0 + 1 + 1 + 7 = 5",
+        ],
+      },
+      {
+        paragraphs: [
+          "So output(0,0) = 5. Now slide one step right:",
+        ],
+      },
+      {
+        equations: [
+          "(0 \\cdot -1) + (1 \\cdot -1) + (5 \\cdot -1) + 0 + 0 + 0 + (1 \\cdot 1) + (7 \\cdot 1) + (8 \\cdot 1) = -6 + 16 = 10",
+        ],
+      },
+      {
+        paragraphs: [
+          "So output(0,1) = 10. Keep sliding across and down. A 5×5 input convolved with a 3×3 filter gives a **3×3 output** by default — we'll see exactly why in a moment.",
+        ],
+      },
+      {
+        paragraphs: [
+          "What is this filter actually doing? It returns a big positive value wherever the bottom row of the patch is brighter than the top row — that is, wherever there's a horizontal edge running from dark-on-top to light-on-bottom. The value 5 at (0,0) means a moderate horizontal edge there; the 10 at (0,1) means an even stronger one just to the right. That's what \"detecting a pattern\" means: the output is highest where the input matches what the filter is looking for.",
+        ],
+      },
+      {
+        diagram: { id: "vis-worked-convolution-example-5x5-input-3x3-edge-filter", caption: "Fig 6.5 — Big positive output where the bottom of the patch is brighter than the top - that's a horizontal edge being detected." },
+      },
+      {
+        quiz: {
+          question: "Why does the output value of 10 mean a \"stronger edge\" than the output of 5?",
+          answer: "This filter computes (sum of bottom row) − (sum of top row) for each patch. A larger positive result means a bigger jump in brightness from the top of the patch to the bottom — i.e. a sharper dark-to-light horizontal transition. At (0,1) the bottom row (1, 7, 8) is much brighter than the top row (0, 1, 5), giving +10; at (0,0) the contrast is milder, giving +5. The filter's output magnitude directly measures how strongly the patch matches the pattern it detects.",
+        },
+      },
+      {
+        heading: "Multiple filters and channels",
+        paragraphs: [
+          "One filter produces one feature map — one kind of pattern detected across the image. But the world has many kinds of patterns: horizontal edges, vertical edges, diagonals, color blobs, textures. So a conv layer uses **many filters in parallel**, each hunting for a different thing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "If a layer has $K$ filters and the input has $C_{in}$ channels, then:",
+        ],
+      },
+      {
+        list: [
+          "Each filter has shape $(C_{in}, k, k)$ — the same depth as the input, with spatial size $k \\times k$.",
+          "All $K$ filters together form a weight tensor of shape $(K, C_{in}, k, k)$.",
+          "The output has $K$ channels — one feature map per filter.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So for an input of shape (3, 224, 224) — RGB, 224 pixels a side — a conv layer with 64 filters of size 3×3 produces an output of shape **(64, 224, 224)**. Each of those 64 output channels is one filter's response across the whole image.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is the key reason CNNs scale so gracefully: the input has 3 channels (R, G, B), but after one layer you have 64 abstract feature channels. After another, 128. After another, 256. The network keeps building richer and richer descriptions of the image. And — exactly as promised earlier — after that first layer \"channels\" no longer mean colors. Maybe channel 7 fires on vertical edges, channel 23 on red blobs, channel 41 on diagonal textures. Deeper still and channels mean eyes, faces, wheels, paws. The network discovers all of this from data; nobody assigns the meanings.",
+        ],
+      },
+      {
+        diagram: { id: "vis-many-filters-many-feature-maps", caption: "Fig 6.6 — K filters in parallel make K feature maps. Channels go from 3 colors to hundreds of learned patterns." },
+      },
+      {
+        quiz: {
+          question: "A conv layer takes a (3, 224, 224) input and has 64 filters of size 3×3. What's the shape of its weight tensor, and what's the output shape (with same padding)?",
+          answer: "The weight tensor is (64, 3, 3, 3) — 64 filters, each matching the input's 3 channels with a 3×3 spatial size. The output is (64, 224, 224): 64 channels (one feature map per filter), with the 224×224 spatial size preserved by same padding. The output depth equals the number of filters, full stop.",
+        },
+      },
+      {
+        heading: "Counting the parameters",
+        paragraphs: [
+          "Let's actually count, because the savings are staggering. Input (C_in, H, W) = (3, 224, 224), filter size 3×3, output channels K = 64.",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Per filter", definition: "$3 \\times 3 \\times 3 = 27$ weights, plus 1 bias = 28." },
+          { term: "Whole layer", definition: "$64 \\times 28 = 1{,}792$ parameters." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Now compare to a fully-connected layer mapping the flattened input to just 1,000 outputs: $150{,}528 \\times 1{,}000 = 150$ **million** parameters. That's an **80,000× reduction.** And here's the kicker: those 1,792 parameters are *reused at every one of the* $224 \\times 224 = 50{,}176$ *spatial positions*. The CNN gets translation invariance for free out of this exact design — the same filter looks for the same pattern everywhere.",
+        ],
+      },
+      {
+        diagram: { id: "vis-conv-vs-fully-connected-parameter-count", caption: "Fig 6.7 — A handful of shared weights, reused everywhere, replaces 150 million position-specific ones." },
+      },
+      {
+        quiz: {
+          question: "Where does the CNN's translation invariance actually come from in this parameter-counting picture?",
+          answer: "From weight sharing. The same small filter (e.g. 28 numbers) is applied at every spatial position rather than learning separate weights per location. Because the identical detector slides across the whole image, a pattern produces the same response wherever it sits — that's translation invariance — and it's also why the parameter count is tiny and independent of image size.",
+        },
+      },
+      {
+        heading: "Padding, stride, and output size",
+        paragraphs: [
+          "Back in the worked example, a 5×5 input gave a 3×3 output. Why did it shrink? Because we only placed the filter where it fully fit inside the input — and a 3×3 filter only has 3 valid starting positions along a 5-wide axis. In a deep network that shrinking is a real problem: after a few layers your image would dwindle to nothing.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Padding** fixes it. Add a border of zeros around the input before convolving. With padding $p$, the input effectively becomes $(H + 2p) \\times (W + 2p)$. With $p = 1$ for a 3×3 filter, the output comes out the *same* spatial size as the input — this is called **\"same\" padding**, and nearly every modern CNN uses it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Stride** is how far the filter jumps between positions. Stride 1 means \"slide one pixel at a time.\" Stride 2 means \"skip every other position,\" which *halves* the output's spatial size and is a common way to downsample.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The output spatial size formula ties it all together:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{output\\_size} = \\left\\lfloor \\frac{\\text{input\\_size} + 2p - k}{s} \\right\\rfloor + 1",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $p$ is padding, $k$ is kernel size, $s$ is stride, and $\\lfloor \\cdot \\rfloor$ is the floor (round down). Let's plug in a few cases:",
+        ],
+      },
+      {
+        list: [
+          "5×5 input, 3×3 filter, no padding, stride 1: $(5 + 0 - 3)/1 + 1 = 3$. Output 3×3. (That's our worked example.)",
+          "224×224 input, 3×3 filter, padding 1, stride 1: $(224 + 2 - 3)/1 + 1 = 224$. Output 224×224 — same padding.",
+          "224×224 input, 3×3 filter, padding 1, stride 2: $(224 + 2 - 3)/2 + 1 = 112$. Output 112×112 — halved.",
+          "224×224 input, 7×7 filter, padding 3, stride 2: $(224 + 6 - 7)/2 + 1 = 112$. Also halved.",
+        ],
+      },
+      {
+        diagram: { id: "vis-padding-stride-and-output-size", caption: "Fig 6.8 — Padding keeps size up; stride brings it down. One formula predicts the output shape every time." },
+      },
+      {
+        quiz: {
+          question: "You have a 56×56 feature map and apply a 3×3 conv with padding 1 and stride 2. What's the output spatial size?",
+          answer: "$(56 + 2\\cdot1 - 3)/2 + 1 = (55)/2 + 1 = \\lfloor 27.5 \\rfloor + 1 = 27 + 1 = 28$. So 28×28 — the stride-2 step halves the spatial size, while the padding-1 keeps the arithmetic clean. This is exactly the downsampling pattern used between CNN stages.",
+        },
+      },
+      {
+        heading: "Activation: ReLU",
+        paragraphs: [
+          "A conv layer is a *linear* function of its input. And stacking linear layers just gives you another linear function — no matter how many you pile up, the whole thing collapses into one single linear transformation. That's useless for the rich, nonlinear patterns in images. (If this argument feels familiar, it's the same reason the transformer's feed-forward block needed a nonlinearity — the villain and the fix recur across architectures.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "So after every conv layer we apply a nonlinear **activation function**, almost always **ReLU** (Rectified Linear Unit):",
+        ],
+      },
+      {
+        equations: [
+          "\\text{ReLU}(x) = \\max(0, x)",
+        ],
+      },
+      {
+        paragraphs: [
+          "That's the whole thing: any negative value becomes 0, positives pass through unchanged. ReLU is dirt cheap to compute, it doesn't saturate (its gradient is 1 everywhere positive, so signal flows nicely during backprop), and empirically it trains deep networks far better than the older sigmoid and tanh. Modern variants include **Leaky ReLU** (a small negative slope instead of a hard zero), **GELU** (a smooth version used in transformers), and **SiLU/Swish** (smooth, used in some recent CNNs) — but for classic CNN work, plain ReLU is the default.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The standard conv-layer pattern, end to end, is **Conv → BatchNorm → ReLU**. That **batch normalization** step (introduced in 2015) normalizes activations to zero mean and unit variance across the batch, which dramatically stabilizes training and is nearly universal in modern CNNs.",
+        ],
+      },
+      {
+        diagram: { id: "vis-relu-and-the-conv-batchnorm-relu-block", caption: "Fig 6.9 — Without a nonlinearity, stacked conv layers collapse to one. ReLU keeps them expressive and the gradients flowing." },
+      },
+      {
+        quiz: {
+          question: "Why does removing the activation function defeat the purpose of stacking many conv layers?",
+          answer: "Because a composition of linear maps is itself a single linear map. A conv layer with no nonlinearity is linear, so stacking ten of them is mathematically equivalent to one linear conv — the depth buys you zero extra expressive power. ReLU (or any nonlinearity) breaks that collapse, letting each added layer learn genuinely more complex, non-linear features. It's the same logic as the nonlinearity in a transformer's FFN.",
+        },
+      },
+      {
+        heading: "Pooling",
+        paragraphs: [
+          "After several conv layers you usually want to **downsample** — shrink the spatial resolution to focus on what matters and cut the compute. There are two ways:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Strided convolution** — use stride 2 in a conv layer to halve the spatial size *while learning* the downsampling (the filter weights decide what to keep).",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Pooling** — a fixed, non-learned downsampling. The most common is **max pooling**: slide a small window (typically 2×2 with stride 2) across the feature map and keep only the maximum value in each window. For a 2×2 max pool with stride 2, every 2×2 patch becomes one output value — the max of those four numbers — so both spatial dimensions halve.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Why max instead of average? Max pooling preserves the *strongest* response — if some pixel in the window fires hard for \"horizontal edge,\" that signal survives. Average pooling would water it down. Max pooling also hands you a little translation invariance for free: nudge a feature by a pixel within a 2×2 window and the max is unchanged.",
+        ],
+      },
+      {
+        paragraphs: [
+          "There's also **global average pooling**, used at the very end of a network: average each entire feature map down to a single scalar, collapsing a (C, H, W) tensor to a length-C vector. This replaced the heavy fully-connected layers of older CNNs and was popularized by ResNet.",
+        ],
+      },
+      {
+        diagram: { id: "vis-pooling-max-average-and-global", caption: "Fig 6.10 — Pooling shrinks space. Max keeps the strongest signal; global average pooling collapses each map to one number at the end." },
+      },
+      {
+        quiz: {
+          question: "Why is max pooling usually preferred over average pooling inside a CNN, and what does global average pooling replace?",
+          answer: "Max pooling keeps the strongest activation in each window, so a sharp feature response survives downsampling instead of being diluted by neighboring low values (as average pooling would do); it also gives a little translation invariance, since shifting a feature within the window doesn't change the max. Global average pooling, used at the network's end, collapses each feature map to a single scalar — replacing the bulky fully-connected layers that older CNNs used before their classifier.",
+        },
       },
       {
         heading: "The hierarchy of features",
         paragraphs: [
-          "Stacking conv + pool blocks builds a hierarchy of increasing complexity, and it emerges from training, not design. Early layers detect edges and color blobs; middle layers combine them into corners, textures, and simple shapes; late layers respond to whole objects and parts — \"dog face,\" \"car wheel.\" This works because deeper neurons have larger receptive fields: each only looked at a small patch, but stacking widens the region of the input that influences it until a single neuron can see the whole image.",
+          "Here's the deepest idea about CNNs — the reason they work as well as they do. By stacking conv + pool blocks, the network builds a **hierarchy of features** of increasing complexity. Visualize what the filters in a trained CNN respond to and you see a clear progression:",
         ],
-        diagram: {
-          id: "receptive-field",
-          caption:
-            "Fig 5.3 — The receptive field grows with depth. Early neurons see a tiny patch; deep neurons see whole objects.",
+      },
+      {
+        definitions: [
+          { term: "Early layers (1–2)", definition: "— simple low-level features: edges at various orientations, color blobs, basic textures. These look almost exactly like the filters that classical computer-vision researchers hand-designed before deep learning (Gabor filters, Sobel operators). The network rediscovers them on its own." },
+          { term: "Middle layers (3–5)", definition: "— combinations of those into mid-level patterns: corners, stripes, simple shapes, eye-like patterns, wheel-like patterns." },
+          { term: "Late layers (6+)", definition: "— high-level concepts: whole objects, animal parts, faces, scene types. Individual deep neurons often fire on startlingly specific things — \"dog face,\" \"car wheel,\" \"vertical text.\"" },
+        ],
+      },
+      {
+        paragraphs: [
+          "Nobody programs this hierarchy in. It *emerges* from training. The network discovers, by itself, that the way to recognize a dog is to first find edges, combine edges into textures and shapes, combine shapes into dog-parts, and combine parts into a whole dog. That compositional structure is exactly how vision researchers — and probably biological visual systems — think about the problem. And the reason deeper layers can represent bigger concepts comes down to one idea: their **receptive fields** are larger. Let's unpack that.",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-emergent-feature-hierarchy", caption: "Fig 6.11 — Edges -> textures -> parts -> objects. The hierarchy is never programmed; it emerges from training." },
+      },
+      {
+        heading: "Receptive field",
+        paragraphs: [
+          "The **receptive field** of a neuron is the region of the *input image* that affects its value. Early-layer neurons see only a small patch — each looked at just a 3×3 region of the input. But deeper neurons combine outputs from many earlier neurons, so they end up seeing much more of the original image.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Here's how it grows for stacked 3×3 conv layers:",
+        ],
+      },
+      {
+        list: [
+          "After 1 layer: receptive field 3×3.",
+          "After 2 stacked layers: each output depends on a 3×3 patch of the previous layer, each of which depended on a 3×3 patch of the input — so the field is 5×5.",
+          "After 3 stacked: 7×7.",
+          "After $n$ stacked 3×3 layers: $(2n + 1) \\times (2n + 1)$.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Pooling and strided convolutions speed this up dramatically — a stride-2 layer effectively *doubles* the receptive field of everything after it. By the end of a deep CNN like ResNet-50, individual neurons can have receptive fields covering the *entire* input image. That's how deep neurons can \"see\" whole objects: their window is finally big enough to contain them.",
+        ],
+      },
+      {
+        diagram: { id: "vis-how-the-receptive-field-grows-with-depth", caption: "Fig 6.12 — Stack layers and the window onto the input widens - until a single deep neuron can see the entire object." },
+      },
+      {
+        quiz: {
+          question: "After 5 stacked 3×3 conv layers (stride 1, no pooling), what's the receptive field, and why does this matter for recognizing whole objects?",
+          answer: "$(2 \\cdot 5 + 1) = 11$, so an 11×11 receptive field. It matters because a neuron can only respond to a concept that fits inside the region of the input it can \"see.\" Early neurons (3×3) can only detect tiny local features like edges; deeper neurons, with their much larger receptive fields (accelerated further by pooling/striding), take in enough of the image to represent whole objects — which is why high-level concepts live in the late layers.",
         },
       },
       {
+        heading: "A complete CNN, layer by layer",
         paragraphs: [
-          "It's worth being precise about how fast that region grows. One 3×3 layer gives a 3×3 receptive field. Stack a second 3×3 on top and each output neuron depends on a 3×3 patch of the previous layer, each of which depended on a 3×3 patch of the input — so the receptive field is now 5×5. A third stacked layer takes it to 7×7. In general, after $n$ stacked 3×3 layers the receptive field is $(2n+1) \\times (2n+1)$. Pooling and stride-2 layers accelerate this dramatically — a single stride-2 layer effectively doubles the receptive field of everything after it — which is how deep neurons in a network like ResNet-50 end up seeing the entire image.",
+          "Let's trace a full CNN — a simplified ResNet-style classifier — from input to output, watching the tensor shapes change at every step. Keep one eye on the pattern: spatial size shrinks while channel count grows.",
         ],
       },
       {
-        heading: "A complete CNN",
         paragraphs: [
-          "Trace a ResNet-style classifier and a clear pattern appears: as you go deeper, spatial resolution shrinks (224 → 7) while channel count grows (3 → 512). The network trades spatial detail for semantic depth, then global-average-pools and applies a fully connected layer to produce class scores. Every classifier from AlexNet to EfficientNet is a variant of this recipe.",
+          "**Input:** a single 224×224 RGB image, shape (3, 224, 224).",
         ],
-        diagram: {
-          id: "cnn-stack",
-          caption:
-            "Fig 5.4 — The canonical CNN: spatial size falls while channel depth rises, ending in global pooling and a classifier.",
+      },
+      {
+        paragraphs: [
+          "**Block 1 — Stem.**",
+        ],
+      },
+      {
+        list: [
+          "Conv 7×7, 64 filters, stride 2, padding 3 → (64, 112, 112)",
+          "BatchNorm + ReLU",
+          "MaxPool 3×3, stride 2, padding 1 → (64, 56, 56)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Block 2.**",
+        ],
+      },
+      {
+        list: [
+          "Conv 3×3, 64 filters, stride 1, padding 1 → (64, 56, 56)",
+          "Conv 3×3, 64 filters, stride 1, padding 1 → (64, 56, 56) (BatchNorm + ReLU between)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Block 3.**",
+        ],
+      },
+      {
+        list: [
+          "Conv 3×3, 128 filters, stride 2, padding 1 → (128, 28, 28)",
+          "Conv 3×3, 128 filters, stride 1, padding 1 → (128, 28, 28)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Block 4.**",
+        ],
+      },
+      {
+        list: [
+          "Conv 3×3, 256 filters, stride 2, padding 1 → (256, 14, 14)",
+          "Conv 3×3, 256 filters, stride 1, padding 1 → (256, 14, 14)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Block 5.**",
+        ],
+      },
+      {
+        list: [
+          "Conv 3×3, 512 filters, stride 2, padding 1 → (512, 7, 7)",
+          "Conv 3×3, 512 filters, stride 1, padding 1 → (512, 7, 7)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Head.**",
+        ],
+      },
+      {
+        list: [
+          "Global average pooling: average each of the 512 feature maps to one scalar → (512,) vector",
+          "Fully-connected layer, 512 → 1000 (for 1000-class ImageNet) → (1000,) logits",
+          "Softmax → class probabilities",
+        ],
+      },
+      {
+        paragraphs: [
+          "Notice the pattern: as we go deeper, spatial dimensions shrink (224 → 7) while channel count grows (3 → 512). The network is **trading spatial resolution for semantic depth.** Early on you have lots of pixels each described by 3 numbers (R, G, B). At the end you have just 7×7 = 49 spatial positions, but each is described by 512 abstract feature dimensions. Then global pooling throws away spatial info entirely and the fully-connected layer produces a class score. This is the canonical CNN recipe — every classifier from AlexNet to EfficientNet follows some variant of it.",
+        ],
+      },
+      {
+        diagram: { id: "vis-a-full-cnn-tensor-shapes-from-input-to-logits", caption: "Fig 6.13 — Spatial resolution traded for semantic depth: 224x224x3 pixels become 7x7x512 features, then one class." },
+      },
+      {
+        quiz: {
+          question: "Across the CNN, spatial size goes 224 → 7 while channels go 3 → 512. In one phrase, what is the network doing, and what does global average pooling do at the end?",
+          answer: "It's trading spatial resolution for semantic depth — converting many pixels described by 3 color numbers into a few spatial positions described by hundreds of abstract feature dimensions. Global average pooling then collapses each of the 512 feature maps to a single scalar, discarding spatial layout entirely and producing a 512-length vector that the final fully-connected layer turns into class scores.",
         },
       },
       {
+        heading: "Training a CNN, and the three big ideas",
         paragraphs: [
-          "Beyond convolution itself, three ideas turned CNNs from a 1990s curiosity into the dominant vision architecture: ReLU activations (AlexNet, 2012) for clean gradient flow, batch normalization (2015) for stable training at higher learning rates, and residual connections (ResNet, 2015) — skip connections that add the input back to each block, letting gradients flow through arbitrarily deep networks. That last idea is the same one transformers use today. The training tricks that matter most are data augmentation, batch norm, learning-rate schedules, and pretraining on ImageNet then fine-tuning.",
+          "Training is exactly what you saw in earlier chapters: forward pass, compute loss, backprop, update weights. The only CNN-specific wrinkle is how gradients flow through the convolution. For each training example you (1) run the image forward to get logits, apply softmax, and compute cross-entropy loss against the true label; (2) backpropagate the gradient of the loss to every parameter — for conv layers, how each filter weight should change; and (3) update with an optimizer like SGD-with-momentum or Adam. Neat fact: the gradient of a conv layer is itself computed via a convolution (with flipped filters), which is why frameworks like PyTorch implement conv backprop efficiently on GPU.",
         ],
       },
       {
-        heading: "YOLO: detection as one regression",
         paragraphs: [
-          "Classification tells you what's in an image; detection asks the harder question of where everything is. The pre-deep-learning approach (DPM) and the first deep one (R-CNN) both took the same tack — repurpose a classifier and run it at thousands of locations. Accurate, but painfully slow; R-CNN took 40-plus seconds per image. YOLO's insight was to stop treating it as classification at all and make detection a single regression problem solved in one network pass. Resize the image, run one CNN, threshold the detections — you only look once.",
-          "YOLO divides the image into an $S \\times S$ grid (7×7 for VOC). Each cell predicts $B$ bounding boxes plus $C$ class probabilities, and the cell containing an object's center is responsible for detecting it. The output is a single $7 \\times 7 \\times 30$ tensor laid out spatially — for $B=2$ boxes (5 numbers each) plus 20 class probabilities.",
+          "The training tricks that matter most for CNNs: **data augmentation** (random crops, horizontal flips, color jitter, mixup — essential; without it CNNs overfit most datasets), **batch normalization** (normalize activations within each batch — stabilizes training, allows higher learning rates), **learning-rate schedules** (start high, decay via cosine annealing or step decay — critical for converging well), and **pretraining** (train on ImageNet first, then fine-tune on your task — this transfer-learning approach is overwhelmingly the default; training from scratch on a small dataset is rarely the right move).",
         ],
-        diagram: {
-          id: "yolo-grid",
-          caption:
-            "Fig 5.5 — YOLO's grid. Each cell predicts B boxes and class probabilities; the cell holding an object's center is responsible for it.",
+      },
+      {
+        paragraphs: [
+          "To wrap up CNNs, here are the three ideas — beyond convolution itself — that turned them from a 1990s curiosity into the dominant vision architecture for a decade:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **ReLU activations (AlexNet, 2012).** Replaced saturating sigmoid/tanh with $\\max(0, x)$. Gradients flow much better; training is faster.",
+          "2. **Batch normalization (2015).** Normalizes activations within each mini-batch. Enables deeper networks, higher learning rates, and far less sensitivity to weight initialization.",
+          "3. **Residual connections (ResNet, 2015).** Skip connections that add a block's input back to its output. They let gradients flow back through arbitrarily deep networks — and this is, no exaggeration, the single most important architectural idea since convolution itself. It's the *exact same idea* used in transformers today. (Remember the $+x$ skip path from the transformer chapter? Same hero, different architecture.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Together with the convolution operation, these are the load-bearing ideas in every modern vision CNN. Understand them and you understand why every detection model (YOLO, R-CNN), every segmentation model (U-Net, Mask R-CNN), and even diffusion models (which run on U-Nets) share the same conceptual DNA.",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-three-ideas-that-made-cnns-dominate", caption: "Fig 6.14 — ReLU keeps gradients alive, BatchNorm steadies training, residuals carry gradients through depth - the last one is the same trick transformers use." },
+      },
+      {
+        quiz: {
+          question: "Residual connections are called \"the same idea used in transformers.\" What problem do they solve, and what's the mechanism?",
+          answer: "They solve the problem of training very deep networks, where gradients have to flow back through many layers and tend to vanish. The mechanism is a skip connection that adds a block's input directly to its output ($\\text{output} = x + \\text{block}(x)$). That $+x$ creates a direct path for gradients during backprop, so they reach early layers intact, and it lets each block learn only a small *change* to its input rather than a full transformation. It's identical to the residual/Add step inside transformer layers.",
         },
       },
       {
-        heading: "Before YOLO: DPM and R-CNN",
+        heading: "YOLO: You Only Look Once",
         paragraphs: [
-          "To appreciate why YOLO felt like such a leap, it helps to see what it replaced. Before deep learning, the dominant detector was the Deformable Parts Model (DPM). It worked by sliding a classifier across the image at every location and multiple scales, and at each window it would extract hand-crafted HOG (Histogram of Oriented Gradients) features, score the window against a learned template for the object's overall shape, score it again against templates for the object's parts (legs, head, wheels), and combine everything while allowing some deformation between the parts. The trouble was that every piece — feature extraction, root filter, part filters, deformation cost, post-processing — was designed or trained separately with no joint optimization, the hand-crafted HOG features couldn't capture the diversity of natural images, and even the fastest variant couldn't really hit real-time on general detection.",
-          "The first wave of deep-learning detectors — R-CNN (2014), then Fast R-CNN, then Faster R-CNN — swapped HOG for CNN features but kept a two-stage structure. Stage one generates around 2000 candidate boxes per image: the original R-CNN used Selective Search (a classical, non-learned algorithm), while Faster R-CNN replaced it with a small learned Region Proposal Network. Stage two runs a CNN on each candidate to classify it and refine the box. On top of that sat a separate box-refinement model, NMS to remove duplicates, and context rescoring. The numbers tell the story: the original R-CNN took more than 40 seconds per image, and even Fast R-CNN managed only about 0.5 frames per second — nowhere near real-time. Too many parts, each trained separately, each adding its own cost.",
-          "Both DPM and R-CNN share the same flaw: they repurpose a classifier to do detection, running it at many locations and post-processing the results. The classifier never sees the whole image, so it can't reason about context, and the pipeline is slow because so many separate operations have to run. YOLO's core insight was to make detection one regression problem, optimized end-to-end on the actual goal — good boxes and class predictions — instead of stacking separately-trained classifiers.",
+          "Funny name, huh? YOLO became one of the most popular computer-vision architectures around, and it's worth understanding *why* the design is so good. But first we need to know what came before it — because, just like in the transformer story, YOLO is best understood as a reaction to the slow, clunky thing it replaced.",
         ],
       },
       {
-        heading: "Inside the YOLO network",
         paragraphs: [
-          "The network itself is 24 convolutional layers followed by 2 fully connected layers. It's inspired by GoogLeNet but simpler — instead of inception modules, YOLO alternates 1×1 reduction layers with 3×3 convolutions. A 1×1 convolution mixes channels at a single spatial position without looking at neighbors, which makes it the cheapest possible way to cut a feature map's depth (say 512 channels down to 256) before an expensive 3×3 layer. That 1×1 → 3×3 pattern became standard after this paper.",
-          "Reading the shapes off the paper's Figure 3: the 448×448×3 input passes through a 7×7×64 stride-2 conv and maxpool down to 112×112×64, a 3×3×192 conv and maxpool to 56×56×192, a stack of $(1\\times1\\times128, 3\\times3\\times256, 1\\times1\\times256, 3\\times3\\times512)$ and maxpool to 28×28×512, then $(1\\times1\\times256, 3\\times3\\times512) \\times 4$ followed by $1\\times1\\times512, 3\\times3\\times1024$ and maxpool to 14×14×1024, then $(1\\times1\\times512, 3\\times3\\times1024) \\times 2$ plus two more 3×3×1024 convs (one stride-2) down to 7×7×1024, two final 3×3×1024 convs, a fully connected layer to 4096, and a final fully connected layer reshaped to the 7×7×30 output tensor. That last tensor is the entire detection prediction: $S=7$, $B=2$, $C=20$, so each cell carries $2 \\times 5 + 20 = 30$ numbers, and cell $(i, j)$ of the output corresponds directly to grid cell $(i, j)$ of the image.",
-          "Every layer except the last uses Leaky ReLU with a 0.1 slope on the negative side — standard ReLU zeros out any negative input, which can leave \"dead neurons\" that output zero and never recover, whereas the small leak lets a little gradient flow even when a neuron isn't firing. The final layer uses a linear activation, because it has to predict coordinates and probabilities that span the real line:",
+          "A quick framing of the task. **Classification** answers \"what's in this image?\" with one label. **Detection** is harder: it answers \"what objects are here, and *where*?\" — drawing a bounding box around each object and labeling it. That \"where\" is the whole challenge.",
         ],
+      },
+      {
+        heading: "Before deep learning: DPM",
+        paragraphs: [
+          "The dominant detection method before deep learning was **DPM** (Deformable Parts Model). It worked by **sliding window**: take a classifier for your target object, slide it across the image at evenly spaced locations and at multiple scales, and at each stop ask \"is the object here?\" For each window the model would extract hand-crafted features (typically **HOG** — Histogram of Oriented Gradients), score the window against a learned template for the object's overall shape, score against templates for the object's *parts* (legs, head, wheels), and combine the scores while allowing some deformation between parts.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The problems were severe: the **pipeline was complex** (feature extraction, root filter, part filters, deformation cost, post-processing — each piece designed or trained separately, no joint optimization), it was **slow** (even the fastest variant couldn't really do real-time general detection), and the **hand-crafted HOG features** worked for some objects like pedestrians but couldn't capture the diversity of natural images the way learned features could.",
+        ],
+      },
+      {
+        diagram: { id: "vis-dpm-detection-by-sliding-window", caption: "Fig 6.15 — Slide a hand-crafted classifier everywhere, at every scale - accurate-ish, but slow and built from many separate pieces." },
+      },
+      {
+        heading: "The first deep wave: R-CNN",
+        paragraphs: [
+          "The first deep-learning detectors — **R-CNN (2014)**, then Fast R-CNN, then Faster R-CNN — replaced hand-crafted features with CNNs but kept a **two-stage** structure:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Stage 1: Region proposals", definition: "Generate ~2,000 candidate boxes per image that *might* contain objects. Original R-CNN used Selective Search (a classical, non-learned algorithm); Faster R-CNN later replaced it with a small Region Proposal Network." },
+          { term: "Stage 2: Classify each proposal", definition: "Run a CNN on every candidate, classify it as an object class (or background), and refine the box coordinates." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Then, on top of that: a separate linear model to refine boxes, NMS to remove duplicates, and rescoring based on context. The numbers tell the story — original R-CNN took **more than 40 seconds per image** at test time; even Fast R-CNN at 0.5 frames per second was nowhere near real-time. Too many parts, each trained separately, each adding its own cost.",
+        ],
+      },
+      {
+        diagram: { id: "vis-r-cnn-two-stage-detection", caption: "Fig 6.16 — Propose ~2000 boxes, then classify each: accurate, fully deep - but far too slow for real time." },
+      },
+      {
+        paragraphs: [
+          "Both DPM and R-CNN share one deep flaw: they **repurpose a classifier to do detection.** They take a classifier, run it at many locations, and post-process the results. That means each component is trained and tuned separately; the classifier never sees the whole image (only local patches or proposals), so it can't reason about context; and the pipeline is slow because so many separate operations have to run.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The YOLO authors' core insight: **detection should be one regression problem, optimized end-to-end on the actual goal** — good bounding boxes and class predictions — not a stack of separately trained classifiers.",
+        ],
+      },
+      {
+        quiz: {
+          question: "What single design flaw do both DPM and R-CNN share, and what did YOLO propose instead?",
+          answer: "Both repurpose a *classifier* for detection — they run a classifier at many locations or region proposals and stitch the results together with separate, individually-trained stages. This makes them slow and prevents reasoning over the whole image at once. YOLO reframes detection as a single end-to-end *regression* problem: one network looks at the entire image once and directly outputs all the boxes and class probabilities, trained jointly on the real goal.",
+        },
+      },
+      {
+        heading: "The YOLO algorithm",
+        paragraphs: [
+          "The YOLO inference recipe is only three steps:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. Resize the input image to 448×448.",
+          "2. Run a single CNN on the image.",
+          "3. Threshold the resulting detections by confidence (and apply NMS).",
+        ],
+      },
+      {
+        paragraphs: [
+          "One image goes in, a list of detection boxes comes out — a genuine one-shot pipeline. Unlike R-CNN, which effectively looks at the image thousands of times, with YOLO **you only look once.** (NMS, by the way, is **Non-Maximum Suppression** — a post-processing step that removes duplicate boxes and keeps the best detections. We'll cover it properly below.)",
+        ],
+      },
+      {
+        diagram: { id: "vis-yolo-one-shot-detection-pipeline", caption: "Fig 6.17 — Resize, one CNN pass, threshold + NMS. The whole detector is a single forward pass." },
+      },
+      {
+        paragraphs: [
+          "Now the architecture at a high level — it's organized around a grid:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 1 — divide the image into an S × S grid.** For PASCAL VOC, S = 7, so the 448×448 image is conceptually broken into a 7×7 grid, each cell covering a 64×64-pixel region.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 2 — each cell predicts B bounding boxes plus C class probabilities.** For VOC, B = 2 (each cell proposes two candidate boxes) and C = 20 (twenty object classes).",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 3 — the \"responsible\" cell.** If the *center* of an object falls inside a grid cell, that cell is responsible for detecting it. This is the critical rule: an object belongs to exactly *one* cell, regardless of how big it is. A dog whose center lands in cell (3, 4) is detected by cell (3, 4), even if its body sprawls across many cells.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So the model's prediction is entirely *spatially organized*. The output isn't just a flat list of boxes — it's a 3D tensor laid out spatially, where each (row, column) slot predicts what's centered in the corresponding region of the image.",
+        ],
+      },
+      {
+        diagram: { id: "vis-yolo-s-s-x-s-grid-and-the-responsible-cell", caption: "Fig 6.18 — An object belongs to the one cell holding its center - so predictions line up spatially with the image." },
+      },
+      {
+        quiz: {
+          question: "A large truck's body covers 12 of the 7×7 grid cells, but its center sits in cell (2, 5). How many cells are \"responsible\" for detecting it, and why does this matter?",
+          answer: "Exactly one — cell (2, 5), the cell containing the object's *center*, regardless of how many cells the body spans. This \"one object → one cell\" rule is what makes YOLO's output a clean, spatially-organized tensor (each cell predicts what's centered there) and what largely prevents duplicate detections. It's also the source of a limitation we'll hit later: if two object centers fall in the same cell, the cell can struggle to report both.",
+        },
+      },
+      {
+        heading: "The architecture",
+        paragraphs: [
+          "The network has **24 convolutional layers followed by 2 fully-connected layers** (the paper's Figure 3). It's inspired by GoogLeNet but simpler — instead of inception modules, YOLO alternates **1×1 reduction layers** with **3×3 convolutions**.",
+        ],
+      },
+      {
+        paragraphs: [
+          "What's a 1×1 convolution? It mixes channels at a single spatial position without looking at neighbors — it's used for **dimensionality reduction**. If a feature map has 512 channels and you want to cut it to 256 before an expensive 3×3 conv, a 1×1 conv is the cheapest way to do it. The 1×1 → 3×3 pattern became standard after this paper.",
+        ],
+      },
+      {
+        diagram: { id: "vis-1x1-convolution-cheap-channel-mixing", caption: "Fig 6.19 — A 1x1 conv remixes channels at each pixel - the cheap way to shrink depth before a pricey 3x3." },
+      },
+      {
+        paragraphs: [
+          "Reading the shape progression off the paper's Figure 3:",
+        ],
+      },
+      {
+        paragraphs: [
+          "| Stage | Layer | Filter / config | Stride | Output shape |",
+          "|---|---|---|---|---|",
+          "| Input | — | — | — | 448 × 448 × 3 |",
+          "| 1 | Conv | 7×7×64 | 2 | 224 × 224 × 64 |",
+          "| 1 | Maxpool | 2×2 | 2 | 112 × 112 × 64 |",
+          "| 2 | Conv | 3×3×192 | 1 | 112 × 112 × 192 |",
+          "| 2 | Maxpool | 2×2 | 2 | 56 × 56 × 192 |",
+          "| 3 | Conv | 1×1×128, 3×3×256, 1×1×256, 3×3×512 | 1 | 56 × 56 × 512 |",
+          "| 3 | Maxpool | 2×2 | 2 | 28 × 28 × 512 |",
+          "| 4 | (1×1×256, 3×3×512) ×4, then 1×1×512, 3×3×1024 | — | 1 | 28 × 28 × 1024 |",
+          "| 4 | Maxpool | 2×2 | 2 | 14 × 14 × 1024 |",
+          "| 5 | (1×1×512, 3×3×1024) ×2, then 3×3×1024, 3×3×1024 stride 2 | varies | — | 7 × 7 × 1024 |",
+          "| 6 | Conv | 3×3×1024, 3×3×1024 | 1 | 7 × 7 × 1024 |",
+          "| 7 | Fully connected | — | — | 4096 |",
+          "| 8 | Fully connected | — | — | 7 × 7 × 30 |",
+        ],
+      },
+      {
+        paragraphs: [
+          "The final output is reshaped to a **7 × 7 × 30** tensor — that's the entire detection prediction for the image. Where does 30 come from? For VOC, S = 7, B = 2, C = 20, and each cell predicts: B = 2 boxes × 5 numbers each (x, y, w, h, confidence) = 10, plus C = 20 class probabilities, for a total of **30 channels per cell**. The 7 × 7 spatial layout corresponds directly to the 7×7 grid over the image, so cell (i, j) of the output describes grid cell (i, j) of the input.",
+        ],
+      },
+      {
+        diagram: { id: "vis-yolo-architecture-448x448x3-7x7x30", caption: "Fig 6.20 — Twenty-four convs squeeze the image to a 7x7x30 grid - two boxes and twenty class scores per cell." },
+      },
+      {
+        paragraphs: [
+          "The network's convolutional layers are **pretrained on ImageNet classification first**. (ImageNet is a massive set of over 14 million images across more than 20,000 categories.) Then those pretrained conv layers are transferred to detection. In the original paper, the authors: take the first 20 conv layers, append an average-pooling and a fully-connected layer, train on ImageNet at 224×224 for about a week, and hit 88% top-5 accuracy (comparable to GoogLeNet). Then they convert to detection by adding 4 more conv layers and 2 fully-connected layers (randomly initialized) and *doubling* the input resolution to 448×448, since detection needs finer detail than classification. This pretrain-then-fine-tune approach is now standard for nearly every detection model.",
+        ],
+      },
+      {
+        paragraphs: [
+          "(Side note — **Fast YOLO** uses the same training setup but only 9 conv layers instead of 24, with fewer filters. It runs at 155 FPS on a Titan X GPU, trading some accuracy for speed while staying more than 2× as accurate as any prior real-time detector.)",
+        ],
+      },
+      {
+        heading: "Activation: Leaky ReLU",
+        paragraphs: [
+          "Every layer except the final one uses **Leaky ReLU**:",
+        ],
+      },
+      {
         equations: [
           "\\phi(x) = \\begin{cases} x & \\text{if } x > 0 \\\\ 0.1x & \\text{otherwise} \\end{cases}",
         ],
       },
       {
         paragraphs: [
-          "Like nearly every detector since, YOLO is pretrained on ImageNet classification before being fine-tuned for detection. The authors took the first 20 conv layers, bolted on an average-pooling layer and a fully connected layer, and trained at 224×224 resolution for about a week — reaching 88% top-5 accuracy, comparable to GoogLeNet. They then converted the network for detection by adding 4 more conv layers and 2 fully connected layers (randomly initialized) and doubling the input resolution from 224×224 to 448×448, since detection needs finer detail than classification. This pretrain-then-fine-tune recipe is now standard practice for essentially every detection model.",
-          "The paper also describes Fast YOLO, same training setup but only 9 conv layers (instead of 24) and fewer filters, which runs at 155 FPS on a Titan X. It trades accuracy for speed yet is still more than 2× as accurate as any prior real-time detector.",
+          "Standard ReLU outputs zero for any negative input, which can cause **dead neurons** — neurons stuck outputting zero that never recover, because zero output means zero gradient. Leaky ReLU keeps a small slope (0.1) for negative inputs, so a little gradient still flows even when the neuron isn't firing. The *final* layer uses a **linear** activation, because it predicts coordinates and probabilities that need to range over the real numbers.",
         ],
       },
       {
-        paragraphs: [
-          "Each box carries a center $(x, y)$ relative to its cell, a width and height relative to the whole image, and a confidence that bundles existence and accuracy together — the probability an object is present times how well the box fits:",
-        ],
-        equations: ["C = P(\\text{object}) \\cdot \\mathrm{IoU}^{\\text{truth}}_{\\text{pred}}"],
-        diagram: {
-          id: "iou",
-          caption:
-            "Fig 5.6 — Intersection over Union: the overlap between predicted and true boxes, the basis of confidence and of NMS.",
+        diagram: { id: "vis-leaky-relu-vs-relu", caption: "Fig 6.21 — A small negative slope keeps gradients alive, so neurons don't get stuck dead at zero." },
+      },
+      {
+        quiz: {
+          question: "Why does YOLO use Leaky ReLU in its hidden layers but a *linear* activation in the final layer?",
+          answer: "Leaky ReLU's small negative slope (0.1) keeps a trickle of gradient flowing through neurons that would otherwise be stuck outputting zero (the \"dead neuron\" problem with plain ReLU), helping the deep stack keep learning. The final layer is linear because it has to output box coordinates and confidence/probability values that span the real number line — clamping negatives (as ReLU would) would distort those regression targets.",
         },
       },
       {
+        heading: "Target outputs: what each box actually predicts",
         paragraphs: [
-          "At inference, multiplying class probability by confidence gives a per-class score for each box; you threshold and then apply Non-Maximum Suppression to drop duplicate boxes (sort by score, keep the top, discard others that overlap it above an IoU threshold). YOLO's grid already enforces spatial diversity, so NMS adds only 2–3% — most duplicates never arise. Training uses a five-term squared-error loss (center, size with a $\\sqrt{\\cdot}$ trick for small boxes, object confidence, no-object confidence, and class), weighted so coordinates matter more and empty cells matter less. Its weaknesses are structural: each cell predicts only one class, so groups of small objects (a flock of birds) break it, and it generalizes poorly to unusual aspect ratios.",
+          "To reiterate, YOLO produces bounding boxes with coordinates x, y, w, h. Each of the B = 2 boxes per cell is described by four spatial numbers plus a confidence:",
         ],
       },
       {
-        heading: "Responsible predictors and training",
         paragraphs: [
-          "There's a subtlety in how that five-term loss is assigned. Each cell predicts $B = 2$ boxes, but at training time we want exactly one of them on the hook for any given object. The rule: whichever of the two predictors currently has the highest IoU with the ground-truth box is declared \"responsible.\" Only that predictor pays the coordinate and box-confidence losses for the object; the other gets a no-object signal. Over training this produces specialization — one predictor in each cell drifts toward tall, narrow boxes (people), the other toward wide, short ones (cars) — and the authors note it improves overall recall, since different shapes get handled by different predictors.",
-          "At inference the network hands you confidence and class probabilities separately, and you combine them by multiplying. The conditional class probability times the box confidence cleanly factors into a single class-specific score per box:",
+          "**x, y — the box center, relative to the grid cell**, normalized to [0, 1]. So x = 0.5, y = 0.5 puts the center smack in the middle of the cell; x = 0 is the left edge, y = 1 the bottom edge. By construction, the box center *cannot leave its responsible cell*.",
         ],
+      },
+      {
+        paragraphs: [
+          "**w, h — width and height, relative to the whole image**, normalized to [0, 1]. So w = 0.5 means the box spans half the image's width. Note these are *not* relative to the cell — they're relative to the entire image, because objects can be far larger than one cell.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is a careful, deliberate design. It means (x, y) are tightly bound to [0, 1] and the network just learns small offsets from a known cell center, while (w, h) can express any object size from tiny to image-spanning.",
+        ],
+      },
+      {
+        diagram: { id: "vis-how-a-yolo-box-is-encoded", caption: "Fig 6.22 — Center (x,y) is small and cell-relative; size (w,h) is image-relative so boxes can be any size." },
+      },
+      {
+        paragraphs: [
+          "The fifth number per box is the **confidence** C, which the paper defines as:",
+        ],
+      },
+      {
         equations: [
-          "P(\\text{Class}_i \\mid \\text{Object}) \\cdot P(\\text{Object}) \\cdot \\mathrm{IoU}^{\\text{truth}}_{\\text{pred}} = P(\\text{Class}_i) \\cdot \\mathrm{IoU}^{\\text{truth}}_{\\text{pred}}",
+          "C = P(\\text{Object}) \\cdot \\text{IOU}^{\\text{truth}}_{\\text{pred}}",
         ],
       },
       {
         paragraphs: [
-          "For the training run itself, the paper's recipe is: 135 epochs on PASCAL VOC 2007 + 2012, batch size 64, momentum 0.9, weight decay 0.0005. The learning rate warms up from $10^{-3}$ to $10^{-2}$ over the first epochs (jumping straight to the high rate would diverge), holds at $10^{-2}$ for 75 epochs, drops to $10^{-3}$ for 30 epochs, then $10^{-4}$ for the final 30. Dropout of 0.5 sits after the first FC layer, and augmentation adds random scaling and translation up to 20% of image size plus exposure and saturation jitter up to 1.5× in HSV space. Modest by today's standards, but without it the model overfits VOC's small training set.",
+          "In words: confidence is the probability that an object exists in this box, multiplied by how good the box is — measured as the **IOU** (Intersection over Union) between the predicted box and the ground-truth box. So:",
         ],
       },
       {
-        heading: "Segmentation",
-        paragraphs: [
-          "Detection draws boxes; segmentation goes all the way down and labels every single pixel. There are flavors: semantic segmentation hands each pixel a class (so all the dogs blur into one mass), instance segmentation separates the individual dogs, and panoptic does both at once — instances for countable \"things,\" classes for uncountable \"stuff\" like sky and road. The hard part is an architectural tug-of-war: a classifier wants to aggressively downsample (great for semantics, terrible for pixel precision), yet segmentation demands both deep semantics and full resolution at the same time. The Fully Convolutional Network took the first crack at this by upsampling a coarse score grid back up to full size — but the masks came out blurry, because the spatial detail had already been thrown away.",
+        list: [
+          "No object → $P(\\text{Object}) = 0$ → confidence should be 0.",
+          "Object present and the box matches perfectly → IOU = 1 → confidence should be 1.",
+          "Object present but the box is sloppy → low IOU → low confidence.",
         ],
       },
       {
-        heading: "The Fully Convolutional Network",
         paragraphs: [
-          "The FCN's trick rests on one observation: a fully connected layer is mathematically a convolution with a kernel the size of its whole input — same weights, same arithmetic. Swap the FC layers of a classifier for convolutions and the output stops being one vector per image and becomes a small grid of class scores. Run a 224×224 image through a converted VGG-16 backbone and you get roughly a 7×7×21 score grid, where each cell holds 21 class scores (Pascal VOC's 21 classes). To turn that coarse grid into a full-resolution mask, FCN upsamples it 32× back to 224×224×21 with a learnable transposed convolution, then takes the argmax along the class dimension at each pixel.",
-          "It works — the first end-to-end neural segmenter, and it crushed the hand-engineered approaches — but upsampling straight from 7×7 to 224×224 gives blurry masks. The network knows what is in the image but has lost track of exactly where the boundaries are; you simply can't conjure back spatial detail that was thrown away. FCN patched this with skip connections from earlier, higher-resolution layers (the FCN-16s and FCN-8s variants), which gave small but real improvements — but the fix was bolted on rather than designed in. The architecture that was designed around the idea is U-Net.",
+          "A single number thus encodes *both* existence and accuracy — a high-confidence box is more likely both to contain an object *and* to localize it well. Let's pin down IOU, since it shows up everywhere in detection:",
         ],
+      },
+      {
+        equations: [
+          "\\text{IOU} = \\frac{\\text{area of intersection}}{\\text{area of union}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "IOU = 1 means the boxes are identical; IOU = 0 means they don't overlap at all; IOU > 0.5 usually means \"significant overlap, probably the same object.\"",
+        ],
+      },
+      {
+        diagram: { id: "vis-intersection-over-union-iou", caption: "Fig 6.23 — Overlap over combined area: 1 = identical boxes, 0 = no overlap. The universal box-quality metric." },
+      },
+      {
+        heading: "Class probabilities",
+        paragraphs: [
+          "The remaining C = 20 numbers in each cell are **conditional class probabilities**:",
+        ],
+      },
+      {
+        equations: [
+          "P(\\text{Class}_i \\mid \\text{Object})",
+        ],
+      },
+      {
+        paragraphs: [
+          "The \"conditioned on object\" part is the key: these answer \"*given* that an object is in this cell, what class is it?\" They don't need to be zero when there's no object — they're only meaningful when an object is present. And importantly, YOLO predicts **one** class-probability vector per cell, regardless of how many boxes B that cell predicts. Both of a cell's boxes share the same class vector — which leads to a limitation we'll discuss shortly.",
+        ],
+      },
+      {
+        paragraphs: [
+          "At inference, the network hands you confidence and class probabilities separately. To get the final class-specific score for a box, just multiply:",
+        ],
+      },
+      {
+        equations: [
+          "P(\\text{Class}_i \\mid \\text{Object}) \\cdot P(\\text{Object}) \\cdot \\text{IOU}^{\\text{truth}}_{\\text{pred}} = P(\\text{Class}_i) \\cdot \\text{IOU}^{\\text{truth}}_{\\text{pred}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "This single score per (box, class) pair combines the probability of that class, and how well the box fits. Now you have, for every box in every cell, a confidence score for every class — you filter out the low-confidence ones, apply NMS, and you're done.",
+        ],
+      },
+      {
+        paragraphs: [
+          "For a 7 × 7 grid with B = 2 boxes per cell, the network outputs 7 × 7 × 2 = **98 bounding boxes** per image. Compare that to R-CNN's ~2,000 region proposals! Far fewer candidates, all generated in parallel by one network. Most of those 98 will have very low confidence (no object in that cell) and get filtered out at the thresholding step. Cool, right?",
+        ],
+      },
+      {
+        diagram: { id: "vis-from-cell-predictions-to-final-scores", caption: "Fig 6.24 — 98 boxes from one pass; multiply class prob by confidence, threshold, and only real detections survive." },
+      },
+      {
+        quiz: {
+          question: "YOLO outputs 98 boxes per image versus R-CNN's ~2,000 proposals. Where does 98 come from, and why are most of them discarded?",
+          answer: "$7 \\times 7 \\times 2 = 98$: the 7×7 grid with B = 2 boxes per cell. Most cells don't contain an object center, so their boxes get a near-zero confidence ($P(\\text{Object}) \\approx 0$) and are removed at the confidence-thresholding step (then NMS cleans up the rest). The point is that all 98 are produced in a single parallel forward pass, unlike R-CNN's ~2,000 separately-processed proposals — that's the speed win.",
+        },
+      },
+      {
+        heading: "Non-Maximum Suppression (NMS)",
+        paragraphs: [
+          "The grid design already prevents most duplicate detections — most objects fall cleanly into one cell. But some objects, especially large ones or those near cell borders, get detected by multiple cells. **NMS** cleans these up. The algorithm, run for each class separately:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. Take all boxes predicted for that class with class-specific confidence above some threshold.",
+          "2. Sort them by confidence, highest first.",
+          "3. Take the top box and add it to the final output.",
+          "4. Compute IOU between this top box and all remaining boxes.",
+          "5. Discard any box whose IOU with the top box exceeds a threshold (e.g. 0.5) — those are duplicates of the same object.",
+          "6. Repeat from step 3 with the next-highest remaining box, until none are left.",
+        ],
+      },
+      {
+        diagram: { id: "vis-non-maximum-suppression-nms", caption: "Fig 6.25 — Keep the most confident box, suppress its high-overlap neighbors, repeat - duplicates gone." },
+      },
+      {
+        paragraphs: [
+          "How important is NMS to YOLO? The paper makes a subtle point: NMS adds only **2–3% mAP** to YOLO — far less than it adds to R-CNN or DPM. Why? Because YOLO's grid already enforces spatial diversity (each cell can only predict objects centered there), so most duplicates never arise in the first place. R-CNN's region proposals can overlap freely, so it leans heavily on NMS. YOLO's structure has NMS *partially built in* via the grid; NMS just polishes the edges.",
+        ],
+      },
+      {
+        quiz: {
+          question: "NMS dramatically helps R-CNN but only adds 2–3% mAP to YOLO. Why the difference?",
+          answer: "Because YOLO's grid already prevents most duplicates: an object is assigned to the single cell holding its center, so the architecture enforces spatial diversity by design. R-CNN's ~2,000 region proposals can overlap freely and pile multiple boxes on the same object, so it depends on NMS to clean up the mess. In YOLO, NMS only mops up the few duplicates from large or border-straddling objects — the grid did most of the deduplication for free.",
+        },
+      },
+      {
+        heading: "The loss function: how YOLO learns",
+        paragraphs: [
+          "The total loss is $L = L_{\\text{cls}} + L_{\\text{loc}}$ — a classification part and a localization part — and the trick that makes the whole thing trainable is that **everything is squared error**, which turns detection into a regression problem. The full loss has five terms:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Term 1 — center-coordinate loss", definition: "Squared error on the (x, y) predictions. Counted only for the box responsible for an object (denoted $\\mathbb{1}_{ij}^{\\text{obj}}$). Weighted by $\\lambda_{\\text{coord}} = 5$." },
+          { term: "Term 2 — size loss", definition: "Squared error on $\\sqrt{w}$ and $\\sqrt{h}$ (note the square roots). Same condition and weighting as Term 1. The square root is the fix for small-box sensitivity — more on that in a second." },
+          { term: "Term 3 — confidence loss for object cells", definition: "The predicted confidence should match the IOU of the predicted box with the ground truth. Squared error, weight 1." },
+          { term: "Term 4 — confidence loss for no-object cells", definition: "Confidence should be 0 here. Weighted *down* by $\\lambda_{\\text{noobj}} = 0.5$ so the many empty cells don't dominate the loss." },
+          { term: "Term 5 — classification loss", definition: "Sum of squared errors over the class probabilities, counted only for cells that *contain* an object ($\\mathbb{1}_i^{\\text{obj}}$ — per cell, not per box, because classification is per-cell)." },
+        ],
+      },
+      {
+        paragraphs: [
+          "A couple of those weights deserve a word. $\\lambda_{\\text{coord}} = 5$ up-weights localization so getting boxes right matters more than the raw class terms. $\\lambda_{\\text{noobj}} = 0.5$ down-weights the flood of empty cells so they don't drown out the signal from the few cells that actually contain objects. And the $\\sqrt{w}, \\sqrt{h}$ trick: a small absolute error in a *small* box hurts IOU far more than the same error in a *large* box; taking the square root compresses large values so that equal *relative* errors are penalized more equally across box sizes.",
+        ],
+      },
+      {
+        diagram: { id: "vis-yolo-s-five-term-loss", caption: "Fig 6.26 — Five squared-error terms turn detection into regression - with weights to balance localization, objects, and empty space." },
+      },
+      {
+        heading: "What \"responsible\" means",
+        paragraphs: [
+          "Each cell predicts B = 2 boxes, but at training time we want exactly *one* of them responsible for any given object. The rule (paper section 2.2): assign the predictor whose box currently has the **highest IOU** with the ground truth. So if cell (3, 4) holds a dog, both its box predictors make predictions, and whichever has the higher IOU with the true dog box is declared responsible. Only that responsible predictor incurs the coordinate and box-confidence losses for the object; the other gets a no-object signal.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This produces **specialization**: the two predictors in each cell learn to handle different kinds of boxes — one might gravitate toward tall, narrow boxes (people), the other toward wide, short ones (cars). The authors note this \"improves overall recall,\" since different shapes get handled by different predictors.",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-responsible-predictor-and-specialization", caption: "Fig 6.27 — The higher-IOU box is responsible for the object; over time the two predictors specialize in different box shapes." },
+      },
+      {
+        paragraphs: [
+          "**Training hyperparameters**, from the paper, for completeness: 135 epochs on PASCAL VOC 2007 + 2012; batch size 64, momentum 0.9, weight decay 0.0005; a learning-rate schedule that warms up from $10^{-3}$ to $10^{-2}$ over the first epochs (jumping straight to $10^{-2}$ would make training diverge), holds $10^{-2}$ for 75 epochs, drops to $10^{-3}$ for 30, then $10^{-4}$ for the final 30; dropout 0.5 after the first FC layer; and data augmentation with random scaling/translation up to 20% of image size plus random exposure and saturation jitter up to 1.5× in HSV space. The warm-up-then-decay schedule is a familiar pattern in modern training, and the augmentation — modest by today's standards — is still critical to avoid overfitting VOC's smallish training set.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why does YOLO's loss use $\\sqrt{w}$ and $\\sqrt{h}$ instead of $w$ and $h$, and why is $\\lambda_{\\text{noobj}} = 0.5$?",
+          answer: "The square root makes the size penalty fairer across object scales: a fixed pixel error in a *small* box damages IOU much more than the same error in a *large* box, and taking the square root compresses big values so equal relative errors are weighted more equally. $\\lambda_{\\text{noobj}} = 0.5$ down-weights the confidence loss from the many empty cells — most of the 49 cells contain no object, so without this their \"confidence should be 0\" signal would swamp the gradient from the few cells that actually matter.",
+        },
+      },
+      {
+        heading: "YOLO's limitations",
+        paragraphs: [
+          "The paper is refreshingly honest about its model's weaknesses (section 2.4). Worth knowing, because every later YOLO version is largely about fixing these.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Strong spatial constraints.** Each cell predicts only B = 2 boxes and only *one* class. So a cell containing two objects of different classes is in trouble — it can predict two boxes but only one class vector, so a person standing next to a bird in the same cell forces a choice. And groups of small objects (a flock of birds, many centers in one cell) simply can't all be predicted. This is structural; v2 onward loosened it dramatically with anchor boxes and higher S.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Poor generalization to unusual aspect ratios.** YOLO learns box shapes from data, so it struggles with objects in configurations or aspect ratios it didn't see in training. There's no principled handling of out-of-distribution box shapes — it just relies on having seen enough examples.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Coarse features.** The 448×448 input is downsampled hard before prediction, so each output position corresponds to a 64×64 image patch (448/7). Small objects may not have enough features left at that resolution to be detected well.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**The loss doesn't match the goal.** Sum-squared error treats localization and classification errors as comparable (even the $\\lambda_{\\text{coord}} = 5$ trick only partly fixes this), and treats errors in large and small boxes similarly (the $\\sqrt{\\cdot}$ trick helps but doesn't fully fix it). The *actual* goal is mean Average Precision (mAP), a complex ranking metric; squared error is a convenient proxy that usually does the right thing but not always.",
+        ],
+      },
+      {
+        diagram: { id: "vis-yolo-s-four-limitations", caption: "Fig 6.28 — Two boxes and one class per cell, coarse features, and a proxy loss - the exact things v2+ set out to fix." },
+      },
+      {
+        quiz: {
+          question: "Why does the original YOLO struggle with a flock of small birds clustered together?",
+          answer: "Two structural reasons. First, each grid cell predicts at most B = 2 boxes and only one shared class vector, so if many bird centers fall into the same cell, the cell literally cannot output a box for all of them. Second, YOLO's coarse features mean each cell corresponds to a 64×64 image patch, so small objects have very little feature detail by the time predictions are made. Later versions raise the grid resolution S and add anchor boxes to ease both problems.",
+        },
+      },
+      {
+        heading: "Segmentation Models",
+        paragraphs: [
+          "Detection draws a box around each object. **Segmentation** goes finer: it figures out what *each pixel* belongs to. The output of a segmentation model is a **mask** the same spatial size as the input — for a 512×512 input, that's a 512×512 grid of labels, **262,144 predictions per image.** Three flavors are worth knowing:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Semantic segmentation", definition: "— every pixel gets a class label, but no instance distinction. Three dogs all get labeled \"dog\" and merge into one blob of dog-pixels." },
+          { term: "Instance segmentation", definition: "— every pixel gets a class label *and* an instance ID. Three dogs become three separate masks: \"dog #1,\" \"dog #2,\" \"dog #3.\" Great for counting." },
+          { term: "Panoptic segmentation", definition: "— the two combined. \"Things\" (countable: cars, people, dogs) get instance IDs; \"stuff\" (uncountable: sky, road, grass) gets only a class label. The most complete description of an image." },
+        ],
+      },
+      {
+        diagram: { id: "vis-three-kinds-of-segmentation", caption: "Fig 6.29 — Semantic = what, instance = what + which one, panoptic = both, for things and stuff." },
+      },
+      {
+        heading: "Why segmentation is architecturally harder",
+        paragraphs: [
+          "There's a tension here that classification simply doesn't have. A classification CNN *aggressively downsamples* — from 224×224 down to a 7×7 final feature map, a 32× reduction. That downsampling is *good* for classification: the deepest features have huge receptive fields and capture the whole object, and you don't need spatial precision because you only output one label.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Segmentation needs **both deep semantics and full resolution at once.** You need the deepest features to know *what* you're looking at, but you also need to output a prediction at *every original pixel*. A 7×7 mask for a 224×224 input is useless — that's one label per 32×32 patch. The classical CNN treats spatial resolution and semantic depth as a tradeoff: you get one or the other, not both. To segment, you need a way to *recover* the lost resolution while *keeping* the deep semantic information. Every modern segmentation architecture exists to solve exactly this.",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-resolution-vs-semantics-tension", caption: "Fig 6.30 — Classification can throw away resolution; segmentation can't. The whole game is keeping semantics AND pixels." },
+      },
+      {
+        heading: "The Fully Convolutional Network (FCN)",
+        paragraphs: [
+          "The first deep approach to segmentation was the **Fully Convolutional Network**. The idea: take a classification CNN and turn it into a segmentation model by *removing the fully-connected layers* and replacing them with convolutional ones that output a per-pixel prediction.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The key realization (from the FCN paper) is that a fully-connected layer is mathematically the same as a convolution with a kernel the size of its input — same weights, same arithmetic. So you can \"convolutionalize\" the classifier. Now its output goes from one vector per image to a *grid* of class scores — a small spatial map. Run a 224×224 image through a converted VGG-16 and you get roughly a 7×7 map where each spatial cell holds 21 class scores (for PASCAL VOC's 21 classes).",
+        ],
+      },
+      {
+        paragraphs: [
+          "But that's still a 7×7 grid, and you need 224×224 for a per-pixel mask. The fix is **upsampling**: blow the small score grid back up to the input size with a *learnable* upsampling operation (originally **transposed convolution**, which we'll detail soon). The full FCN pipeline: run the input through a CNN backbone to get a 7×7×21 score grid, upsample 32× back to 224×224×21, then take the argmax along the class dimension to get a 224×224 mask.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This worked — it was the first end-to-end neural network for semantic segmentation, and it crushed the hand-engineered approaches. But it had a problem: upsampling from 7×7 straight to 224×224 produces **blurry, low-detail masks.** The model knows *what's* in the image but loses precision about *where* the boundaries are. The reason is fundamental — by the time you reach the 7×7 map, the spatial detail is gone. You can upsample the resolution arithmetically, but you can't conjure back information that was thrown away. You'd need to combine the deep features (which know *what*) with shallow features (which still hold the spatial *where*). FCN partially patched this with skip connections from earlier layers (FCN-16s, FCN-8s) — small but real gains — but the architecture wasn't *designed* around the idea; it was bolted on. The model that was designed around it: U-Net.",
+        ],
+      },
+      {
+        diagram: { id: "vis-fully-convolutional-network-fcn", caption: "Fig 6.31 — Turn the classifier fully convolutional, upsample to a mask - it works, but coarse, because the detail was already gone." },
+      },
+      {
+        quiz: {
+          question: "FCN can upsample its 7×7 score grid back to 224×224, so why are its masks still blurry?",
+          answer: "Because upsampling restores *resolution* (number of pixels) but not *information*. By the time the network reaches the 7×7 feature map, the precise spatial detail — exactly where edges and boundaries sit — has been discarded through downsampling. Arithmetic upsampling can't invent that lost detail back. To get sharp masks you have to *combine* the deep, low-resolution \"what\" features with shallow, high-resolution \"where\" features — which is precisely what U-Net's skip connections are built to do.",
+        },
       },
       {
         heading: "U-Net",
         paragraphs: [
-          "U-Net cut through the resolution-versus-semantics problem with a design so clean it's almost obvious in hindsight: an encoder that downsamples (building up semantics), a decoder that upsamples (recovering resolution), and skip connections that splice each encoder feature map straight into the matching decoder stage. The deep \"what\" flows up through the bottleneck; the precise \"where\" flows sideways across the skips; and the decoder's conv layers fuse the two. It's sample-efficient, produces sharp boundaries, works in both 2-D and 3-D, and — a full decade later — is still sitting at the heart of diffusion models.",
+          "**U-Net** (Ronneberger, Fischer, Brox, 2015) came out the same year as FCN, originally for medical image segmentation, and it's now the most influential segmentation architecture there is — the foundation of countless models, including modern diffusion models. The reason it took over: it solved the resolution-versus-semantics problem with a clean, symmetric design.",
         ],
-        diagram: {
-          id: "unet",
-          caption:
-            "Fig 5.7 — U-Net. Skip connections carry high-resolution detail from the encoder directly across to the decoder.",
+      },
+      {
+        paragraphs: [
+          "As the name says, the architecture is shaped like a **U**. The left side is the **encoder**, the bottom is the deepest, most compressed point, the right side is the **decoder**, and arcing across the U are the **skip connections** — the special ingredient.",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Left side — Encoder", definition: "A standard CNN: conv blocks alternating with downsampling. Spatial size halves at each step (224 → 112 → 56 → 28 → 14); channel count doubles (64 → 128 → 256 → 512 → 1024). This builds up semantic understanding." },
+          { term: "Bottom — the deepest point", definition: "The most abstract representation: smallest spatial size, most channels. Here the network \"knows\" *what's* in the image." },
+          { term: "Right side — Decoder", definition: "A mirror of the encoder: conv blocks alternating with *upsampling*. Spatial size doubles each step (14 → 28 → 56 → 112 → 224); channel count halves. This recovers spatial resolution." },
+          { term: "Skip connections", definition: "At each scale level, features from the corresponding encoder layer are *concatenated* with the upsampled features in the decoder. This is what makes U-Net special." },
+        ],
+      },
+      {
+        paragraphs: [
+          "Why do the skip connections matter so much? Walk through the problem. The encoder loses spatial detail as it downsamples — each pooling step throws away exact pixel positions. By the bottom of the U, you have rich semantics (\"there's a dog here\") but no precise edges (\"the outline is at *exactly* these pixels\"). The decoder upsamples back to full resolution but, working only from the coarse bottom, lacks that original detail. The skip connections deliver the original spatial detail *directly across*: when the decoder is at the 64×64 stage, it receives the encoder's 64×64 features — features that never went through the downsample-and-upsample cycle and still know exactly where the edges are. Mathematically, at each decoder level:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{decoder\\_features} = \\text{Conv}\\big(\\text{Concat}(\\text{upsampled\\_features}, \\text{encoder\\_features})\\big)",
+        ],
+      },
+      {
+        paragraphs: [
+          "The concatenation stacks the channels — if the upsampled features have 256 channels and the encoder features have 256, you get 512 after concatenation — and the following conv layer learns to *merge* the two sources: deep semantics from the upsampled path, spatial detail from the skip path. This is the architectural realization of \"both at the same time\": semantics flow up through the bottom and decoder, spatial detail flows across through the skips, and the decoder's conv layers figure out how to combine them.",
+        ],
+      },
+      {
+        diagram: { id: "vis-u-net", caption: "Fig 6.32 — Semantics flow down and back up; sharp spatial detail leaps across the skip connections. That's how U-Net gets crisp masks." },
+      },
+      {
+        heading: "Each U-Net block, broken down",
+        paragraphs: [
+          "**Encoder block:** Conv 3×3 → BatchNorm → ReLU, then Conv 3×3 → BatchNorm → ReLU, then MaxPool 2×2 (downsample to the next level).",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Decoder block:** Upsample 2× (transposed conv, or interpolation + conv), then Concatenate with the encoder skip features, then Conv 3×3 → BatchNorm → ReLU, then Conv 3×3 → BatchNorm → ReLU.",
+        ],
+      },
+      {
+        paragraphs: [
+          "(The original U-Net used Conv → ReLU without BatchNorm, since BN was published the same year. Modern U-Nets always include BatchNorm or GroupNorm.)",
+        ],
+      },
+      {
+        heading: "Upsampling: how to double the spatial size",
+        paragraphs: [
+          "The decoder needs to double spatial resolution at each step. Two main ways:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Transposed convolution** (also called \"deconv\"). A *learned* upsampling — mathematically it's the gradient operation of a strided convolution. Each input pixel \"spreads out\" into a small patch of the output, with learnable weights deciding the spread pattern. Pro: learnable, adapts to data. Con: can produce **checkerboard artifacts** if the stride and kernel size are chosen badly.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Interpolation + convolution.** Use a fixed upsampling (nearest-neighbor or bilinear) to double the size, then apply a regular conv to refine. Pro: no checkerboard artifacts, simpler. Con: slightly less expressive. Most modern segmentation models prefer this.",
+        ],
+      },
+      {
+        diagram: { id: "vis-upsampling-transposed-conv-vs-interpolation-conv", caption: "Fig 6.33 — Two ways to double resolution: learnable transposed conv (watch for checkerboards) or fixed upsample + conv (clean)." },
+      },
+      {
+        heading: "The output layer",
+        paragraphs: [
+          "The decoder ends at the original input resolution with some feature channels (typically 64 at the first level). The final operation is a **1×1 convolution** mapping those features to C output channels, one per class — output shape (H, W, C). A 1×1 conv just remixes channels at each pixel without combining neighbors, so it maps each pixel's feature vector to a per-pixel class-score vector (the per-pixel logit map). Apply softmax along the channel dimension to get per-pixel class probabilities:",
+        ],
+      },
+      {
+        equations: [
+          "P(\\text{class}_c \\mid \\text{pixel}_{i,j}) = \\frac{e^{z_{i,j,c}}}{\\sum_{k} e^{z_{i,j,k}}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $z_{i,j,c}$ is the logit for class $c$ at pixel $(i,j)$, and the denominator sums over all classes $k$. To produce the final mask, take the argmax over channels at each pixel.",
+        ],
+      },
+      {
+        quiz: {
+          question: "In U-Net, what concrete information do the skip connections carry across the U, and what operation merges them with the decoder's features?",
+          answer: "They carry high-resolution *spatial detail* — the encoder's same-resolution features that never went through the downsample-then-upsample round trip, so they still know exactly where edges and boundaries are. They're merged by *concatenation* (stacking channels: upsampled + encoder features) followed by a conv layer that learns to combine the deep \"what\" semantics from the decoder path with the sharp \"where\" detail from the skip. That fusion is why U-Net masks have crisp boundaries where FCN's are blurry.",
         },
       },
       {
+        heading: "Training U-Net",
         paragraphs: [
-          "Each decoder block upsamples 2×, concatenates the matching encoder skip features, and runs a couple of Conv → BatchNorm → ReLU layers (the original U-Net had no BatchNorm, since it was published the same year; modern versions always include BatchNorm or GroupNorm). There are two ways to do the upsampling itself. A transposed convolution — often called \"deconv\" — is a learned upsample; mathematically it's the gradient operation of a strided convolution, with each input pixel \"spreading out\" into a small patch of the output. It's flexible but can produce checkerboard artifacts when the stride and kernel size interact badly. The alternative is fixed interpolation (nearest-neighbor or bilinear) followed by a regular conv to refine — no checkerboarding, slightly less expressive, and the choice most modern segmentation models actually prefer.",
+          "Training a U-Net is just like training a classifier, but **per-pixel**. The loss is per-pixel cross-entropy — for each pixel, the cross-entropy between the predicted class distribution and the true label:",
         ],
       },
       {
-        heading: "Training a U-Net",
-        paragraphs: [
-          "Training a U-Net is a classifier's training loop run per-pixel. The output ends at full resolution, a final 1×1 conv maps the features to $C$ class channels, softmax runs along the channel dimension at every pixel, and the loss is per-pixel cross-entropy summed over every pixel and class:",
-        ],
         equations: [
           "\\mathcal{L} = -\\sum_{i,j} \\sum_{c} y_{i,j,c} \\log \\hat{p}_{i,j,c}",
         ],
       },
       {
         paragraphs: [
-          "The catch is class imbalance, which bites hardest in medical imaging: a tumor a few hundred pixels wide in a large scan means a model that predicts \"background\" everywhere scores 99% pixel accuracy while being completely useless. The fixes are worth knowing. Weighted cross-entropy multiplies each pixel's loss by a class-dependent weight inversely proportional to class frequency, so rare classes count for more. Dice loss directly optimizes overlap (a close relative of IoU), which sidesteps imbalance entirely because it measures agreement with the rare class rather than overall accuracy:",
+          "where $(i, j)$ runs over pixels, $c$ over classes, $y_{i,j,c}$ is the one-hot true label, and $\\hat{p}_{i,j,c}$ is the predicted probability. For binary segmentation this becomes binary cross-entropy.",
         ],
+      },
+      {
+        paragraphs: [
+          "The big practical wrinkle is **class imbalance.** In medical imaging especially, you often have a tiny object (a tumor a few hundred pixels wide) in a huge image. A lazy model that predicts \"background\" everywhere scores 99% pixel accuracy and is completely useless. Common fixes:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Weighted cross-entropy", definition: "— multiply each pixel's loss by a class-dependent weight inversely proportional to class frequency, so rare classes count more." },
+          { term: "Dice loss", definition: "— directly optimizes the Dice coefficient (closely related to IoU):" },
+        ],
+      },
+      {
         equations: [
           "\\mathcal{L}_{\\text{dice}} = 1 - \\frac{2 \\sum_i \\hat{p}_i y_i}{\\sum_i \\hat{p}_i + \\sum_i y_i}",
         ],
       },
       {
         paragraphs: [
-          "In practice people often add the two — total loss = cross-entropy + Dice — and for very rare classes reach for focal loss, which down-weights the easy, already-confident pixels and up-weights the hard ones. Augmentation matters even more here than usual, because these datasets are tiny: the original U-Net was trained on roughly 30 labeled images for cell segmentation and leaned heavily on elastic deformations (warping the image as if it were on a rubber sheet) to teach robustness to continuously varying cell shapes. That sample-efficiency, plus sharp boundaries from the skip connections and a design that ports cleanly to 3D volumes (the 3D U-Net), is exactly why the architecture is still everywhere a decade on — including as the backbone inside Stable Diffusion.",
+          "where $\\hat{p}_i$ is the predicted probability and $y_i$ the true label at pixel $i$. Because this is a ratio of overlap to combined area, the size of the background doesn't drown it out — it intrinsically handles imbalance. Often combined: total loss = Cross-Entropy + Dice.",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Focal loss", definition: "— down-weights easy pixels (where the model is already confident) and up-weights hard ones. Useful for very rare classes." },
+          { term: "Data augmentation", definition: "— critical, especially in medical settings with small datasets: random rotations, flips, and **elastic deformations** (very useful for biological images, since cell shapes vary continuously), brightness shifts. The original U-Net paper leaned heavily on elastic deformations." },
+        ],
+      },
+      {
+        diagram: { id: "vis-per-pixel-training-and-class-imbalance", caption: "Fig 6.34 — Per-pixel cross-entropy, plus Dice/focal/weighting so a tiny object isn't drowned out by a sea of background." },
+      },
+      {
+        heading: "Why U-Net won",
+        paragraphs: [
+          "A few reasons it's still the default segmentation architecture a decade on: it **works with limited data** (originally trained on ~30 labeled cell images — sample-efficient thanks to strong inductive biases: locality, hierarchy, skip connections); it's **architecturally simple** (conv blocks, max pools, transposed convs, skips — easy to implement and modify); it produces **sharp masks** (skip connections give precise boundaries, critical for medical imaging); it's **modality-agnostic** (2D images, 3D volumes via 3D U-Net, medical scans, satellite imagery, microscopy); and it's the **backbone of diffusion models** — the same U-Net that segments cells is the architecture inside Stable Diffusion. Every modern image generator runs on a U-Net. Its longevity is striking: it's older than the transformer, and still everywhere.",
+        ],
+      },
+      {
+        quiz: {
+          question: "A tumor-segmentation model reports 99% pixel accuracy but finds no tumors. What went wrong, and which loss would help?",
+          answer: "Class imbalance fooled the accuracy metric. The tumor is a tiny fraction of pixels, so a model that predicts \"background\" everywhere is 99% pixel-accurate yet useless. Dice loss (or focal loss, or class-weighted cross-entropy) fixes this: Dice measures the *overlap* between predicted and true tumor regions as a ratio, so it isn't dominated by the vast background, and focal loss down-weights the easy background pixels so the rare tumor pixels actually drive learning.",
+        },
+      },
+      {
+        heading: "Mask R-CNN: instance segmentation",
+        paragraphs: [
+          "U-Net gives you *semantic* segmentation — every pixel labeled by class. But how do you tell three dogs apart? For *instance* segmentation, the dominant architecture is **Mask R-CNN** (He, Gkioxari, Dollár, Girshick, 2017). It extends Faster R-CNN (a two-stage detector) with a mask-predicting branch.",
         ],
       },
       {
         paragraphs: [
-          "For instance segmentation, Mask R-CNN extends a two-stage detector with a third branch that predicts a small binary mask per detected box. Its key contribution is RoIAlign: instead of rounding region coordinates to the feature grid (which misaligns masks by a few pixels), it samples features at exact floating-point positions with bilinear interpolation. The mask head is decoupled from classification — each pixel only answers \"am I part of this object?\", a binary question — which gives cleaner masks and a simpler learning problem.",
+          "The core stance: instance segmentation is **detection plus segmentation.** The high-level steps: (1) detect each instance and produce a bounding box around it; (2) for each detected box, produce a binary mask of that single object inside the box. This decomposition is elegant — the detector handles \"different instances are different objects,\" and the mask head handles \"which exact pixels belong to this instance.\" Each is a well-studied subproblem, and combining them yields instance segmentation.",
         ],
       },
       {
         paragraphs: [
-          "It's worth seeing how that mask branch is actually built. Inside each detected region the mask head is a small fully convolutional network: take the RoI-aligned feature map (14×14 or 7×7), run a few conv layers to refine it, a transposed conv to upsample to 28×28, then a 1×1 conv producing $K$ channels — one per class — each a per-pixel sigmoid. Crucially the model outputs $K$ binary masks per region, one for every possible class, and at inference you simply pick the mask for the class the classification head chose. That's the decoupling: the mask head never has to decide \"dog or cat,\" it just draws whatever object is in the box. And because each pixel runs through a sigmoid rather than a softmax, pixels answer the binary question \"am I part of this object?\" independently, with no competition between classes — unlike U-Net, where softmax forces the classes to compete at every pixel.",
-          "The other half of Mask R-CNN's contribution is RoIAlign. A region proposal lands at fractional coordinates like $(137.3, 248.7, 282.5, 451.1)$, and to pull out a fixed 7×7 feature map you have to map that real-valued box onto the discrete feature grid. The old RoIPool rounded the coordinates to integers before pooling — fine for classification, where a few pixels of slop doesn't change the class label, but ruinous for masks, where every pixel matters. RoIAlign refuses to round: it samples feature values at the exact floating-point positions using bilinear interpolation, where each sample point reads its four nearest integer feature cells weighted by proximity:",
+          "So Mask R-CNN's output for each detected region has three branches: a **class label** (one of C classes or background), a **bounding-box refinement** (fine-tuned coordinates), and a **binary mask** (a small mask within the box, one channel per class). The first two come straight from Faster R-CNN; the third is the new addition — a small fully-convolutional network that takes the region's feature map and outputs an m × m binary mask (typically m = 28).",
         ],
+      },
+      {
+        diagram: { id: "vis-mask-r-cnn-three-branches-per-region", caption: "Fig 6.35 — Detect each instance, then paint a per-pixel mask inside its box: detection + segmentation = instances." },
+      },
+      {
+        heading: "RoI Align — the key innovation",
+        paragraphs: [
+          "This is Mask R-CNN's most important technical contribution. A region proposal might land at fractional coordinates like (137.3, 248.7, 282.5, 451.1). To extract a fixed-size feature map for that region (say 7×7), you have to map those real-valued coordinates onto the discrete grid of the CNN's feature map.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**RoI Pool** (the old way, from Fast/Faster R-CNN): *round* the box coordinates to integer pixels, divide the rounded box into a 7×7 grid of sub-regions, and max-pool each. This works for classification — small misalignments don't matter when you only predict one label per region. But for *mask prediction* every pixel matters, and those rounding errors compound, leaving the final mask misaligned by a few pixels.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**RoI Align** (the Mask R-CNN way): *don't round.* Use **bilinear interpolation** to sample feature values at exact real-valued coordinates within the box. The 7×7 output grid has its corners at exactly the right floating-point positions, and each output cell pools values interpolated from neighboring feature-map cells. The math, for a sample point at floating-point $(x, y)$, looks at the 4 nearest integer feature positions and takes a distance-weighted sum:",
+        ],
+      },
+      {
         equations: [
-          "f(x, y) = \\sum_{i, j \\in \\{\\text{floor}, \\text{ceil}\\}} f(i, j) \\cdot \\max(0,\\, 1 - |x - i|) \\cdot \\max(0,\\, 1 - |y - j|)",
+          "f(x, y) = \\sum_{i,j \\in \\{\\text{floor}, \\text{ceil}\\}} f(i, j) \\cdot \\max(0, 1 - |x - i|) \\cdot \\max(0, 1 - |y - j|)",
         ],
       },
       {
         paragraphs: [
-          "That's just textbook bilinear interpolation; the insight is using it instead of rounding. Sub-pixel-accurate feature extraction lifted mask average precision by roughly 10% from this single change. The full loss sums the three branches — $\\mathcal{L} = \\mathcal{L}_{\\text{cls}} + \\mathcal{L}_{\\text{box}} + \\mathcal{L}_{\\text{mask}}$ — where the mask term is per-pixel binary cross-entropy applied only to the channel for the ground-truth class, averaged over the $28 \\times 28 = 784$ mask pixels.",
+          "where $f(i,j)$ are the feature values at the four surrounding integer positions and the $\\max(0, 1 - |\\cdot|)$ terms are the bilinear weights (closer positions count more). That's just standard bilinear interpolation — the insight is *using it instead of rounding*. The result is sub-pixel-accurate feature extraction, and mask quality jumps: the paper reported a ~10% improvement in mask average precision from this single change.",
         ],
       },
       {
-        heading: "SAM: a foundation model for segmentation",
-        paragraphs: [
-          "In 2023 segmentation got its foundation model. The Segment Anything Model (SAM) shifts from task-specific to promptable: trained on 1.1 billion masks via a model-in-the-loop data engine, it segments whatever you point to — a click, a box, or a rough mask — zero-shot, including objects it never saw in training. The architecture is asymmetric for interactive speed: a heavy ViT image encoder runs once per image (hundreds of milliseconds), a lightweight prompt encoder turns clicks and boxes into embeddings (once per prompt), and a small mask decoder produces masks in milliseconds. The asymmetry is the whole point — encode the image once, then click on it as many times as you like, getting a fresh mask in real time each click without re-encoding.",
-        ],
+        diagram: { id: "vis-roi-pool-vs-roi-align", caption: "Fig 6.36 — Don't round - interpolate. Sub-pixel-accurate features are what make Mask R-CNN's masks line up." },
       },
       {
-        heading: "SAM's image encoder",
+        heading: "The mask head and loss",
         paragraphs: [
-          "The image encoder turns a 1024×1024 RGB image into a 64×64 grid of 256-dimensional features. It's a Vision Transformer — ViT-H, 636 million parameters, in the largest variant — pretrained with Masked Autoencoding (MAE) before being adapted for segmentation. Why a ViT and not a CNN? CNNs grow their receptive field slowly with depth, so two disconnected pieces of an object (a person split by a tree trunk) can't \"talk\" until very deep layers, whereas a ViT's self-attention gives every patch immediate access to every other patch — exactly the global reasoning segmentation needs.",
-          "It tokenizes the image with 16×16 non-overlapping patches (a single stride-16 conv), so $(3, 1024, 1024)$ pixels become a $(1280, 64, 64)$ grid of patch vectors for ViT-H — a 256× spatial reduction packed into far richer features. Learnable absolute positional embeddings (one per 64×64 position) tell each patch where it is.",
-          "Running full self-attention at every layer would mean a 4096-token sequence and roughly $4096^2 \\approx 16.8$ million attention operations per head per layer, so SAM uses mostly windowed attention with a window size of 14 — attention within each ~14×14 window instead of the whole image — and switches to full global attention only every 8th layer to mix information across the image. This is the same idea as the Swin Transformer: cheap local layers, rare expensive global ones.",
+          "Inside each detected region, the mask head is a small fully-convolutional network: take the RoI-aligned feature map (14×14 or 7×7), apply a few conv layers, upsample with a transposed conv to 28×28, then a 1×1 conv to produce C output channels — one per class, each a sigmoid binary mask. Critically, the model outputs **K binary masks per region, one for each possible class**, and at inference you simply take the mask for the class the classification head predicted. This *decouples* classification from mask prediction: the mask head doesn't have to decide \"is this a dog or a cat,\" it just draws the right pixels.",
         ],
       },
       {
         paragraphs: [
-          "Inside each block SAM adds relative positional biases on top of the absolute ones — absolute positions say \"where I am,\" relative positions say \"how I relate to you,\" and for segmentation the relationship is what really matters (which patches belong to the same object). The biases are added to the attention scores before the softmax:",
+          "The total loss combines all three branches:",
         ],
+      },
+      {
+        equations: [
+          "\\mathcal{L} = \\mathcal{L}_{\\text{cls}} + \\mathcal{L}_{\\text{box}} + \\mathcal{L}_{\\text{mask}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The mask loss is per-pixel *binary* cross-entropy, applied only to the channel for the ground-truth class:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}_{\\text{mask}} = -\\frac{1}{m^2} \\sum_{i,j} \\big[y_{i,j} \\log \\hat{y}_{i,j} + (1 - y_{i,j}) \\log(1 - \\hat{y}_{i,j})\\big]",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $m^2$ is the number of mask pixels (784 for a 28×28 mask), $y_{i,j}$ is the true 0/1 mask value, and $\\hat{y}_{i,j}$ the predicted probability. Notice: **sigmoid per pixel, not softmax.** Each pixel independently answers \"am I part of *this* object or not,\" with no competition between classes — which is exactly what allows the decoupling.",
+        ],
+      },
+      {
+        paragraphs: [
+          "That decoupling is one of Mask R-CNN's most elegant ideas. In semantic segmentation (U-Net), you ask each pixel \"which of the C classes are you?\" — softmax forces classes to compete. In Mask R-CNN you ask each pixel \"are you part of *this* object?\" — binary, no competition. So the mask head's job is much simpler: it doesn't have to learn what a dog looks like versus a cat and distinguish them at the pixel level; it just learns to draw the boundary of whatever object is in this region, while the class head answers \"what\" independently. The result: cleaner gradient signal, better masks, lower data requirements.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Mask R-CNN uses a *sigmoid* per pixel (one binary mask per class) rather than a *softmax* over classes like U-Net. Why is that \"decoupling\" helpful?",
+          answer: "Because it separates \"what is this object?\" (handled by the dedicated classification branch) from \"which pixels belong to it?\" (handled by the mask head). With a per-class sigmoid, each pixel just answers a binary \"am I part of this object?\" with no competition between classes, so the mask head only has to learn to trace boundaries — not to distinguish dog-from-cat at the pixel level. That simpler, decoupled task gives a cleaner gradient, sharper masks, and lower data needs than forcing a softmax to do classification and segmentation at once.",
+        },
+      },
+      {
+        heading: "SAM: The Segment Anything Model",
+        paragraphs: [
+          "In 2023, Meta released the **Segment Anything Model (SAM)**, and segmentation got its foundation model. Before SAM, every segmentation task needed its own model trained on its own labeled dataset — one for tumors, one for roads, one for satellite imagery. After SAM, a single model could segment essentially *anything* in *any* image with a click, a box, or a rough mask — including objects it had never been explicitly trained on. It was trained on 11 million images and **1.1 billion masks** (over 400× larger than the previous biggest segmentation dataset), and its architecture has three parts: a heavy image encoder, a lightweight prompt encoder, and a small mask decoder.",
+        ],
+      },
+      {
+        heading: "The big idea: promptable segmentation",
+        paragraphs: [
+          "The single most important idea in SAM is the shift from *task-specific* to *promptable* segmentation. A traditional model is trained for a fixed output — a U-Net trained on medical scans outputs tumor masks, a model trained on COCO outputs masks of 80 categories. The set of possible outputs is locked at training time. SAM flips this: it's trained to take a **prompt** — a point click, a bounding box, or a rough mask — and produce the segmentation that the prompt indicates. Whatever you point at, SAM segments. Which means you don't need labeled data for your specific task (SAM works zero-shot), you can segment things the model never saw in training, and one model serves countless downstream tasks just by changing the prompt.",
+        ],
+      },
+      {
+        paragraphs: [
+          "If that sounds familiar, it should: it's the *exact same conceptual move* that GPT made in language. Instead of training a separate model for translation, summarization, and classification, you train one model that responds to prompts and let the prompt encode the task. SAM is the segmentation version of that shift.",
+        ],
+      },
+      {
+        diagram: { id: "vis-task-specific-vs-promptable-segmentation", caption: "Fig 6.37 — Stop training one model per task. Train one promptable model and let the prompt say what to segment." },
+      },
+      {
+        heading: "Architecture: a deliberate asymmetry",
+        paragraphs: [
+          "SAM has three components, designed around one constraint: interactive use must feel almost instant. When you click, the mask should appear in milliseconds.",
+        ],
+      },
+      {
+        definitions: [
+          { term: "Image encoder", definition: "— a heavy Vision Transformer (ViT-H, 636 million parameters) that turns the image into a dense embedding. Runs **once per image.**" },
+          { term: "Prompt encoder", definition: "— a lightweight network that converts user prompts into embeddings. Runs **once per prompt.**" },
+          { term: "Mask decoder", definition: "— a small transformer-based module that combines the image and prompt embeddings to produce masks. Runs in **milliseconds.**" },
+        ],
+      },
+      {
+        paragraphs: [
+          "The asymmetry is the entire point. Encoding the image is expensive (the ViT-H takes hundreds of milliseconds on a modern GPU), but decoding from a prompt is cheap. So you encode an image *once*, then click on it many times, getting a fresh mask in real time for each click without ever recomputing the image embedding.",
+        ],
+      },
+      {
+        diagram: { id: "vis-sam-s-three-components-and-their-cost-asymmetry", caption: "Fig 6.38 — Encode the image once (expensive); decode each prompt in milliseconds (cheap). That's what makes SAM feel instant." },
+      },
+      {
+        heading: "The image encoder",
+        paragraphs: [
+          "The image encoder is SAM's eyes. It turns a 1024×1024 RGB image into a 64×64 grid of 256-dimensional feature vectors. It's a **Vision Transformer** — ViT-H in the largest variant — pretrained with Masked Autoencoding (MAE) before being adapted for segmentation. (We'll cover ViTs in full in the next chapter; here's just enough to follow SAM.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "Why a ViT and not a CNN? CNNs are excellent at *local* features through convolution, but they struggle with *long-range* dependencies because receptive fields grow only slowly with depth. Segmentation often needs global reasoning — picture segmenting a person partially hidden behind a tree. A CNN might segment the visible body parts separately, because the disconnected regions can't \"talk\" until very deep layers. A ViT's self-attention gives every patch immediate access to every other patch in a single layer — exactly what global reasoning needs.",
+        ],
+      },
+      {
+        heading: "Patch tokenization",
+        paragraphs: [
+          "The first step turns the 2D image into discrete tokens the transformer can process. SAM uses **16×16 non-overlapping patches.** Operationally that's a single convolution with kernel size 16 and stride 16 — each output position corresponds to one 16×16 input patch. The shape transformation:",
+        ],
+      },
+      {
+        list: [
+          "Input: (3, 1024, 1024) — RGB pixels.",
+          "After patch embedding: (1280, 64, 64) — since 1024/16 = 64 patches per side, each represented by a 1280-dim vector (for ViT-H).",
+          "Rearranged for the transformer: a sequence of 64×64 = 4096 patch tokens.",
+        ],
+      },
+      {
+        paragraphs: [
+          "So we go from 1024×1024 raw pixels to a 64×64 grid of patch tokens, each a rich learned feature vector — a 256× reduction in spatial resolution, packed into much richer per-location features.",
+        ],
+      },
+      {
+        diagram: { id: "vis-vit-patch-tokenization-sam-s-encoder", caption: "Fig 6.39 — Chop the image into 16x16 patches, project each to a token - 4096 tokens for a 1024x1024 image." },
+      },
+      {
+        heading: "Positional encodings",
+        paragraphs: [
+          "Patches alone have no order — the transformer can't tell where each came from. SAM adds **learnable absolute positional embeddings**: each of the 64×64 = 4096 patch positions gets its own learnable vector, added to the patch embedding. Unlike the sinusoidal encoding of the original transformer, these are *learned* — the network discovers whatever positional representation works best. (And unlike *relative* encodings, which we'll see in a moment, absolute embeddings tell each patch its own coordinate, not its relationship to others.)",
+        ],
+      },
+      {
+        heading: "Windowed and global attention",
+        paragraphs: [
+          "Here SAM does something clever. A standard ViT does *full* self-attention at every layer — every patch attends to every other. For 4096 tokens (the flattened 64×64 grid), that's $4096^2 \\approx 16.8$ million attention operations per head per layer, multiplied across many heads and layers. Expensive. So SAM uses mostly **windowed attention with periodic global attention**:",
+        ],
+      },
+      {
+        list: [
+          "Most layers use **windowed self-attention** with window size 14. Attention happens only within each 14×14 window, not across the whole image. For a 64×64 feature map that's about $(64/14)^2 \\approx 21$ windows, each doing attention over only 196 tokens instead of 4096. Complexity drops from $O(N^2)$ to roughly $O(N \\cdot W^2)$ — a major saving.",
+          "A few designated layers (typically every 8th) use **full global self-attention**, letting information mix across the whole image.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is the same idea as Swin Transformer's hierarchical attention (which we'll meet later): cheap windowed layers capture local patterns, while rare, expensive global layers mix information globally. Far more efficient than full attention everywhere, with no real loss of global reasoning.",
+        ],
+      },
+      {
+        diagram: { id: "vis-windowed-periodic-global-attention", caption: "Fig 6.40 — Cheap local windows most layers, occasional global mixing - global reasoning without paying O(N^2) everywhere." },
+      },
+      {
+        heading: "Relative positional embeddings inside attention",
+        paragraphs: [
+          "On top of the absolute positions, SAM adds **relative positional embeddings** inside each attention block. The framing is clean: *absolute* positions tell each patch \"where I am,\" while *relative* positions tell pairs of patches \"how I relate to you spatially.\" Both are useful — absolute lets the network reason about specific locations (\"top-right corner\"), relative lets it reason about relationships (\"these two patches are vertically adjacent\"). For segmentation, relative positions are arguably more useful, since what matters is which patches belong to the same object — a relationship, not an absolute spot.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Recall the standard attention computation:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{Attention}(Q, K, V) = \\text{softmax}\\!\\left(\\frac{QK^\\top}{\\sqrt{d}}\\right) V",
+        ],
+      },
+      {
+        paragraphs: [
+          "SAM adds position-dependent biases to the scores *before* the softmax:",
+        ],
+      },
+      {
         equations: [
           "\\text{scores}_{ij} = \\frac{Q_i \\cdot K_j^\\top}{\\sqrt{d}} + \\text{rel\\_h}(\\Delta h_{ij}) + \\text{rel\\_w}(\\Delta w_{ij})",
         ],
       },
       {
         paragraphs: [
-          "Learning a separate bias for every $(\\Delta h, \\Delta w)$ pair on a 64×64 grid would cost $(2 \\cdot 64 - 1)^2 = 127^2 \\approx 16{,}000$ parameters per head. SAM instead decomposes the bias into independent height and width terms, $\\text{bias}(\\Delta h, \\Delta w) = \\text{rel\\_h}(\\Delta h) + \\text{rel\\_w}(\\Delta w)$, needing only $2 \\cdot (2 \\cdot 64 - 1) = 254$ parameters per head — a 98% reduction. Finally a neck standardizes the output for the decoder: a 1×1 conv drops the channels from 1280 down to 256, then a 3×3 conv with LayerNorm refines spatially, so every SAM variant (ViT-B at 768, ViT-L at 1024, ViT-H at 1280) emerges as the same $(256, 64, 64)$ tensor.",
+          "where $\\Delta h_{ij}$ and $\\Delta w_{ij}$ are the vertical and horizontal distances between query position $i$ and key position $j$, and $\\text{rel\\_h}, \\text{rel\\_w}$ are learned biases for those distances. The naive approach would learn a separate bias for every $(\\Delta h, \\Delta w)$ pair — for a 64×64 map that's $(2 \\cdot 64 - 1)^2 = 127^2 \\approx 16{,}000$ parameters per head. Expensive. SAM instead **decomposes** the bias into separate height and width components:",
         ],
       },
       {
-        heading: "SAM's prompt encoder",
-        paragraphs: [
-          "The prompt encoder converts user inputs into vectors the decoder can attend to. Points and boxes are sparse prompts (a few vectors); masks are dense prompts (a feature map). A point is a coordinate plus a label — 1 for foreground, 0 for background. Its coordinate is shifted by 0.5 to hit the pixel center, normalized to $[0, 1]$, then lifted into a high-dimensional vector by Random Fourier Features against a fixed Gaussian matrix $\\mathbf{B} \\in \\mathbb{R}^{2 \\times d}$ (with $d = 128$):",
-        ],
         equations: [
-          "\\gamma(x, y) = \\left[\\sin\\!\\left(2\\pi \\mathbf{B}^\\top \\begin{bmatrix} x \\\\ y \\end{bmatrix}\\right),\\ \\cos\\!\\left(2\\pi \\mathbf{B}^\\top \\begin{bmatrix} x \\\\ y \\end{bmatrix}\\right)\\right]",
+          "\\text{bias}(\\Delta h, \\Delta w) = \\text{rel\\_h}(\\Delta h) + \\text{rel\\_w}(\\Delta w)",
         ],
       },
       {
         paragraphs: [
-          "That gives a $2d = 256$-dimensional encoding — the continuous-2D cousin of the transformer's sinusoidal positional encoding, where nearby points get similar codes and distant ones get very different codes. On top of position, SAM adds a learned label embedding: a foreground, background, or (when no point is given) no-point vector. A box is handled by reusing the point machinery — treat it as its two corners, Fourier-encode each, and add learned top-left-corner and bottom-right-corner embeddings, giving four learned point-type embeddings in total and exactly 2 sparse vectors per box. A mask prompt is different: a $(1, 256, 256)$ image downsampled by two stride-2 convs and a 1×1 conv to a $(256, 64, 64)$ tensor that's added directly to the image embedding (a learned no-mask embedding fills in when none is given). So sparse embeddings enter through attention as tokens; the dense embedding modifies the image features themselves.",
+          "which needs only $2 \\cdot (2 \\cdot 64 - 1) = 254$ parameters per head — a **98% reduction** in positional parameters. The assumption is that horizontal and vertical relationships can be encoded independently, which is reasonable for natural images. Intuitively, the model can learn things like \"patches in the same row are highly related\" (small horizontal bias at $\\Delta w = 0$) and \"patches close vertically are more related than distant ones\" (vertical bias decaying with $|\\Delta h|$); the two combine into a position-aware attention adjustment.",
         ],
       },
       {
-        heading: "SAM's mask decoder",
+        diagram: { id: "vis-decomposed-relative-position-bias", caption: "Fig 6.41 — Split the relative bias into independent height and width parts: same idea, 98% fewer parameters." },
+      },
+      {
+        heading: "The neck",
         paragraphs: [
-          "The decoder is where the cleverness concentrates, and it has four moving parts. First, learnable output tokens: one IoU token (which will predict each mask's quality) and four mask tokens (each producing one candidate mask), concatenated with the sparse prompt embeddings into one short sequence. Second, two-way attention — unlike a normal decoder where queries attend to the encoder but not back, each block here updates both the tokens and the image features against each other, in four steps run twice: self-attention among the tokens, cross-attention from tokens to image features, an MLP on the tokens, then cross-attention from image features back to tokens.",
-          "Third, a hypernetwork produces the masks. The image features are upsampled by two stride-2 transposed convolutions from $(256, 64, 64)$ to $(32, 256, 256)$, and each mask token is passed through its own MLP to emit a 32-dimensional filter. The mask at each pixel is just the dot product of that pixel's 32-dim feature with the filter, $\\text{mask}_{ij} = \\sum_{c=1}^{32} \\text{features}_{c,i,j} \\cdot \\text{filter}_c$, producing four 256×256 mask logits. Fourth, multi-mask output: the four masks exist to resolve ambiguity (a click on a shirt could mean the shirt, the person, or the whole group), and at training time SAM only backpropagates through whichever of the four best matches the ground truth, letting the mask tokens specialize toward different interpretations.",
+          "After all the transformer blocks, the output is (64, 64, 1280) for ViT-H. But SAM's mask decoder expects exactly **256 channels** — a standardized interface independent of which ViT size you use. The **neck** is a small two-layer convolutional projection that handles this: a 1×1 conv reduces channels 1280 → 256, then a 3×3 conv with LayerNorm does light spatial refinement at 256. After the neck, every SAM variant (Base with ViT-B at 768, Large with ViT-L at 1024, Huge with ViT-H at 1280) produces the same output shape: **(256, 64, 64)**. This decouples the rest of the model from the encoder choice.",
         ],
+      },
+      {
+        heading: "MAE pretraining",
+        paragraphs: [
+          "Before being trained on segmentation, the ViT-H encoder was pretrained with **Masked Autoencoding (MAE)**: randomly mask out 75% of the input patches, then train an encoder-decoder to reconstruct the missing patches from the remaining 25%. Afterward the decoder is thrown away and only the encoder is kept. The encoder has learned to extract rich, generic visual features — capturing both local detail (to reconstruct fine textures) and global context (to figure out what should be where). This is a powerful initialization: the MAE-trained encoder already \"knows how to see\" before SAM training begins; it just needs to learn what to extract for promptable segmentation. The result is far stronger than training from scratch, especially given how data-hungry ViTs are.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Putting the encoder all together, the shape trail is: input (3, 1024, 1024) → patch embedding (1280, 64, 64) → add absolute positional embeddings → transformer blocks (mostly windowed, a few global, with relative position biases), still (1280, 64, 64) → neck (channel reduction + spatial refinement) → **(256, 64, 64)**. That final 64×64 grid of 256-dim features is what the rest of the model sees.",
+        ],
+      },
+      {
+        quiz: {
+          question: "SAM's encoder is heavy (ViT-H, runs in hundreds of ms) but the model still feels instant when you click. How is that possible?",
+          answer: "Because of the cost asymmetry between the components. The expensive image encoder runs *once per image* and produces a (256, 64, 64) embedding that's cached. Every subsequent click only runs the lightweight prompt encoder and the small mask decoder, which together take milliseconds — they reuse the already-computed image embedding rather than re-encoding the image. So you pay the heavy cost once and then get real-time masks for as many prompts as you want.",
+        },
+      },
+      {
+        heading: "The prompt encoder",
+        paragraphs: [
+          "The prompt encoder converts user inputs into vector embeddings the mask decoder can attend to. SAM accepts three kinds of prompts: **points** (clicks, each labeled foreground or background), **boxes** (a rectangular region of interest), and **masks** (a rough input mask, often from a previous SAM output, to refine). Points and boxes are **sparse** prompts — small, encoded as a few vectors. Masks are **dense** prompts — they have spatial structure and get encoded as a feature map. That sparse-vs-dense split matters, and we'll see why at the end.",
+        ],
+      },
+      {
+        heading: "Point prompts",
+        paragraphs: [
+          "A point prompt is a coordinate $(x, y)$ plus a label: 1 for foreground (\"part of the object\"), 0 for background (\"not part of it\"). You click on what you want (positive points) and optionally click things to exclude (negative points). Encoding happens in three steps:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 1 — coordinate normalization.** Shift the pixel coordinates by 0.5 to align with pixel centers (avoiding a bias toward the top-left corner), then normalize to [0, 1] by dividing by the image size.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 2 — Fourier positional encoding.** SAM doesn't embed $(x, y)$ directly — that would be a 2-dimensional representation, far too small. Instead it uses **Random Fourier Features** to lift the coordinate into a high-dimensional vector. SAM has a fixed Gaussian random matrix $\\mathbf{B} \\in \\mathbb{R}^{2 \\times d}$ generated at initialization (with $d = 128$, half of 256). For a normalized coordinate $(x, y) \\in [0,1]^2$, the encoding is:",
+        ],
+      },
+      {
+        equations: [
+          "\\gamma(x, y) = \\left[\\sin\\!\\left(2\\pi \\mathbf{B}^\\top \\begin{bmatrix} x \\\\ y \\end{bmatrix}\\right), \\cos\\!\\left(2\\pi \\mathbf{B}^\\top \\begin{bmatrix} x \\\\ y \\end{bmatrix}\\right)\\right]",
+        ],
+      },
+      {
+        paragraphs: [
+          "The symbols: $\\mathbf{B}$ is the fixed random Gaussian projection matrix; $\\mathbf{B}^\\top [x, y]^\\top$ produces a $d$-dimensional vector; applying $\\sin$ and $\\cos$ and concatenating gives a $2d = 256$-dimensional vector $\\gamma(x,y)$. This is essentially the same idea as sinusoidal positional encoding in transformers, generalized to continuous 2D coordinates — the random matrix gives a projection that captures both fine and coarse spatial patterns at many frequencies. Nearby points get similar encodings (smoothness); distant points get very different ones (uniqueness).",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 3 — add a label embedding.** The Fourier encoding is purely positional. To inject the label, SAM adds a learned label-specific vector: a `foreground_embedding` for positive points, a `background_embedding` for negative points, or a `no_point_embedding` for padding when no point is given. So each point becomes a 256-dim vector encoding both its position and its semantic role.",
+        ],
+      },
+      {
+        diagram: { id: "vis-encoding-a-point-prompt", caption: "Fig 6.42 — Normalize, lift to a high-dim Fourier vector, then tag it foreground or background - one 256-dim token per click." },
+      },
+      {
+        heading: "Box prompts",
+        paragraphs: [
+          "A box is four numbers $(x_1, y_1, x_2, y_2)$ — top-left and bottom-right corners. SAM handles it elegantly: treat the box as **two corner points** and reuse the point machinery. Each corner is Fourier-encoded just like a point, then gets a learned *corner-specific* embedding added — a `top_left_corner_embedding` for one and a `bottom_right_corner_embedding` for the other. So SAM has four learned point-type embeddings in total: foreground, background, top-left corner, bottom-right corner. The model learns to read them differently — a top-left corner signals \"the object's upper-left bound is here,\" while a foreground click signals \"this exact spot is inside the object.\" A box thus produces exactly 2 sparse vectors (one per corner), while a single point produces 1; multiple prompts just stack into a longer sequence.",
+        ],
+      },
+      {
+        heading: "Mask prompts",
+        paragraphs: [
+          "A mask prompt is fundamentally different — it's a 2D image at near-full resolution (256×256), not a few sparse points, carrying dense pixel-level guidance. The challenge is to fold that dense information into the 64×64 feature grid that matches the image embedding. SAM does it with a small convolutional downsampling network: start with the (1, 256, 256) input mask, apply a 2×2 stride-2 conv → (mask_chans/4, 128, 128), another 2×2 stride-2 conv → (mask_chans, 64, 64), then a 1×1 conv → (256, 64, 64). The output matches the image embedding's shape, so SAM can **add the mask embedding directly to the image embedding** before the decoder runs — a dense prompt modifies the image features rather than entering through attention. When no mask is given, SAM uses a learned `no_mask_embedding` broadcast across the (256, 64, 64) grid, keeping shapes consistent.",
+        ],
+      },
+      {
+        heading: "Sparse vs dense, and why the split matters",
+        paragraphs: [
+          "So the prompt encoder produces two kinds of output: **sparse embeddings** (a few 256-dim vectors — one per point, two per box — that get concatenated as tokens and fed into the decoder's attention) and **dense embeddings** (a (256, 64, 64) tensor added directly to the image embedding). The distinction matches each prompt's spatial nature: points and boxes are inherently *local* (\"this spot is special\"), so they enter as attention tokens; masks are inherently *global* (\"this whole region is special\"), so they modify the image features wholesale. Encoding each appropriately lets the mask decoder use them naturally.",
+        ],
+      },
+      {
+        diagram: { id: "vis-sparse-vs-dense-prompts", caption: "Fig 6.43 — Local prompts (points, boxes) become attention tokens; a global prompt (mask) is added straight onto the image features." },
+      },
+      {
+        heading: "The mask decoder",
+        paragraphs: [
+          "The mask decoder is the heart of SAM, where most of the cleverness lives. It takes the image embedding and the prompt embeddings and produces high-quality masks in milliseconds. Four key ideas: learnable output tokens, two-way attention, hypernetwork-based mask generation, and multi-mask output for ambiguity.",
+        ],
+      },
+      {
+        heading: "The output token system",
+        paragraphs: [
+          "A naive decoder would directly output a 256×256 mask map — but that scales badly and doesn't generalize well to multiple mask hypotheses. SAM's approach is more elegant: introduce learnable **output tokens** that act as queries summarizing what mask the decoder will produce. Through training, these tokens learn to represent different mask interpretations and quality scores. SAM uses two kinds:",
+        ],
+      },
+      {
+        definitions: [
+          { term: "IoU token", definition: "— one token whose final value predicts the quality (estimated IoU) of each output mask." },
+          { term: "Mask tokens", definition: "— four tokens, each producing one candidate mask (we'll see why four shortly)." },
+        ],
+      },
+      {
+        paragraphs: [
+          "So the decoder has 5 output tokens total — learnable 256-dim embeddings, initialized randomly and trained. They get concatenated with the sparse prompt embeddings to form the decoder's input sequence. And remember, before the decoder runs, the dense mask embedding has already been added to the image embedding. So the decoder sees a sequence of tokens — `[IoU token, 4 mask tokens, sparse prompt embeddings]`, typically 5–10 tokens — plus an image embedding of shape (256, 64, 64), flattened during attention into 4096 image tokens.",
+        ],
+      },
+      {
+        heading: "Two-way attention",
+        paragraphs: [
+          "This is the decoder's most important innovation. A standard transformer decoder uses *one-way* attention: the decoder's queries attend to the encoder's keys, but the encoder doesn't attend back. SAM uses **two-way attention** — at each decoder layer, *both* the prompt tokens and the image features get updated based on each other. Why? Because segmentation needs mutual understanding: the prompts need image context (a point click is just a coordinate; to make a meaningful mask it needs to \"see\" what visual content is at that location), and the image features need prompt context (the features should highlight what the user is asking about — different prompts should activate different visual features).",
+        ],
+      },
+      {
+        paragraphs: [
+          "The two-way attention block has four steps, in order:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Self-attention** among the prompt and output tokens — the tokens \"talk to each other\" (the IoU token learns what the mask tokens predict, the mask tokens coordinate to produce different hypotheses, prompt tokens combine information).",
+          "2. **Cross-attention: tokens attend to image features** — each token is a query, the flattened image features are keys/values. This is where prompts gather visual information from the image.",
+          "3. **MLP on tokens** — a standard feed-forward block refines each token.",
+          "4. **Cross-attention: image features attend to tokens** — now the image features are queries and the tokens are keys/values. The \"reverse\" direction, where image features get updated based on the prompts.",
+        ],
+      },
+      {
+        paragraphs: [
+          "After the block, both the tokens and the image features are updated and informed by each other. SAM stacks two such blocks back to back.",
+        ],
+      },
+      {
+        diagram: { id: "vis-sam-s-two-way-attention-decoder-block", caption: "Fig 6.44 — Tokens and image features attend to each other both ways - prompts gain visual context, image features highlight the prompt." },
+      },
+      {
+        heading: "Hypernetwork-based mask generation",
+        paragraphs: [
+          "After two-way attention finishes (two blocks plus a final token-to-image cross-attention), the decoder has refined both the tokens and the image features. Now, how do we actually produce a mask? The naive way is to have the decoder directly output a 256×256 map. SAM does something cleverer — a **hypernetwork**. Each mask token doesn't produce the mask itself; it produces the *weights of a tiny filter* that then gets applied to the image features. Step by step:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 1 — upsample the image features.** The decoder's image features are still 64×64. To produce a high-res mask, SAM uses two transposed convolutions with stride 2, taking the features from (256, 64, 64) up to (32, 256, 256). The channel count drops to 32 — a smaller per-pixel feature, but at 4× the spatial resolution.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 2 — each mask token generates a filter.** SAM has 4 mask tokens, each a 256-dim vector after the decoder. Each is passed through its own learnable MLP that outputs a 32-dim vector — the \"filter weights\" for that mask token.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Step 3 — apply the filter as a dot product.** The upsampled features have shape (32, 256, 256) — 256×256 positions, each a 32-dim feature. The filter is also 32-dim. The mask at each pixel is the dot product of that pixel's feature with the filter:",
+        ],
+      },
+      {
+        equations: [
+          "\\text{mask}_{ij} = \\sum_{c=1}^{32} \\text{features}_{c, i, j} \\cdot \\text{filter}_c",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $\\text{features}_{c,i,j}$ is the $c$-th feature channel at pixel $(i,j)$ and $\\text{filter}_c$ is the $c$-th filter weight. This yields one scalar per pixel — the mask logit. Do it for each of the 4 mask tokens and you get 4 mask maps of shape (256, 256). The hypernetwork design is far more efficient than directly outputting masks: the token-to-filter MLP has only ~256 × 32 ≈ 8,000 parameters per mask token, yet the same dot-product produces a full 256×256 mask — and each mask token can adapt its filter to the prompt, so the same image features can be queried with different filters to produce different masks.",
+        ],
+      },
+      {
+        diagram: { id: "vis-hypernetwork-mask-generation", caption: "Fig 6.45 — A mask token emits a tiny filter; dotting it against upsampled features paints the mask - cheap and prompt-adaptive." },
+      },
+      {
+        heading: "Why four masks? Handling ambiguity",
+        paragraphs: [
+          "A single point click is often ambiguous — click on a person's shirt and do you mean the shirt, the torso, or the whole person? SAM sidesteps the ambiguity by predicting **multiple masks** (the 4 mask tokens) and letting the IoU token rank them. At training time, for an ambiguous prompt SAM only backpropagates through the *best-matching* of its 4 predictions (the one with the lowest mask loss against the ground truth), so only one mask token gets updated per ambiguous example. Over training this lets the four tokens **specialize** toward different interpretations (e.g. part vs whole-object), and at inference you can surface whichever the IoU head scores highest.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Full decoder forward pass**, summarized: concatenate `[IoU token, 4 mask tokens, sparse prompt embeddings]` into the input token sequence; add the dense prompt to the image embedding (image_features = image_embedding + dense_prompt); run the two-way attention blocks (×2) so tokens and image features inform each other; do a final token-to-image cross-attention; separate out the IoU token and the 4 mask tokens; upsample the image features to (32, 256, 256); run hypernetwork mask generation (each mask token's MLP makes a 32-dim filter, dotted against the features to make a 256×256 mask); pass the IoU token through an MLP to predict each mask's quality. Output: 4 mask logits (256×256 each) and 4 predicted IoU scores. Threshold or argmax to get binary masks.",
+        ],
+      },
+      {
+        quiz: {
+          question: "Why does SAM predict four masks per prompt, and what role does the IoU token play?",
+          answer: "To handle ambiguity. A single click can legitimately mean different things (the shirt, the torso, the whole person), so SAM outputs four candidate masks and, during training, only backprops through the best-matching one per ambiguous example — which lets the four mask tokens specialize toward different valid interpretations (part vs whole, etc.). The IoU token predicts the *quality* (estimated IoU) of each candidate mask, so at inference SAM can rank the four and surface the one it believes is best.",
+        },
       },
       {
         heading: "Training SAM: the data engine",
         paragraphs: [
-          "The architecture is only half the story; the other half is the SA-1B dataset and the engine that built it. SA-1B is 11 million images and 1.1 billion masks — about 100 per image, and 400× the ~2.5 million masks in COCO, the previous biggest. No team could label that by hand, so SAM bootstrapped it in three stages. Assisted-Manual: annotators corrected masks an early SAM proposed, ~34 seconds per mask dropping to ~14 as the model improved, yielding 4.3M masks. Semi-Automatic: SAM auto-segmented the obvious objects so annotators could focus on the ones it missed, adding 5.9M masks and boosting diversity. Fully-Automatic: SAM, now strong enough to run unattended, was prompted at every point of a regular 32×32 grid per image, with the outputs filtered by confidence and a stability check (perturb the prompt slightly, keep only masks that stay consistent) — producing the full 1.1 billion.",
-          "The loss combines a mask loss and an IoU-prediction loss. The mask loss is focal loss plus Dice loss weighted 20:1 — $\\mathcal{L}_{\\text{mask}} = 20 \\cdot \\mathcal{L}_{\\text{focal}} + 1 \\cdot \\mathcal{L}_{\\text{dice}}$ — where focal supplies sharp per-pixel boundary signal while Dice ensures good overall overlap, and the IoU token is trained with a plain MSE between its predicted and actual IoU. Training uses AdamW, a cosine learning-rate schedule with a 250-step warmup, no data augmentation (the dataset is large and diverse enough not to need it), batch size 64 for the Huge model, and 270K iterations.",
+          "The architecture is only half the story. The other half is the **data engine** that produced 1.1 billion training masks. SAM was trained on **SA-1B** (Segment Anything 1 Billion): 11 million diverse, high-resolution images (typically 1500×2250) and **1.1 billion** segmentation masks — about 100 per image. For context, before SAM the biggest segmentation dataset was COCO with ~2.5 million masks; SA-1B is **400× larger.** No human team could label that many masks manually, so SAM was trained through a **model-in-the-loop data engine** that bootstrapped its way up in three stages:",
         ],
       },
       {
-        heading: "SAM 2: segmentation in video",
-        paragraphs: [
-          "In 2024 SAM 2 carried this to video, where objects move, deform, get occluded, and reappear — and running SAM frame-by-frame has no temporal consistency, so a tracked dog might become the bush behind it one frame later. SAM 2 processes video as a stream, one frame at a time, with a few additions: the image encoder is now a faster Hiera transformer instead of ViT-H; memory attention modifies the current frame's features using memories of past frames; a memory encoder turns each predicted mask into a memory feature; and a memory bank holds those past embeddings and mask features for the object being tracked. On a single image the memory bank is empty and SAM 2 behaves exactly like SAM.",
+        definitions: [
+          { term: "Stage 1 — Assisted-Manual (4.3M masks)", definition: "Annotators segmented objects with browser tools, helped by an early SAM. They clicked, SAM proposed masks, they refined. Started at ~34 seconds per mask; as SAM improved on this data, annotation sped up to ~14 seconds per mask. Several iterations produced 4.3 million masks across 120,000 images." },
+          { term: "Stage 2 — Semi-Automatic (5.9M masks)", definition: "SAM now confidently masked \"easy\" objects on its own. It auto-detected prominent objects and annotators focused on adding the ones SAM *missed* — increasing diversity rather than re-covering obvious objects. Added 5.9 million masks across 180,000 images." },
+          { term: "Stage 3 — Fully Automatic (1.1B masks)", definition: "SAM was now strong enough to annotate without humans. A regular 32×32 grid of points was placed on each image, SAM was prompted at each point, and the resulting masks were filtered for quality using confidence thresholds and stability metrics (running SAM with slightly perturbed prompts and keeping only masks that stayed consistent). This generated ~1.1 billion masks across 11 million images." },
         ],
+      },
+      {
+        paragraphs: [
+          "This bootstrapped engine is one of the biggest reasons SAM succeeded — the model and the dataset improved each other in a virtuous cycle that no fixed labeling budget could have matched.",
+        ],
+      },
+      {
+        diagram: { id: "vis-sam-s-three-stage-data-engine", caption: "Fig 6.46 — Bootstrap from human-assisted to fully automatic - the model labels its own ever-growing dataset, 400x bigger than COCO." },
+      },
+      {
+        heading: "SAM's training loss",
+        paragraphs: [
+          "SAM's loss has two parts: a mask loss and an IoU-prediction loss.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Mask loss: focal + dice.** Plain binary cross-entropy has two well-known problems for segmentation — class imbalance (most pixels are background; predicting all-zeros scores low loss but is useless) and easy-negative dominance (most background pixels are trivially easy, but multiplied by millions they swamp the loss from hard boundary pixels). **Focal loss** fixes both by down-weighting easy pixels:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}_{\\text{focal}} = -\\frac{1}{N} \\sum_{i=1}^{N} \\alpha_t (1 - p_t)^\\gamma \\log(p_t)",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $p_t = p_i$ if $y_i = 1$ else $(1 - p_i)$, $\\alpha_t$ is a class-balancing weight, and $\\gamma$ (typically 2) is the \"focusing parameter.\" The term $(1 - p_t)^\\gamma$ is small when the model is already confident and large when it's wrong, so hard examples dominate the gradient. **Dice loss** directly optimizes overlap:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}_{\\text{dice}} = 1 - \\frac{2 \\sum_i p_i y_i + \\epsilon}{\\sum_i p_i + \\sum_i y_i + \\epsilon}",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $p_i$ is the predicted probability, $y_i$ the true label, and $\\epsilon$ a small constant for stability. Being a ratio of intersection to combined area, it's naturally robust to class imbalance. SAM combines them, weighting focal 20× more than dice:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}_{\\text{mask}} = 20 \\cdot \\mathcal{L}_{\\text{focal}} + 1 \\cdot \\mathcal{L}_{\\text{dice}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "The 20:1 ratio is a tuned hyperparameter; the intuition is that focal provides fine per-pixel boundary signal while dice provides a global overlap signal — both are needed.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**IoU-prediction loss.** SAM also trains the IoU token to predict each mask's quality, with a simple mean-squared error between predicted and actual IoU:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}_{\\text{iou}} = \\frac{1}{K} \\sum_{k=1}^{K} (\\text{IoU}_{\\text{pred}, k} - \\text{IoU}_{\\text{true}, k})^2",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $K$ is the number of predicted masks (typically 4) and $\\text{IoU}_{\\text{true}}$ is the actual IoU of mask $k$ with the ground truth. The combined objective is:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L}_{\\text{total}} = \\mathcal{L}_{\\text{mask}} + \\mathcal{L}_{\\text{iou}}",
+        ],
+      },
+      {
+        paragraphs: [
+          "This trains SAM to do two things at once: produce accurate masks *and* honestly predict each mask's quality — both essential for interactive use, where the user only wants to see good masks. (Training details: AdamW with weight decay, a cosine learning-rate schedule with a 250-step linear warmup, no data augmentation — the dataset is so large and diverse it isn't needed — batch size 64 for SAM-Huge, and 270K iterations for SAM-Huge with fewer for smaller variants.)",
+        ],
+      },
+      {
+        quiz: {
+          question: "SAM's mask loss is $20 \\cdot \\mathcal{L}_{\\text{focal}} + 1 \\cdot \\mathcal{L}_{\\text{dice}}$. What does each piece contribute, and why is focal loss used over plain BCE?",
+          answer: "Focal loss provides fine, per-pixel boundary signal and is used over plain binary cross-entropy because it down-weights the huge number of easy background pixels (via the $(1-p_t)^\\gamma$ factor), so hard boundary pixels actually drive the gradient instead of being swamped. Dice loss provides a global overlap signal that's robust to class imbalance (it's an intersection-over-combined-area ratio). Together — weighted 20:1 toward focal — they give both crisp local boundaries and good overall mask overlap, which neither alone delivers as well.",
+        },
+      },
+      {
+        heading: "SAM 2: segmenting video",
+        paragraphs: [
+          "In 2024, Meta released **SAM 2**, extending SAM to video. The fundamental challenge with video is that objects move, deform, get occluded, and reappear — and a naive \"run SAM on every frame\" has no temporal consistency (a tracked dog might be segmented as the dog in frame 1 and the bush behind it in frame 2). SAM 2 solves this by adding a **memory module** that tracks each object's state across frames.",
+        ],
+      },
+      {
+        paragraphs: [
+          "SAM 2 processes video as a **stream** — one frame at a time, in order — which matches how video is captured and lets it run in real time. Beyond SAM's components it adds: an **image encoder** (now a faster Hiera transformer instead of ViT-H) that encodes each frame; **memory attention** that modifies the current frame's embedding based on memories of previous frames; a **memory encoder** that encodes the predicted mask for the current frame as a memory feature for future use; and a **memory bank** storing past frame embeddings and mask features for the tracked object. The mask decoder is essentially SAM's. The per-frame flow: encode the frame; run memory attention so the frame's features attend to the memory bank (picking up where the object was and what it looked like before); decode the (memory-modified) features plus any prompts into this frame's mask; then encode that mask and add it to the memory bank for future frames. Nicely, when SAM 2 is applied to a single image, the memory bank is empty and the model behaves exactly like SAM — the memory components are simply bypassed, so one model handles both.",
+        ],
+      },
+      {
+        diagram: { id: "vis-sam-2-streaming-video-segmentation-with-memory", caption: "Fig 6.47 — Stream frames, remember the object across them - temporal consistency that per-frame SAM can't give." },
+      },
+      {
+        quiz: {
+          question: "What does SAM 2 add to handle video, and what happens to that machinery when you give it a single still image?",
+          answer: "It adds a memory module: a memory bank storing past frames' embeddings and mask features, memory attention that lets the current frame's features attend to those memories, and a memory encoder that writes each predicted mask back into the bank. This gives temporal consistency, so a tracked object stays the same object across motion and occlusion. On a single still image the memory bank is empty, so the memory components are bypassed and SAM 2 behaves exactly like the original SAM.",
+        },
       },
       {
         heading: "Vision Transformers",
         paragraphs: [
-          "For a solid decade, CNNs simply owned vision. Then ViT came along in 2020 and asked a deliberately provocative question: what if we drop all of the CNN's hand-built inductive biases and just feed a transformer raw image patches? The recipe is almost suspiciously simple. Chop the image into fixed 16×16 patches, flatten and linearly project each one into a token, prepend a learnable [CLS] token, add positional embeddings, and run a completely standard transformer encoder over it — the exact same thing as BERT, only on image tokens. The [CLS] token's final state is what feeds the classifier.",
+          "For nearly a decade after AlexNet, convolutional neural networks owned vision. Every state-of-the-art classifier, detector, and segmentation model was built on the same CNN scaffolding — local convolutions, pooling, hierarchical feature maps. The architecture's inductive biases (locality, translation invariance, spatial hierarchy) seemed not just convenient but *necessary* for vision.",
         ],
-        diagram: {
-          id: "vit-patches",
-          caption:
-            "Fig 5.8 — A ViT turns 16×16 image patches into tokens (plus a [CLS] token) and runs a standard transformer encoder over them.",
+      },
+      {
+        paragraphs: [
+          "Meanwhile, transformers were eating language. By 2020, every important language model was a transformer, with two beautiful properties: it scaled almost arbitrarily well with data and parameters, and it imposed very little structure on its input — it just learned which patterns mattered. So the natural question: could transformers work for vision too? The CNN's biases helped enormously with limited data — but with internet-scale image datasets, maybe those same biases had become a ceiling. Maybe the right move was to hand the transformer raw image patches and let it figure out everything else.",
+        ],
+      },
+      {
+        heading: "Inductive bias versus scale",
+        paragraphs: [
+          "The answer, delivered by Google's **Vision Transformer (ViT)** paper in 2020, was: *yes — if you have enough data.* With a few million images (a typical academic-scale dataset), ViTs *underperformed* CNNs of comparable size. But with 300 million images (JFT-300M, Google's internal dataset), ViTs *outperformed* the best CNNs — and the gap widened with more data.",
+        ],
+      },
+      {
+        paragraphs: [
+          "First, a definition: **inductive bias** is the set of assumptions an architecture builds in about its problem — the prior knowledge it uses to generalize to inputs it hasn't seen. CNNs have *strong* inductive biases: translation invariance, locality, hierarchy — assumptions about how vision works, baked into the wiring. With limited data those priors are gold, steering learning toward good solutions and saving the network from having to discover \"nearby pixels are correlated\" from scratch. ViTs have *weak* inductive biases: a ViT assumes almost nothing about images. It has to *learn* that nearby patches relate, that translation invariance helps, that hierarchies are useful — and with little data it can't learn all that, so it loses. But with enough data the situation flips: the CNN's biases become a straitjacket, while the transformer can discover patterns the CNN literally cannot represent (long-range relationships, attention-based pooling), and it pulls ahead.",
+        ],
+      },
+      {
+        paragraphs: [
+          "This is the *exact same scaling story* that had already played out in language — architectures with stronger biases win at small scale, architectures with weaker biases but more parameters win at large scale. The transformer turned out to be the right \"weak bias\" architecture for vision, just as it had been for language. (Remember the inductive-bias-versus-scale theme from the language chapters? Same lesson, new domain.)",
+        ],
+      },
+      {
+        diagram: { id: "vis-inductive-bias-vs-scale-cnn-vs-vit", caption: "Fig 6.48 — Strong biases win when data is scarce; weak biases plus scale win when data is abundant - the same story as language." },
+      },
+      {
+        heading: "Turning an image into a sequence of patches",
+        paragraphs: [
+          "Transformers operate on sequences, so to use one on an image you first turn the image into a sequence. ViT does this by chopping the image into a grid of fixed-size patches, flattening each patch into a vector, and treating each patch as a token.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Take a 224×224 RGB image. Divide it into non-overlapping **16×16 patches**. That gives a 14×14 grid (224/16 = 14), or **196 patches** total. Each patch contains 16×16×3 = 768 raw pixel values. For each patch:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Flatten** the patch into a 768-dimensional vector (just unroll the 16×16×3 values).",
+          "2. **Project** it through a learnable linear layer to produce a $d$-dimensional patch embedding. For ViT-Base, $d = 768$ (chosen so the projection is roughly identity-initialized, though it could be any value).",
+        ],
+      },
+      {
+        paragraphs: [
+          "After this step, the image has become a sequence of 196 token embeddings, each of dimension $d$ — exactly the kind of input a transformer expects. Notice the parallel to SAM's image encoder: same patch-tokenization idea, because SAM's encoder *is* a ViT.",
+        ],
+      },
+      {
+        diagram: { id: "vis-image-to-patch-tokens", caption: "Fig 6.49 — Chop into 16x16 patches, flatten, linearly project - the image is now a 196-token sequence." },
+      },
+      {
+        heading: "The CLS token and positional encodings",
+        paragraphs: [
+          "Two more ingredients before the transformer can run.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The **[CLS] token** is borrowed directly from BERT. ViT prepends a special *learnable* token at the start of the sequence — an extra slot the transformer can use to aggregate global information. After the transformer runs, this token's final hidden state is what gets passed to the classification head. Through attention, every other token can write information into the [CLS] token's representation, so it ends up as a learned global summary of the whole image.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Positional encodings** give the model a sense of where each token sits. Without them, \"dog on top, sky on bottom\" would look identical to \"sky on top, dog on bottom\" — attention alone is permutation-invariant. ViT uses **learnable positional embeddings**: one trainable $d$-dimensional vector per position, added to the patch embeddings. Position 0 (the [CLS] token) gets one positional vector, position 1 (the top-left patch) another, and so on through position 196. Here's the lovely part: ViT's experiments show the model learns *2D-aware* positional embeddings from this 1D scheme — patches that are neighbors in the original image end up with similar positional vectors, even though the network was never told about the 2D layout. The transformer figures out the topology from data.",
+        ],
+      },
+      {
+        diagram: { id: "vis-cls-token-learnable-positional-embeddings", caption: "Fig 6.50 — A prepended [CLS] token gathers a global summary; learnable position vectors recover the 2D grid on their own." },
+      },
+      {
+        heading: "The transformer encoder stack",
+        paragraphs: [
+          "Now we have a sequence of 197 token embeddings. From here, ViT is a *standard transformer encoder* — identical to BERT, just operating on image tokens instead of word tokens. Each block does:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **LayerNorm** the input.",
+          "2. **Multi-head self-attention** — every token attends to every other token. This is where global reasoning happens.",
+          "3. **Add** the residual connection.",
+          "4. **LayerNorm** again.",
+          "5. **MLP** — a two-layer feed-forward network with GELU activation.",
+          "6. **Add** the residual connection.",
+        ],
+      },
+      {
+        paragraphs: [
+          "If that block structure looks familiar, it should — it's the same pre-norm transformer block from the language chapters, residual connections and all (there's our recurring hero again, carrying gradients through the depth). ViT-Base stacks 12 such blocks, ViT-Large stacks 24, ViT-Huge stacks 32. After all the blocks you have an output sequence of 197 tokens, each a $d$-dimensional vector now enriched by attention with every other token. For classification, ViT takes the final hidden state of the **[CLS] token** alone and passes it through a small MLP head that outputs class logits. That's it — the other 196 tokens are discarded for classification (though they're useful for dense tasks like segmentation, which is exactly how SAM uses them).",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-vit-encoder-block", caption: "Fig 6.51 — Identical to a BERT block - LayerNorm, attention, residual, MLP, residual - just over image patches." },
+      },
+      {
+        heading: "Making the sizes concrete",
+        paragraphs: [
+          "The standard ViT sizes, straight from the paper:",
+        ],
+      },
+      {
+        paragraphs: [
+          "| Variant | Layers | Hidden dim $d$ | Heads | MLP dim | Parameters |",
+          "|---|---|---|---|---|---|",
+          "| ViT-Base | 12 | 768 | 12 | 3072 | 86M |",
+          "| ViT-Large | 24 | 1024 | 16 | 4096 | 307M |",
+          "| ViT-Huge | 32 | 1280 | 16 | 5120 | 632M |",
+        ],
+      },
+      {
+        paragraphs: [
+          "Three things to notice. The **MLP dim is 4× the hidden dim** — the standard transformer expansion ratio, where each block's feed-forward network projects up 4×, applies the nonlinearity, then projects back down; most of a transformer's parameters live in these MLPs. The **hidden dim is divisible by the number of heads** — each attention head operates on $d / h$ dimensions (for ViT-Base, 768/12 = 64 per head), the standard transformer convention. And **parameters scale quadratically with width** — ViT-Huge has ~4× the layers and ~1.5× the hidden dim of ViT-Base, but ~7× the parameters; that super-linear growth is why scaling transformers gets expensive fast.",
+        ],
+      },
+      {
+        diagram: { id: "vis-vit-sizes-base-large-huge", caption: "Fig 6.52 — Wider and deeper, with MLPs 4x the hidden dim - and parameters that balloon quadratically with width." },
+      },
+      {
+        heading: "Self-attention, and why it differs from convolution",
+        paragraphs: [
+          "The attention computation is identical to the transformer chapter, just over patch tokens. For a sequence of $n$ tokens ($n = 197$ for standard ViT):",
+        ],
+      },
+      {
+        equations: [
+          "\\text{Attention}(Q, K, V) = \\text{softmax}\\!\\left(\\frac{QK^\\top}{\\sqrt{d_k}}\\right) V",
+        ],
+      },
+      {
+        paragraphs: [
+          "The query, key, and value matrices are linear projections of the input token sequence:",
+        ],
+      },
+      {
+        equations: [
+          "Q = XW_Q, \\quad K = XW_K, \\quad V = XW_V",
+        ],
+      },
+      {
+        paragraphs: [
+          "where $X$ has shape $(n, d)$ and each $W$ matrix has shape $(d, d_k)$; $\\sqrt{d_k}$ is the scaling factor that keeps the dot products from growing too large (and flattening the softmax gradient — the same reason it's there in language). With multi-head attention this runs $h$ times in parallel with different $W$ matrices per head, then the results are concatenated.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The key contrast with a CNN: the attention pattern is genuinely **all-to-all** — every one of the 197 tokens attends to every other one. A single conv layer only sees a 3×3 neighborhood, so a ViT layer has a \"receptive field\" of the entire image *immediately*, in layer one. This is precisely the architectural difference that makes ViT good at global reasoning (no waiting for depth to grow the receptive field) and bad at small-data sample efficiency (it has to learn locality from scratch instead of getting it for free).",
+        ],
+      },
+      {
+        diagram: { id: "vis-all-to-all-attention-vs-a-3x3-convolution", caption: "Fig 6.53 — One ViT layer sees the whole image; one conv layer sees a 3x3 patch. Global reasoning vs sample efficiency." },
+      },
+      {
+        heading: "Computational cost",
+        paragraphs: [
+          "Self-attention has **quadratic cost in sequence length.** For 197 tokens you compute a 197×197 attention matrix per head per layer — manageable. But what if you want higher-resolution input? Drop the patch size from 16 to 8 and you get 784 patches — 4× the tokens, **16× the attention cost.** Patch size 4: 16× the tokens, **256× the attention cost.** This quadratic scaling is why ViT uses 16×16 patches by default — smaller patches give finer spatial precision, but the cost explodes. (This is the same quadratic-attention wall from the language chapters, and the fixes rhyme too: variants like Swin use windowed attention, exactly as SAM's encoder did, to claw back efficiency.)",
+        ],
+      },
+      {
+        diagram: { id: "vis-why-patch-size-matters-quadratic-attention-cost", caption: "Fig 6.54 — Halving the patch size quadruples the tokens and ~16x's the attention cost - why 16x16 is the default." },
+      },
+      {
+        quiz: {
+          question: "A ViT layer's attention is all-to-all while a conv layer sees only a 3×3 patch. Name one advantage and one disadvantage this gives the ViT.",
+          answer: "Advantage: global reasoning from the very first layer — every patch can directly attend to every other, so long-range relationships (a person and the tree occluding them, opposite corners of an object) are available immediately, without waiting many layers for a receptive field to grow. Disadvantage: poor small-data sample efficiency — because the ViT bakes in almost no assumptions (no built-in locality or translation invariance), it must *learn* those useful priors from data, which takes a lot of data; a CNN gets them for free and so wins when data is scarce. It also costs more: all-to-all attention is quadratic in the number of patches.",
         },
       },
       {
+        heading: "Making ViTs practical: DeiT, Swin, MAE, DINO",
         paragraphs: [
-          "The patch arithmetic is worth doing once concretely. Take a 224×224 RGB image and cut it into non-overlapping 16×16 patches: that's a 14×14 grid, 196 patches in all, each holding $16 \\times 16 \\times 3 = 768$ raw pixel values. Flatten each patch to a 768-vector and project it through a learnable linear layer to a $d$-dimensional embedding ($d = 768$ for ViT-Base), and the image is now a sequence of 196 tokens. Prepend the [CLS] token for 197, add the positional embeddings, and you have the transformer's input.",
-          "Those positional embeddings are learnable — one trainable $d$-vector per position, added to the patch embeddings — rather than the fixed sinusoids of the original transformer. Without them, \"dog on top, sky on bottom\" would look identical to its flip. Strikingly, even though the scheme is nominally 1D, ViT learns 2D-aware embeddings from data: patches that are neighbors in the image end up with similar positional vectors, the transformer recovering the grid topology on its own. From there every one of the 197 tokens attends to every other, a 197×197 attention matrix per head per layer — a \"receptive field\" of the whole image in a single layer, which is exactly why ViT is strong at global reasoning and weak at small-data sample efficiency.",
-          "That all-to-all attention is also the cost ceiling. Self-attention is quadratic in sequence length, so 197 tokens is comfortable, but shrink the patch size from 16 to 8 and you get 784 patches — 4× the tokens and 16× the attention cost; drop to patch size 4 and it's 16× the tokens, 256× the cost. That quadratic blow-up is why ViT defaults to 16×16 patches, and why variants like Swin restrict attention to local windows to claw back efficiency.",
+          "The original ViT only beat CNNs with Google's proprietary JFT-300M. Four follow-up ideas made ViTs practical for everyone else.",
         ],
       },
       {
         paragraphs: [
-          "The catch, as always, is data. Give a ViT only a few million images and it actually underperforms CNNs — with such weak inductive biases, it has to learn locality and translation invariance from scratch. Give it 300 million and it overtakes the best CNNs, and the gap only widens as you scale further. It's the same inductive-bias-versus-scale story we saw in language: strong priors win at small scale, weak priors plus a mountain of parameters win at large scale. Follow-ups made ViTs practical without Google-scale data: DeiT (strong augmentation + distillation), Swin (windowed, hierarchical attention for high resolution), and the self-supervised pair MAE (mask 75% of patches and reconstruct) and DINO (self-distillation), which learn rich features with no labels at all.",
+          "**DeiT (Data-efficient Image Transformer, 2021)** was the breakthrough that made ViTs trainable on ImageNet *alone*. Its key ingredients: much **stronger data augmentation** (RandAugment, mixup, cutmix, random erasing — artificially expanding the training set), **knowledge distillation** via a separate \"distillation token\" that learns from a CNN teacher's predictions (so the student ViT learns from both the labels and the CNN's soft predictions), and **better hyperparameters** (careful tuning of learning rate, weight decay, dropout, stochastic depth). After DeiT, a competitive ViT no longer needed a proprietary dataset.",
         ],
       },
       {
-        heading: "ViT sizes and self-supervision",
         paragraphs: [
-          "The standard sizes are worth memorizing because they recur everywhere. ViT-Base has 12 layers, hidden dim 768, 12 heads, MLP dim 3072, and 86M parameters. ViT-Large: 24 layers, hidden dim 1024, 16 heads, MLP dim 4096, 307M parameters. ViT-Huge: 32 layers, hidden dim 1280, 16 heads, MLP dim 5120, 632M parameters. Three patterns: the MLP dim is always 4× the hidden dim (the standard transformer expansion ratio, where most of the parameters live); the hidden dim is divisible by the head count (each head works on $d/h$ dimensions — 64 for ViT-Base); and parameters scale roughly quadratically with width, so ViT-Huge has only ~1.5× ViT-Base's width but ~7× its parameters.",
-          "On the self-supervised side, the two key recipes are worth a little more detail. MAE masks a full 75% of patches, lets the encoder see only the visible 25%, and trains a small decoder to reconstruct the missing pixels — the aggressive masking is what forces rich representations, after which the decoder is discarded and only the encoder kept. DINO instead runs a student and a teacher network on different augmented views of the same image, training the student to match the teacher, where the teacher is simply an exponential moving average (EMA) of the student's own weights — self-distillation with no labels at all. Its features come out remarkably semantic (attention maps trace object boundaries with nothing supervising them), and the follow-up, DINOv2 from Meta, is now a go-to general-purpose vision feature extractor.",
+          "**Swin Transformer** kept the transformer but reintroduced CNN-like locality and hierarchy: a **hierarchical structure** with multiple stages of decreasing spatial resolution and increasing channel depth (just like a CNN); **shifted-window attention**, where attention runs within local windows (typically 7×7 patches) and the windows are *shifted* between layers so information flows across window boundaries over several layers; and **linear complexity in image size**, because attention is confined to local windows. Swin marries the transformer's flexibility with the CNN's efficiency, and it became the dominant ViT-style backbone for detection and segmentation where high resolution matters. (You met this exact idea inside SAM's image encoder.)",
         ],
       },
       {
-        heading: "Vision-language models",
+        diagram: { id: "vis-swin-s-shifted-window-attention", caption: "Fig 6.55 — Local windows for cheap attention, shifted each layer so information still spreads - linear cost, global reach over depth." },
+      },
+      {
         paragraphs: [
-          "A VLM takes images and text in and generates text out. The recipe that won is delightfully reusable: encode the image with a ViT into tokens, project those tokens into the LLM's space, and interleave them with the text tokens — and from there the LLM attends to visual tokens exactly the way it attends to words. This is the unifying idea underneath so much of modern ML: anything you can tokenize can be fed to a transformer.",
+          "ViT's biggest impact may actually be on **self-supervised learning** — training without labels.",
         ],
-        diagram: {
-          id: "vlm",
-          caption:
-            "Fig 5.9 — A vision-language model: a ViT encodes the image, a projection maps patches into the LLM's token space, and the decoder generates text.",
+      },
+      {
+        paragraphs: [
+          "**MAE (Masked Autoencoder, 2021)** is the vision version of BERT. The procedure: randomly **mask 75%** of the patches; the encoder sees only the visible 25%; a small decoder receives the encoder's output plus mask tokens at the missing positions and reconstructs the original pixels. After training, the decoder is thrown away and the encoder becomes a feature extractor. The aggressive 75% masking is the key — with so much hidden, the encoder *must* learn rich representations to enable reconstruction, so it learns generic visual understanding before any labels are involved. (This is exactly the pretraining SAM's ViT-H encoder used.)",
+        ],
+      },
+      {
+        paragraphs: [
+          "**DINO (self-Distillation with NO labels, 2021)** uses self-distillation: two networks, a student and a teacher, look at different augmented views of the same image, and the student is trained to match the teacher's representations. The teacher is an *exponential moving average* of the student's weights — they're never trained as separate models. DINO produces remarkably semantic features without any supervision: visualize what its attention attends to and you see object boundaries, foreground/background separation, and focus on specific objects — all learned label-free. **DINOv2** (Meta's follow-up) is now a general-purpose vision feature extractor across many downstream applications.",
+        ],
+      },
+      {
+        paragraphs: [
+          "These self-supervised approaches matter because they unlock the real scaling promise: you can train ViTs on *billions* of unlabeled internet images rather than the much smaller labeled datasets, producing far stronger pretrained features.",
+        ],
+      },
+      {
+        diagram: { id: "vis-self-supervised-vits-mae-and-dino", caption: "Fig 6.56 — Reconstruct hidden patches (MAE) or match two views with an EMA teacher (DINO) - rich features, zero labels." },
+      },
+      {
+        quiz: {
+          question: "MAE masks 75% of patches and reconstructs them; what is the encoder actually left with at the end, and why is such aggressive masking the point?",
+          answer: "After training, the decoder is discarded and the **encoder** is kept as a general-purpose feature extractor. The aggressive 75% masking is what forces the encoder to learn rich, semantic representations: if only a little were hidden, the model could reconstruct from low-level local texture alone, but with three-quarters of the image missing it has to understand global structure and context to fill in the gaps — so it learns genuinely useful visual features, all without labels. It's the same pretraining recipe SAM used for its ViT-H encoder.",
         },
       },
       {
+        heading: "Vision-Language Models",
         paragraphs: [
-          "The vision encoder is usually pretrained with CLIP or SigLIP, which align images and text in a shared space. CLIP trains an image encoder and a text encoder jointly on 400M pairs with a contrastive loss: build the similarity matrix between every image and every caption in a batch, then maximize the matched (diagonal) pairs and minimize the rest. SigLIP swaps the batch-wide softmax for a per-pair sigmoid loss, which trains better at both small and very large batches.",
+          "A **vision-language model (VLM)** takes both images and text as input and generates text as output. \"Describe this image.\" \"What's the dog doing?\" \"Read the receipt and total the items.\" VLMs are how GPT-4V, Claude, and Gemini handle vision.",
         ],
-        diagram: {
-          id: "clip-matrix",
-          caption:
-            "Fig 5.10 — CLIP's contrastive objective: pull matched image–text pairs (the diagonal) together, push mismatches apart.",
-        },
       },
       {
         paragraphs: [
-          "The two losses are worth writing down. CLIP uses a softmax over the batch with a temperature $\\tau$ — for image $i$ with matching caption $t_i$, against all captions $t_j$ in the batch:",
+          "The architectural question is: how do you let a *language* transformer see images? You can't just stuff raw pixels into an LLM — LLMs operate on token sequences. You need to convert images into something that fits naturally alongside text tokens. The answer that won: use a **ViT to encode the image into tokens**, then mix those visual tokens into the LLM's token stream. The LLM treats visual tokens just like text tokens — it attends to them, processes them through its layers, and generates text conditioned on all of them.",
         ],
+      },
+      {
+        paragraphs: [
+          "This is the unified abstraction that makes VLMs work, and it's the punchline this whole chapter has been building toward: **anything you can tokenize can become input to an LLM.** Images become patch tokens. Audio becomes audio tokens. Video becomes spatiotemporal tokens. The transformer is modality-agnostic — once everything is tokens, attention does the rest. (This is the same \"tokenize everything\" theme from the language chapters, now extended past text.)",
+        ],
+      },
+      {
+        diagram: { id: "vis-tokenize-everything", caption: "Fig 6.57 — Any modality you can turn into tokens can enter the same LLM - attention reasons over all of them together." },
+      },
+      {
+        heading: "The standard VLM recipe",
+        paragraphs: [
+          "A modern VLM has four components:",
+        ],
+      },
+      {
+        paragraphs: [
+          "1. **Vision encoder** — typically a ViT, often pretrained with CLIP or SigLIP. Takes an image and produces a sequence of patch tokens.",
+          "2. **Projection layer / adapter** — a small network mapping visual tokens from the encoder's dimension into the LLM's input space. Usually just an MLP.",
+          "3. **Language model** — a standard decoder-only LLM (Llama, Qwen, etc.). Sees a sequence of mixed tokens: text tokens + projected visual tokens.",
+          "4. **Tokenizer** — handles the text side as usual; image tokens are inserted into the sequence at the right positions.",
+        ],
+      },
+      {
+        paragraphs: [
+          "At inference, the typical flow: the user provides an image and a prompt (\"What is in this image?\"); the vision encoder turns the image into patch tokens (e.g. 256 tokens from a 224×224 image at patch size 14); the projection layer maps each patch token into the LLM's hidden dimension; the prompt is tokenized normally; the final input sequence is `[image_tokens][text_tokens]`, all in the same hidden dim; and the LLM generates its response autoregressively, attending to both visual and text tokens.",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-vlm-recipe-and-inference-flow", caption: "Fig 6.58 — Encode the image to tokens, project them into the LLM's space, concatenate with text, and generate - that's a VLM." },
+      },
+      {
+        paragraphs: [
+          "Why start from pretrained CLIP/SigLIP and a pretrained LLM rather than training everything from scratch? **Data efficiency.** Pretrained CLIP/SigLIP encoders have already learned semantic visual representations from *billions* of image-text pairs — their patch tokens are organized so semantically similar things have similar embeddings, and so captions and images live in compatible spaces. When you train a VLM you don't have billions of examples — you have maybe millions of (image, instruction, response) triples. Starting from a pretrained encoder means you're not learning vision from scratch, just teaching the LLM to interpret already-meaningful features. The same logic applies to the LLM: it already knows language, so the training task is mainly to teach it how to use the new visual modality.",
+        ],
+      },
+      {
+        heading: "Connector designs: how visual tokens get in",
+        paragraphs: [
+          "The \"projection\" or \"adapter\" between vision encoder and LLM is small but architecturally significant. Three main designs:",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Simple linear projection (LLaVA-style).** Just a linear layer (or MLP) from the encoder's hidden dim to the LLM's hidden dim. Each ViT patch token becomes one LLM token. Cheap, simple, surprisingly effective. The downside: a ViT producing 256 tokens spends 256 tokens of LLM context on the image, which gets expensive for long-image-context scenarios.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Q-Former (BLIP-2 style).** A small transformer with a fixed number of learnable \"query tokens\" (e.g. 32) that learn what to extract from the encoder. The Q-Former cross-attends to the encoder's outputs and produces a fixed-size summary, so the LLM only ever sees those 32 tokens regardless of image resolution. Trades some flexibility for context efficiency.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Cross-attention layers (Flamingo style).** Instead of treating image tokens as additional input tokens, add new cross-attention layers throughout the LLM that attend to the encoder's output. Visual features don't consume context tokens; they're accessed via dedicated attention. More compute, but a cleaner separation between modalities.",
+        ],
+      },
+      {
+        paragraphs: [
+          "For most open-source VLMs today, simple linear projection (or a 2-layer MLP) is the default — LLaVA's success showed the simplest design works well enough that the sophistication of Q-Formers and cross-attention usually isn't necessary.",
+        ],
+      },
+      {
+        diagram: { id: "vis-three-connector-designs", caption: "Fig 6.59 — Map patches 1:1 (LLaVA), summarize to a fixed few (Q-Former), or inject via cross-attention (Flamingo)." },
+      },
+      {
+        heading: "CLIP and SigLIP: the vision encoders",
+        paragraphs: [
+          "These are worth recapping in the VLM context, because the choice of encoder strongly shapes VLM quality.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**CLIP (Contrastive Language-Image Pre-training, OpenAI 2021)** was the first vision encoder explicitly designed to *align with text*. The procedure: collect ~400M image-text pairs from the internet; train an image encoder and a text encoder jointly; for each batch of $N$ pairs, compute an $N \\times N$ similarity matrix between every image embedding and every text embedding; then use a **contrastive loss** that maximizes the diagonal (matched pairs) and minimizes the off-diagonal (mismatched pairs). The objective is a softmax across the batch:",
+        ],
+      },
+      {
         equations: [
           "\\mathcal{L} = -\\log \\frac{\\exp(\\text{sim}(i, t_i) / \\tau)}{\\sum_j \\exp(\\text{sim}(i, t_j) / \\tau)}",
-          "\\mathcal{L} = -\\sum_{i,j} \\log \\sigma\\!\\left(z_{ij} \\cdot \\text{sim}(i, t_j)\\right)",
         ],
       },
       {
         paragraphs: [
-          "The second line is SigLIP: $z_{ij}$ is $+1$ for a matched pair and $-1$ for a mismatch, so every pair is an independent binary \"is this a match?\" question with no batch-wide normalization. That difference is exactly why batch size behaves the way it does. CLIP's softmax couples the whole batch together, so it needs 32K+ examples per batch to be competitive and then plateaus past that point; SigLIP trains well at modest batch sizes and keeps improving beyond 32K. That consistent edge is why SigLIP encoders became the default in modern open VLMs like PaliGemma, Idefics2, and InternVL.",
+          "where $\\text{sim}$ is cosine similarity, $\\tau$ (tau) is a learned temperature scaling the sharpness of the distribution, $t_i$ is the caption matching image $i$, and $t_j$ ranges over all captions in the batch. The result: CLIP's image and text encoders produce embeddings in a *shared* semantic space — a photo of a dog and the caption \"a photo of a dog\" land near each other; a photo of a cat lands far from \"a dog.\"",
         ],
       },
       {
         paragraphs: [
-          "VLMs are trained in stages — pretrained vision encoder and LLM, then an adapter-alignment phase, then instruction tuning, and optionally preference alignment. The connector can be a simple linear projection (LLaVA-style, each patch becomes one token), a Q-Former (a fixed set of query tokens summarize the image), or cross-attention layers (Flamingo-style). The same design extends to multiple images and video. VLMs are strong at semantic understanding — captioning, VQA, OCR, chart reading — but weaker at precise tasks: exact counts, fine spatial relations, and they can hallucinate details. The pattern echoes their training: captions are semantic, not precise.",
+          "**SigLIP (Sigmoid Language-Image Pre-training, Google 2023)** made one elegant change: replace the softmax-over-batch loss with a **per-pair sigmoid loss**:",
+        ],
+      },
+      {
+        equations: [
+          "\\mathcal{L} = -\\sum_{i,j} \\log \\sigma\\big(z_{ij} \\cdot \\text{sim}(i, t_j)\\big)",
         ],
       },
       {
         paragraphs: [
-          "The connector choice is small but consequential because it sets the image's token budget. A simple linear projection (LLaVA-style) turns each ViT patch into one LLM token — cheap and surprisingly effective, but a 256-patch image then spends 256 tokens of context. A Q-Former (BLIP-2 style) uses a fixed set of learned query tokens, typically 32, that cross-attend to the encoder and summarize the image, so the LLM sees only 32 tokens regardless of resolution. Cross-attention layers (Flamingo style) go further and never spend context tokens at all — dedicated attention layers inside the LLM reach out to the visual features directly. LLaVA's success made the simple linear projection the common default.",
-          "The same machinery extends to more than one image and to video. For multiple images, encode each independently and concatenate all the patch tokens into the sequence, marking boundaries with special image-start and image-end tokens so the model knows which token came from which image. For video there are two routes: frame sampling — encode each sampled frame independently and concatenate, simple but heavy on context — or a spatiotemporal encoder like ViViT or VideoMAE that attends across space and time at once, which is more efficient and is how frontier models stretch to long clips.",
+          "where $\\sigma$ is the sigmoid function and $z_{ij}$ is $+1$ for matched pairs and $-1$ for unmatched pairs. Each pair is treated independently as a binary \"is this a match?\" question. The benefits all flow from removing the batch-wide normalization: there's **no softmax across the whole batch** (which is what forced CLIP to use enormous batches), so SigLIP trains effectively at **modest batch sizes** where CLIP needed 32K+ to compete, *and* it keeps improving at **huge batch sizes** past the point where CLIP plateaus. In 2024-2025, SigLIP encoders became the default in modern open VLMs (PaLI-Gemma, Gemini, Idefics2, InternVL) — a better encoder yields a consistently better downstream VLM.",
+        ],
+      },
+      {
+        diagram: { id: "vis-clip-vs-siglip-training", caption: "Fig 6.60 — CLIP softmaxes each row across the batch; SigLIP judges every pair independently - freeing it from giant batches." },
+      },
+      {
+        heading: "VLM training strategy",
+        paragraphs: [
+          "A modern VLM is trained in stages, each unfreezing a bit more of the model:",
         ],
       },
       {
         paragraphs: [
-          "The arc here is one of the cleanest in all of ML, and it's worth saying out loud. Convolutions and residuals made deep vision work in the first place; detection and segmentation specialized it for harder questions; and then the transformer, once it finally had enough data behind it, swallowed vision too — until everything just became tokens flowing into one model. CNN, detector, segmenter, ViT, VLM: it's all the same conceptual DNA, scaled up.",
+          "**Stage 1 — Pretrained components.** Start with a pretrained vision encoder (CLIP/SigLIP) and a pretrained LLM (Llama, Qwen, etc.), both frozen.",
         ],
+      },
+      {
+        paragraphs: [
+          "**Stage 2 — Adapter pretraining.** Train *only* the adapter (the linear projection or Q-Former); the encoder and LLM stay frozen. The objective is image-text alignment on simple tasks like captioning. Cheap, and it teaches the adapter to map vision features into the LLM's space.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Stage 3 — Instruction tuning.** Unfreeze the LLM (and sometimes the encoder) and fine-tune on instruction-following data: image-question-answer triples covering everything from \"what's in this image\" to \"read this receipt\" to \"describe the scene.\" This teaches the model to *use* its multimodal understanding for real tasks.",
+        ],
+      },
+      {
+        paragraphs: [
+          "**Stage 4 — Optional preference alignment.** RLHF, DPO, or similar to align outputs with human preferences — the same alignment step as text-only LLMs.",
+        ],
+      },
+      {
+        paragraphs: [
+          "The data pipeline matters enormously: diverse, high-quality, well-grounded instruction-tuning data is what separates a usable VLM from a curiosity.",
+        ],
+      },
+      {
+        diagram: { id: "vis-vlm-training-stages-freeze-and-unfreeze", caption: "Fig 6.61 — Start fully frozen, train the adapter, then unfreeze the LLM for instruction tuning, then align - cheap to capable." },
+      },
+      {
+        heading: "Multi-image and video",
+        paragraphs: [
+          "The same architecture extends naturally. **Multi-image VLMs** pass each image through the vision encoder independently, then concatenate all the image tokens into the sequence, so the LLM can reason across several images at once (\"which of these dogs is biggest?\"); position information indicates which image each token came from, often via special \"image start\"/\"image end\" tokens. **Video VLMs** take one of two approaches: **frame sampling** (treat the video as a sequence of frames, encode each independently, concatenate all the tokens — simple but context-hungry) or **spatiotemporal encoders** (a video-specific encoder like ViViT or VideoMAE that processes the whole clip at once, attending across both space and time — more efficient). Modern frontier VLMs (Gemini, GPT-4V, Claude) can process hours of video by tokenizing cleverly: keeping important frames in detail while downsampling redundant stretches.",
+        ],
+      },
+      {
+        diagram: { id: "vis-multi-image-and-video-vlms", caption: "Fig 6.62 — Concatenate per-image tokens for multi-image; sample frames or encode space-time for video - same LLM underneath." },
+      },
+      {
+        heading: "What VLMs can and can't do",
+        paragraphs: [
+          "Because the LLM is general-purpose, VLMs handle a wide range of tasks out of the box: **visual question answering** (\"what color is the car?\"), **image captioning**, **OCR** (reading text in images), **chart/document understanding** (tables, graphs, forms), **visual reasoning** (counting, comparing sizes, spatial relations), and **instruction following with visual context** (\"edit the third item in this list\").",
+        ],
+      },
+      {
+        paragraphs: [
+          "But they have real weaknesses: **fine-grained spatial reasoning** is often poor (\"exactly where is the cat's left paw?\"); **precise counting** of many small objects is unreliable; **reading rotated or unusual fonts** can fail; and **hallucination** is a live risk — VLMs can confidently describe things that aren't in the image, especially when it's ambiguous or unusual. The pattern: VLMs are strong at *semantic* understanding (what's in the image, what's happening, what it means) and weaker at *precise* understanding (exact positions, counts, fine details). That makes sense given the training data — captions and natural-language descriptions are themselves usually semantic rather than precise. (And notice the contrast with SAM: when you need pixel-precise *where*, a promptable segmentation model is the right tool; when you need semantic *what*, the VLM shines. Different tools for the two halves of vision.)",
+        ],
+      },
+      {
+        diagram: { id: "vis-vlms-strong-at-semantic-weak-at-precise", caption: "Fig 6.63 — Great at what an image means, shakier on exact positions and counts - pair with SAM-style models when precision matters." },
+      },
+      {
+        quiz: {
+          question: "What single idea lets a language-only transformer suddenly handle images, and why do VLMs start from a pretrained CLIP/SigLIP encoder rather than a random one?",
+          answer: "The single idea: turn the image into *tokens* (via a ViT) and project them into the LLM's hidden dimension so they sit in the same sequence as text tokens — then ordinary attention reasons over both. Because everything is tokens, the LLM is modality-agnostic. VLMs start from a pretrained CLIP/SigLIP encoder for data efficiency: those encoders already learned semantic, text-aligned visual features from billions of image-text pairs, whereas a VLM is fine-tuned on only millions of triples — far too few to learn vision from scratch. Starting pretrained means you only teach the LLM to *interpret* already-meaningful features.",
+        },
+      },
+      {
+        heading: "Putting It All Together",
+        paragraphs: [
+          "Step back and look at the whole road, because — exactly like the language story — every stop on it was a fix for the thing before it.",
+        ],
+      },
+      {
+        paragraphs: [
+          "We started by asking what an image even is (a tensor of numbers) and tried the obvious thing: feed pixels to an MLP. It blew up — too many parameters, no translation invariance — and that failure handed us the **CNN**, built around convolution's two gifts: locality and weight-shared translation invariance. Stack conv-pool blocks and a **feature hierarchy** emerges on its own — edges to textures to parts to objects — as receptive fields widen with depth. Three ideas turned CNNs from a curiosity into a dynasty: ReLU, BatchNorm, and **residual connections** — the last being the very same skip-connection trick that makes transformers trainable.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Then we put CNNs to work. **YOLO** reframed detection from a slow stack of classifiers (DPM, R-CNN) into one end-to-end regression over a grid — you only look once. **Segmentation** pushed to per-pixel labels, which forced a reckoning with the resolution-versus-semantics tension: FCN upsampled but came out blurry, and **U-Net** solved it cleanly with **skip connections** carrying sharp spatial detail across the U while semantics flowed through the deepest point. **Mask R-CNN** added instances by decoupling \"what\" (a class head) from \"which pixels\" (a per-class sigmoid mask). And **SAM** turned segmentation into a foundation model — promptable, trained on a billion bootstrapped masks, with a heavy ViT encoder, a featherweight prompt encoder, and a clever two-way-attention mask decoder — the same \"one promptable model, the prompt encodes the task\" move GPT made in language.",
+        ],
+      },
+      {
+        paragraphs: [
+          "Finally we came full circle. **ViT** dropped convolution entirely, chopped the image into patches, and fed them to a plain transformer — winning once data was large enough, the same inductive-bias-versus-scale story as language. **DeiT, Swin, MAE, and DINO** made ViTs practical and label-free. **CLIP and SigLIP** aligned visual features with text. And **VLMs** tied the whole field to the language chapters with one punchline: tokenize the image, project it into the LLM's space, and let attention do the rest. Anything you can tokenize, the transformer can reason over.",
+        ],
+      },
+      {
+        diagram: { id: "vis-the-whole-vision-arc", caption: "Fig 6.64 — Every model fixes the previous one's weak point - and the same heroes (skip connections, attention, tokenize-everything) recur the whole way through." },
+      },
+      {
+        quiz: {
+          question: "Two ideas recur across this entire chapter, linking it back to the language chapters. Name them, and give two places each shows up in vision.",
+          answer: "First, **skip / residual connections.** They appear as ResNet's residual blocks (the third of the three big CNN ideas, letting gradients flow through deep stacks), as U-Net's skip connections (carrying sharp spatial detail across the U so masks aren't blurry), and again inside every ViT block's residual adds — the same trick that makes transformers trainable in the language chapters. Second, **attention plus the \"tokenize everything\" idea.** It shows up in SAM's ViT image encoder and two-way-attention decoder, in the Vision Transformer itself (all-to-all patch attention replacing convolution), and in VLMs (image patches tokenized and fed into an LLM alongside text, where attention reasons over both). The throughline of the whole chapter: turn a modality into tokens, and attention — with residual connections keeping the deep stack trainable — does the rest.",
+        },
       },
     ],
   },
