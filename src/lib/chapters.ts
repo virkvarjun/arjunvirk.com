@@ -44,22 +44,22 @@ export const mlGuideChapters: Chapter[] = [
       {
         heading: "1. What Machine Learning Is Doing",
         paragraphs: [
-          "Start with the big picture. Normally, to make a computer do something, you write down the rules yourself. \"If the email contains the word *lottery*, mark it as spam.\" The computer follows your rules to the letter. That approach works fine until the rules get too tangled to write down, and for a surprising number of useful problems, they are impossible to write down at all.",
+          "We begin with the big picture. Normally, to make a computer do something, you write down the rules yourself. \"If the email contains the word *lottery*, mark it as spam.\" The computer follows your rules to the letter. That approach works fine until the rules get too tangled to write down, and for a surprising number of useful problems, they are impossible to write down at all.",
         ],
       },
       {
         paragraphs: [
-          "Try to write the rules that separate a cat from a dog in a photo. Not a loose description, but real instructions a computer could follow, stated in terms of the millions of pixel values it actually receives. You can't do it. Nobody can. You know a cat when you see one, but that knowledge lives in your head as intuition, and intuition doesn't come with instructions attached.",
+          "Try to write the instructions that separate a cat from a dog in a photo which a computer can follow, stated in terms of the millions of pixel values it actually receives. I'll help you: You can't do it. Nobody can. You know a cat when you see one, but that knowledge lives in your head as intuition, and intuition doesn't come with instructions attached.",
         ],
       },
       {
         paragraphs: [
-          "Machine learning turns the problem around. Instead of writing the rules, you write a program that figures out the rules from examples. You show it thousands of photos already labeled \"cat\" or \"dog,\" and it works out the pattern on its own. You never have to say what makes a cat a cat. You just need examples and a procedure for turning examples into a rule.",
+          "Machine learning fixes this problem. Instead of writing the rules, you write a program that figures out the rules from examples. You show it thousands of photos already labeled \"cat\" or \"dog,\" and it works out the pattern on its own. You never have to say what makes a cat a cat. You just need examples and a procedure for turning examples into a rule.",
         ],
       },
       {
         paragraphs: [
-          "That is the whole enterprise. Everything in this chapter exists to do that one thing well: take a pile of examples and squeeze a rule out of them.",
+          "That is the whole enterprise. Everything in this chapter converges to do that one thing well: take a ton of examples and squeeze a rule out of them that the computer can apply to the task.",
         ],
       },
       {
@@ -69,7 +69,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "The part that makes this *learning* rather than just *a function* is that ours has adjustable knobs inside it. Picture a machine with a few million little dials on the side. Set the dials one way and it maps cat photos to \"dog.\" Set them another way and it gets the answer right. Learning is the process of finding the dial settings that make the function behave. We call those dials the **parameters** and bundle them under one symbol, the Greek letter theta, $\\theta$. So a more honest way to write the function is $f(x; \\theta)$: the output depends both on the input $x$ and on the current setting $\\theta$ of all the knobs. The semicolon just separates \"the thing we're classifying\" from \"the thing we're tuning.\"",
+          "The part that makes this *learning* rather than just *a function* is that ours has adjustable knobs inside it. Picture a machine with a few million little dials on the side. Set the dials one way and it maps cat photos to \"dog.\" Set them another way and it gets the answer right. Learning is the process of finding the dial settings that make the function behave. We call those dials the **parameters** and bundle them under one symbol, the Greek letter theta, $\\theta$. So a more precise way to write the function is $f(x; \\theta)$: the output depends both on the input $x$ and on the current setting $\\theta$ of all the knobs. The semicolon just separates \"the thing we're classifying\" from \"the thing we're tuning.\"",
         ],
       },
       {
@@ -230,7 +230,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "But the sigmoid has a quiet flaw that nearly stalled deep learning for good, and it's worth seeing now because it returns in the training sections. Look at the flat parts of the S. When $z$ is very positive or very negative, the curve is almost horizontal, so nudging $z$ barely changes the output. Training, as we'll see, depends on those nudges carrying a signal. When the curve goes flat, the signal dies. Stack many sigmoid layers and the signal, passing through one flat region after another, fades to nothing before it reaches the early layers, and they stop learning. This is the **vanishing gradient problem**, which we'll name properly once we have gradients in hand. Its cousin **tanh** (hyperbolic tangent) is the same S-shape squashed into the range $-1$ to $1$ instead of $0$ to $1$. Being centered on zero helps training a little, but it has the same flat-tails problem.",
+          "However, the sigmoid is not perfect. (But the sigmoid has a quiet flaw that nearly stalled deep learning for good, and it's worth seeing now because it returns in the training sections.) Look at the flat parts of the S. When $z$ is very positive or very negative, the curve is almost horizontal, so nudging $z$ barely changes the output. Training, as we'll see, depends on those nudges carrying a signal. When the curve goes flat, the signal dies. Stack many sigmoid layers and the signal, passing through one flat region after another, fades to nothing before it reaches the early layers, and they stop learning. This is the **vanishing gradient problem**, which we'll name properly once we have gradients in hand. Its cousin **tanh** (hyperbolic tangent) is the same S-shape squashed into the range $-1$ to $1$ instead of $0$ to $1$. Being centered on zero helps training a little, but it has the same flat-tails problem.",
         ],
       },
       {
@@ -5753,23 +5753,24 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
-        paragraphs: [
-          "| Stage | Layer | Filter / config | Stride | Output shape |",
-          "|---|---|---|---|---|",
-          "| Input | — | — | — | 448 × 448 × 3 |",
-          "| 1 | Conv | 7×7×64 | 2 | 224 × 224 × 64 |",
-          "| 1 | Maxpool | 2×2 | 2 | 112 × 112 × 64 |",
-          "| 2 | Conv | 3×3×192 | 1 | 112 × 112 × 192 |",
-          "| 2 | Maxpool | 2×2 | 2 | 56 × 56 × 192 |",
-          "| 3 | Conv | 1×1×128, 3×3×256, 1×1×256, 3×3×512 | 1 | 56 × 56 × 512 |",
-          "| 3 | Maxpool | 2×2 | 2 | 28 × 28 × 512 |",
-          "| 4 | (1×1×256, 3×3×512) ×4, then 1×1×512, 3×3×1024 | — | 1 | 28 × 28 × 1024 |",
-          "| 4 | Maxpool | 2×2 | 2 | 14 × 14 × 1024 |",
-          "| 5 | (1×1×512, 3×3×1024) ×2, then 3×3×1024, 3×3×1024 stride 2 | varies | — | 7 × 7 × 1024 |",
-          "| 6 | Conv | 3×3×1024, 3×3×1024 | 1 | 7 × 7 × 1024 |",
-          "| 7 | Fully connected | — | — | 4096 |",
-          "| 8 | Fully connected | — | — | 7 × 7 × 30 |",
-        ],
+        table: {
+          rows: [
+            ["Stage", "Layer", "Filter / config", "Stride", "Output shape"],
+            ["Input", "—", "—", "—", "448 × 448 × 3"],
+            ["1", "Conv", "7×7×64", "2", "224 × 224 × 64"],
+            ["1", "Maxpool", "2×2", "2", "112 × 112 × 64"],
+            ["2", "Conv", "3×3×192", "1", "112 × 112 × 192"],
+            ["2", "Maxpool", "2×2", "2", "56 × 56 × 192"],
+            ["3", "Conv", "1×1×128, 3×3×256, 1×1×256, 3×3×512", "1", "56 × 56 × 512"],
+            ["3", "Maxpool", "2×2", "2", "28 × 28 × 512"],
+            ["4", "(1×1×256, 3×3×512) ×4, then 1×1×512, 3×3×1024", "—", "1", "28 × 28 × 1024"],
+            ["4", "Maxpool", "2×2", "2", "14 × 14 × 1024"],
+            ["5", "(1×1×512, 3×3×1024) ×2, then 3×3×1024, 3×3×1024 stride 2", "varies", "—", "7 × 7 × 1024"],
+            ["6", "Conv", "3×3×1024, 3×3×1024", "1", "7 × 7 × 1024"],
+            ["7", "Fully connected", "—", "—", "4096"],
+            ["8", "Fully connected", "—", "—", "7 × 7 × 30"],
+          ],
+        },
       },
       {
         paragraphs: [
