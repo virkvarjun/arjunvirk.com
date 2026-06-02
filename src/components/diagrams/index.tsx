@@ -62,6 +62,12 @@ import { TfSelfAttention } from "./interactive/tf-scaled-dot-product-self-attent
 import { TfMultiHead } from "./interactive/tf-multi-head-attention";
 import { TfMaskedAttention } from "./interactive/tf-masked-self-attention";
 import { TfCrossAttention } from "./interactive/tf-cross-attention";
+import { TfFFN } from "./interactive/tf-position-wise-feed-forward-network";
+import { TfLayerNorm } from "./interactive/tf-layer-normalization-vs-batch-normalization";
+import { TfResidual } from "./interactive/tf-residual-connection-add-norm";
+import { TfPositionalEncoding } from "./interactive/tf-sinusoidal-positional-encoding";
+import { TfFullTrace } from "./interactive/tf-one-encoder-layer-one-decoder-layer-full-trace";
+import { TfDecoderOnly } from "./interactive/tf-decoder-only-transformer-gpt-style";
 import {
   LinearRegression,
   KNN,
@@ -190,6 +196,12 @@ const registry: Record<string, Entry> = {
   "tf-multi-head-attention": { Comp: TfMultiHead, interactive: true },
   "tf-masked-self-attention": { Comp: TfMaskedAttention, interactive: true },
   "tf-cross-attention": { Comp: TfCrossAttention, interactive: true },
+  "tf-position-wise-feed-forward-network": { Comp: TfFFN, interactive: true },
+  "tf-layer-normalization-vs-batch-normalization": { Comp: TfLayerNorm, interactive: true },
+  "tf-residual-connection-add-norm": { Comp: TfResidual, interactive: true },
+  "tf-sinusoidal-positional-encoding": { Comp: TfPositionalEncoding, interactive: true },
+  "tf-one-encoder-layer-one-decoder-layer-full-trace": { Comp: TfFullTrace, interactive: true },
+  "tf-decoder-only-transformer-gpt-style": { Comp: TfDecoderOnly, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
