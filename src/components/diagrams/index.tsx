@@ -216,6 +216,10 @@ import { AgtTheAgentLoop } from "./interactive/agt-the-agent-loop";
 import { AgtTheFourLevelsOfAiUsage } from "./interactive/agt-the-four-levels-of-ai-usage";
 import { AgtLevel2ASingleToolRoundTrip } from "./interactive/agt-level-2-a-single-tool-round-trip";
 import { AgtLevel3AFixedWorkflow } from "./interactive/agt-level-3-a-fixed-workflow";
+import { AgtOpenclawArchitecture } from "./interactive/agt-openclaw-architecture";
+import { AgtAnInboundMessageSJourneyThroughOpenclaw } from "./interactive/agt-an-inbound-message-s-journey-through-openclaw";
+import { AgtSoulMdIsReadEveryTurn } from "./interactive/agt-soul-md-is-read-every-turn";
+import { AgtFileBasedMemoryVsAVectorDatabase } from "./interactive/agt-file-based-memory-vs-a-vector-database";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -435,6 +439,10 @@ const registry: Record<string, Entry> = {
   "agt-the-four-levels-of-ai-usage": { Comp: AgtTheFourLevelsOfAiUsage, interactive: true },
   "agt-level-2-a-single-tool-round-trip": { Comp: AgtLevel2ASingleToolRoundTrip, interactive: true },
   "agt-level-3-a-fixed-workflow": { Comp: AgtLevel3AFixedWorkflow, interactive: true },
+  "agt-openclaw-architecture": { Comp: AgtOpenclawArchitecture, interactive: true },
+  "agt-an-inbound-message-s-journey-through-openclaw": { Comp: AgtAnInboundMessageSJourneyThroughOpenclaw, interactive: true },
+  "agt-soul-md-is-read-every-turn": { Comp: AgtSoulMdIsReadEveryTurn, interactive: true },
+  "agt-file-based-memory-vs-a-vector-database": { Comp: AgtFileBasedMemoryVsAVectorDatabase, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
