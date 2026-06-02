@@ -52,22 +52,32 @@ export function MathText({ children }: { children: string }) {
 }
 
 /**
- * Renders the Markdown emphasis used in the prose — `**bold**` and `*italic*`
- * — within a span of non-math text. Bold is matched before italic so the
- * double-asterisk form wins.
+ * Renders the Markdown emphasis used in the prose — `**bold**`, `*italic*`, and
+ * `` `inline code` `` — within a span of non-math text. Inline code is matched
+ * first (its contents are taken verbatim), then bold before italic so the
+ * double-asterisk form wins over the single.
  */
 function Emphasis({ text }: { text: string }) {
   const nodes: ReactNode[] = [];
-  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  const re = /`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) nodes.push(text.slice(last, m.index));
     if (m[1] !== undefined) {
-      nodes.push(<strong key={key++}>{m[1]}</strong>);
+      nodes.push(
+        <code
+          key={key++}
+          className="rounded bg-[var(--card)] px-1 py-0.5 font-mono text-[0.85em] text-[var(--foreground)]"
+        >
+          {m[1]}
+        </code>,
+      );
+    } else if (m[2] !== undefined) {
+      nodes.push(<strong key={key++}>{m[2]}</strong>);
     } else {
-      nodes.push(<em key={key++}>{m[2]}</em>);
+      nodes.push(<em key={key++}>{m[3]}</em>);
     }
     last = m.index + m[0].length;
   }

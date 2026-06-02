@@ -173,6 +173,41 @@ export default async function ChapterPage({
                   </code>
                 </pre>
               )}
+              {section.table && section.table.rows.length > 0 && (
+                <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)]">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] bg-[var(--card)]">
+                        {section.table.rows[0].map((cell, c) => (
+                          <th
+                            key={c}
+                            className="px-3 py-2 text-left text-xs font-semibold align-top"
+                          >
+                            <MathText>{cell}</MathText>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.table.rows.slice(1).map((row, r) => (
+                        <tr
+                          key={r}
+                          className="border-b border-[var(--border)] last:border-0"
+                        >
+                          {row.map((cell, c) => (
+                            <td
+                              key={c}
+                              className={`px-3 py-2 align-top ${c === 0 ? "font-medium" : "text-[var(--muted)]"}`}
+                            >
+                              <MathText>{cell}</MathText>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           ))}
         </div>

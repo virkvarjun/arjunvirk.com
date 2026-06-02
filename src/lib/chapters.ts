@@ -20,6 +20,9 @@ export type ChapterSection = {
   image?: { label: string; caption: string };
   // A verbatim code / file-contents block rendered in a monospace <pre>.
   code?: { language?: string; content: string };
+  // A comparison table: the first row is the header, the rest are body rows.
+  // Cells may contain inline math/emphasis.
+  table?: { rows: string[][] };
 };
 
 export type Chapter = {
@@ -7559,15 +7562,16 @@ export const mlGuideChapters: Chapter[] = [
         ],
       },
       {
-        paragraphs: [
-          "| | OpenClaw | Claude Code | ChatGPT Agent | Manus |",
-          "|---|---|---|---|---|",
-          "| Open source | Yes (MIT) | No | No | No |",
-          "| Where it runs | Your machine | Your machine | OpenAI cloud | Manus cloud |",
-          "| Where you talk to it | Messaging apps | Terminal, IDE | ChatGPT app | Web dashboard |",
-          "| Who owns state | You (files on disk) | Anthropic account | OpenAI account | Manus account |",
-          "| Autonomy mode | Heartbeat daemon | On-demand only | Per-task | Per-task |",
-        ],
+        table: {
+          rows: [
+            ["", "OpenClaw", "Claude Code", "ChatGPT Agent", "Manus"],
+            ["Open source", "Yes (MIT)", "No", "No", "No"],
+            ["Where it runs", "Your machine", "Your machine", "OpenAI cloud", "Manus cloud"],
+            ["Where you talk to it", "Messaging apps", "Terminal, IDE", "ChatGPT app", "Web dashboard"],
+            ["Who owns state", "You (files on disk)", "Anthropic account", "OpenAI account", "Manus account"],
+            ["Autonomy mode", "Heartbeat daemon", "On-demand only", "Per-task", "Per-task"],
+          ],
+        },
       },
       {
         paragraphs: [
@@ -7838,7 +7842,7 @@ export const mlGuideChapters: Chapter[] = [
       },
       {
         paragraphs: [
-          "And we ended where every honest agent discussion has to end: the **lethal trifecta**, and the hard truth that you defend against it with architecture, not pleadinging prompts. The approval gates, the scoped permissions, the read-only networks, the audit logs: those aren't friction bolted on at the end. They're the price of admission for letting a system act in the world on your behalf, the same autonomy that negotiates $4,200 off a car while you sleep is the autonomy you have to fence in. Build the fences first, and agents become what they're meant to be: not a chatbot that answers, but a capable, bounded system that decides, acts, observes, and decides again.",
+          "And we ended where every honest agent discussion has to end: the **lethal trifecta**, and the hard truth that you defend against it with architecture, not pleading prompts. The approval gates, the scoped permissions, the read-only networks, the audit logs: those aren't friction bolted on at the end. They're the price of admission for letting a system act in the world on your behalf, the same autonomy that negotiates $4,200 off a car while you sleep is the autonomy you have to fence in. Build the fences first, and agents become what they're meant to be: not a chatbot that answers, but a capable, bounded system that decides, acts, observes, and decides again.",
         ],
       },
       {
