@@ -145,6 +145,14 @@ import { VisAttentionVsConv } from "./interactive/vis-all-to-all-attention-vs-a-
 import { VisPatchSizeCost } from "./interactive/vis-why-patch-size-matters-quadratic-attention-cost";
 import { VisSwinShiftedWindow } from "./interactive/vis-swin-s-shifted-window-attention";
 import { VisMaeDino } from "./interactive/vis-self-supervised-vits-mae-and-dino";
+import { VisTokenizeEverything } from "./interactive/vis-tokenize-everything";
+import { VisVlmRecipe } from "./interactive/vis-the-vlm-recipe-and-inference-flow";
+import { VisThreeConnectors } from "./interactive/vis-three-connector-designs";
+import { VisClipVsSiglip } from "./interactive/vis-clip-vs-siglip-training";
+import { VisVlmTrainingStages } from "./interactive/vis-vlm-training-stages-freeze-and-unfreeze";
+import { VisMultiImageVideoVlms } from "./interactive/vis-multi-image-and-video-vlms";
+import { VisVlmStrengthsWeaknesses } from "./interactive/vis-vlms-strong-at-semantic-weak-at-precise";
+import { VisWholeVisionArc } from "./interactive/vis-the-whole-vision-arc";
 import {
   LinearRegression,
   KNN,
@@ -356,6 +364,14 @@ const registry: Record<string, Entry> = {
   "vis-why-patch-size-matters-quadratic-attention-cost": { Comp: VisPatchSizeCost, interactive: true },
   "vis-swin-s-shifted-window-attention": { Comp: VisSwinShiftedWindow, interactive: true },
   "vis-self-supervised-vits-mae-and-dino": { Comp: VisMaeDino, interactive: true },
+  "vis-tokenize-everything": { Comp: VisTokenizeEverything, interactive: true },
+  "vis-the-vlm-recipe-and-inference-flow": { Comp: VisVlmRecipe, interactive: true },
+  "vis-three-connector-designs": { Comp: VisThreeConnectors, interactive: true },
+  "vis-clip-vs-siglip-training": { Comp: VisClipVsSiglip, interactive: true },
+  "vis-vlm-training-stages-freeze-and-unfreeze": { Comp: VisVlmTrainingStages, interactive: true },
+  "vis-multi-image-and-video-vlms": { Comp: VisMultiImageVideoVlms, interactive: true },
+  "vis-vlms-strong-at-semantic-weak-at-precise": { Comp: VisVlmStrengthsWeaknesses, interactive: true },
+  "vis-the-whole-vision-arc": { Comp: VisWholeVisionArc, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
