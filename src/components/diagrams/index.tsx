@@ -121,6 +121,14 @@ import { VisThreeSegmentations } from "./interactive/vis-three-kinds-of-segmenta
 import { VisResolutionSemantics } from "./interactive/vis-the-resolution-vs-semantics-tension";
 import { VisFcn } from "./interactive/vis-fully-convolutional-network-fcn";
 import { VisUNet } from "./interactive/vis-u-net";
+import { VisUpsampling } from "./interactive/vis-upsampling-transposed-conv-vs-interpolation-conv";
+import { VisPerPixelImbalance } from "./interactive/vis-per-pixel-training-and-class-imbalance";
+import { VisMaskRcnn } from "./interactive/vis-mask-r-cnn-three-branches-per-region";
+import { VisRoiAlign } from "./interactive/vis-roi-pool-vs-roi-align";
+import { VisPromptableSegmentation } from "./interactive/vis-task-specific-vs-promptable-segmentation";
+import { VisSamComponents } from "./interactive/vis-sam-s-three-components-and-their-cost-asymmetry";
+import { VisVitPatchTokenization } from "./interactive/vis-vit-patch-tokenization-sam-s-encoder";
+import { VisWindowedAttention } from "./interactive/vis-windowed-periodic-global-attention";
 import {
   LinearRegression,
   KNN,
@@ -308,6 +316,14 @@ const registry: Record<string, Entry> = {
   "vis-the-resolution-vs-semantics-tension": { Comp: VisResolutionSemantics, interactive: true },
   "vis-fully-convolutional-network-fcn": { Comp: VisFcn, interactive: true },
   "vis-u-net": { Comp: VisUNet, interactive: true },
+  "vis-upsampling-transposed-conv-vs-interpolation-conv": { Comp: VisUpsampling, interactive: true },
+  "vis-per-pixel-training-and-class-imbalance": { Comp: VisPerPixelImbalance, interactive: true },
+  "vis-mask-r-cnn-three-branches-per-region": { Comp: VisMaskRcnn, interactive: true },
+  "vis-roi-pool-vs-roi-align": { Comp: VisRoiAlign, interactive: true },
+  "vis-task-specific-vs-promptable-segmentation": { Comp: VisPromptableSegmentation, interactive: true },
+  "vis-sam-s-three-components-and-their-cost-asymmetry": { Comp: VisSamComponents, interactive: true },
+  "vis-vit-patch-tokenization-sam-s-encoder": { Comp: VisVitPatchTokenization, interactive: true },
+  "vis-windowed-periodic-global-attention": { Comp: VisWindowedAttention, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
