@@ -80,6 +80,12 @@ import { TfMixtureOfExperts } from "./interactive/tf-mixture-of-experts-moe";
 import { TfQuantization } from "./interactive/tf-quantization";
 import { TfSpeculativeDecoding } from "./interactive/tf-speculative-decoding";
 import { TfRag } from "./interactive/tf-retrieval-augmented-generation-rag";
+import { TfThreePhases } from "./interactive/tf-three-phases-of-training-an-llm";
+import { TfLora } from "./interactive/tf-lora-low-rank-decomposition-of-the-update";
+import { TfLoraWithoutRegret } from "./interactive/tf-lora-without-regret-when-lora-matches-full-fine-tuning";
+import { TfGan } from "./interactive/tf-gan-generator-vs-discriminator";
+import { TfGanConvergence } from "./interactive/tf-why-gan-training-converges";
+import { TfAutoencoder } from "./interactive/tf-autoencoder";
 import {
   LinearRegression,
   KNN,
@@ -226,6 +232,12 @@ const registry: Record<string, Entry> = {
   "tf-quantization": { Comp: TfQuantization, interactive: true },
   "tf-speculative-decoding": { Comp: TfSpeculativeDecoding, interactive: true },
   "tf-retrieval-augmented-generation-rag": { Comp: TfRag, interactive: true },
+  "tf-three-phases-of-training-an-llm": { Comp: TfThreePhases, interactive: true },
+  "tf-lora-low-rank-decomposition-of-the-update": { Comp: TfLora, interactive: true },
+  "tf-lora-without-regret-when-lora-matches-full-fine-tuning": { Comp: TfLoraWithoutRegret, interactive: true },
+  "tf-gan-generator-vs-discriminator": { Comp: TfGan, interactive: true },
+  "tf-why-gan-training-converges": { Comp: TfGanConvergence, interactive: true },
+  "tf-autoencoder": { Comp: TfAutoencoder, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
