@@ -113,6 +113,14 @@ import { VisLeakyRelu } from "./interactive/vis-leaky-relu-vs-relu";
 import { VisYoloBoxEncoding } from "./interactive/vis-how-a-yolo-box-is-encoded";
 import { VisIou } from "./interactive/vis-intersection-over-union-iou";
 import { VisCellPredictionsToScores } from "./interactive/vis-from-cell-predictions-to-final-scores";
+import { VisNms } from "./interactive/vis-non-maximum-suppression-nms";
+import { VisYoloLoss } from "./interactive/vis-yolo-s-five-term-loss";
+import { VisResponsiblePredictor } from "./interactive/vis-the-responsible-predictor-and-specialization";
+import { VisYoloLimitations } from "./interactive/vis-yolo-s-four-limitations";
+import { VisThreeSegmentations } from "./interactive/vis-three-kinds-of-segmentation";
+import { VisResolutionSemantics } from "./interactive/vis-the-resolution-vs-semantics-tension";
+import { VisFcn } from "./interactive/vis-fully-convolutional-network-fcn";
+import { VisUNet } from "./interactive/vis-u-net";
 import {
   LinearRegression,
   KNN,
@@ -292,6 +300,14 @@ const registry: Record<string, Entry> = {
   "vis-how-a-yolo-box-is-encoded": { Comp: VisYoloBoxEncoding, interactive: true },
   "vis-intersection-over-union-iou": { Comp: VisIou, interactive: true },
   "vis-from-cell-predictions-to-final-scores": { Comp: VisCellPredictionsToScores, interactive: true },
+  "vis-non-maximum-suppression-nms": { Comp: VisNms, interactive: true },
+  "vis-yolo-s-five-term-loss": { Comp: VisYoloLoss, interactive: true },
+  "vis-the-responsible-predictor-and-specialization": { Comp: VisResponsiblePredictor, interactive: true },
+  "vis-yolo-s-four-limitations": { Comp: VisYoloLimitations, interactive: true },
+  "vis-three-kinds-of-segmentation": { Comp: VisThreeSegmentations, interactive: true },
+  "vis-the-resolution-vs-semantics-tension": { Comp: VisResolutionSemantics, interactive: true },
+  "vis-fully-convolutional-network-fcn": { Comp: VisFcn, interactive: true },
+  "vis-u-net": { Comp: VisUNet, interactive: true },
   "lin-reg": { Comp: LinearRegression },
   knn: { Comp: KNN },
   "knn-fitting": { Comp: KNNFitting, viewBox: "0 0 680 245" },
