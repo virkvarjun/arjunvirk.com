@@ -22,18 +22,25 @@ const PANEL_Y = 44;
 const CPU_X = 16;
 const GPU_X = 228;
 
-// Tile-strip layout shared by both panels.
+// Tile-strip layout shared by both panels. The cell size is bounded by BOTH
+// the available width and height so the 8x8 grid always fits inside the panel
+// (leaving room for the core badges on top and the captions at the bottom).
 const PAD = 14;
-const GRID_W = PANEL_W - PAD * 2;
-const CELL = GRID_W / COLS; // square-ish tiny cells
+const TOP_RESERVE = 30; // CPU big-core badges sit here
+const BOT_RESERVE = 18; // rate / progress captions sit here
+const CELL = Math.min(
+  (PANEL_W - PAD * 2) / COLS,
+  (PANEL_H - TOP_RESERVE - BOT_RESERVE) / ROWS,
+);
+const GRID_W = CELL * COLS;
 const GRID_H = CELL * ROWS;
 
 function tilePos(panelX: number, i: number): { x: number; y: number } {
   const c = i % COLS;
   const r = Math.floor(i / COLS);
   return {
-    x: panelX + PAD + c * CELL,
-    y: PANEL_Y + (PANEL_H - GRID_H) / 2 + 14 + r * CELL,
+    x: panelX + (PANEL_W - GRID_W) / 2 + c * CELL,
+    y: PANEL_Y + TOP_RESERVE + r * CELL,
   };
 }
 
