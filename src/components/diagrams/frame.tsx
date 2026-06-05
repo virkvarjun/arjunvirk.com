@@ -17,8 +17,11 @@ export const C = {
   violet: "#6b5cd6",
 } as const;
 
-export const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
-export const SANS = "ui-sans-serif, system-ui, sans-serif";
+// Diagram text uses Computer Modern (CMU Serif) to match the chapter math
+// and the explainer videos. Scoped to diagrams only — the rest of the site
+// keeps its own fonts. Fallbacks apply only if CMU Serif fails to load.
+export const MONO = '"CMU Serif", ui-monospace, SFMono-Regular, Menlo, monospace';
+export const SANS = '"CMU Serif", ui-serif, Georgia, serif';
 
 // --- Shared SVG primitives (used across chapter diagram files) ---
 
