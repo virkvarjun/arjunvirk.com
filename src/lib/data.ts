@@ -1,7 +1,6 @@
 import {
   type Chapter,
   mlGuideChapters,
-  roboticsGuideChapters,
   becomingReflections,
 } from "./chapters";
 
@@ -265,18 +264,6 @@ export const writing: WritingCategory[] = [
     title: "ML Dictionary",
     description: "A running glossary of machine learning terms and definitions.",
     link: { label: "Browse glossary", href: "/writing/ml-dictionary" },
-  },
-  {
-    key: "robotics-guide",
-    title: "Robotics Guide",
-    description: "Hands-on robotics learnings, from kinematics to control.",
-    chapters: roboticsGuideChapters,
-  },
-  {
-    key: "personal-reflections",
-    title: "Personal Reflections",
-    description: "Essays and thoughts on life, work, and everything between.",
-    posts: [],
   },
   {
     key: "becoming",
