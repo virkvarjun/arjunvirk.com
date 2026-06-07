@@ -18,7 +18,7 @@ export default function WritingIndexPage() {
       <header className="pb-10">
         <h1 className="text-3xl font-semibold tracking-tight">Writing</h1>
         <p className="mt-3 text-base text-[var(--muted)] leading-relaxed">
-          Long-form guides, a running ML dictionary, and personal reflections.
+          Long-form guides and personal reflections.
         </p>
       </header>
 

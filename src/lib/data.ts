@@ -260,12 +260,6 @@ export const writing: WritingCategory[] = [
     chapters: mlGuideChapters,
   },
   {
-    key: "ml-dictionary",
-    title: "ML Dictionary",
-    description: "A running glossary of machine learning terms and definitions.",
-    link: { label: "Browse glossary", href: "/writing/ml-dictionary" },
-  },
-  {
     key: "becoming",
     title: "Becoming",
     description: "Reflections — raw and unedited.",

@@ -17,25 +17,41 @@ export default function WritingSection() {
           </div>
 
           {category.chapters && category.chapters.length > 0 ? (
-            <Link
-              href={`/writing/${category.key}`}
-              className="group inline-flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
-            >
-              <span className="group-hover:underline underline-offset-2">
-                Table of contents
-              </span>
-              <span className="font-mono text-xs text-[var(--muted)]">
-                {category.chapters.length}{" "}
-                {category.kind === "reflections"
-                  ? category.chapters.length === 1
-                    ? "reflection"
-                    : "reflections"
-                  : category.chapters.length === 1
-                    ? "chapter"
-                    : "chapters"}
-              </span>
-              <ArrowRight size={13} className="text-[var(--muted)]" />
-            </Link>
+            category.kind === "reflections" &&
+            category.chapters.length === 1 ? (
+              <Link
+                href={`/writing/${category.key}/${category.chapters[0].slug}`}
+                className="group inline-flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+              >
+                <span className="group-hover:underline underline-offset-2">
+                  {category.chapters[0].title}
+                </span>
+                <span className="font-mono text-xs text-[var(--muted)]">
+                  {category.chapters[0].number}
+                </span>
+                <ArrowRight size={13} className="text-[var(--muted)]" />
+              </Link>
+            ) : (
+              <Link
+                href={`/writing/${category.key}`}
+                className="group inline-flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+              >
+                <span className="group-hover:underline underline-offset-2">
+                  Table of contents
+                </span>
+                <span className="font-mono text-xs text-[var(--muted)]">
+                  {category.chapters.length}{" "}
+                  {category.kind === "reflections"
+                    ? category.chapters.length === 1
+                      ? "reflection"
+                      : "reflections"
+                    : category.chapters.length === 1
+                      ? "chapter"
+                      : "chapters"}
+                </span>
+                <ArrowRight size={13} className="text-[var(--muted)]" />
+              </Link>
+            )
           ) : category.link ? (
             <Link
               href={category.link.href}
