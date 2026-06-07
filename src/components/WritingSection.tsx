@@ -25,7 +25,8 @@ export default function WritingSection() {
                 Table of contents
               </span>
               <span className="font-mono text-xs text-[var(--muted)]">
-                {category.chapters.length} chapters
+                {category.chapters.length}{" "}
+                {category.kind === "reflections" ? "reflections" : "chapters"}
               </span>
               <ArrowRight size={13} className="text-[var(--muted)]" />
             </Link>

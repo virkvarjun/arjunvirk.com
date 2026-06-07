@@ -23,6 +23,9 @@ export type ChapterSection = {
   // A comparison table: the first row is the header, the rest are body rows.
   // Cells may contain inline math/emphasis.
   table?: { rows: string[][] };
+  // Render this section's paragraphs in italics (used by reflections, where
+  // the answer prose is set in italic to mirror the source document).
+  italic?: boolean;
 };
 
 export type Chapter = {
@@ -7904,6 +7907,96 @@ export const roboticsGuideChapters: Chapter[] = [
         heading: "Why classical still matters",
         paragraphs: [
           "Learned policies are great when they work, but a classical controller you can reason about is often the difference between a robot that ships and one that doesn't. Most production stacks are hybrids.",
+        ],
+      },
+    ],
+  },
+];
+
+// Becoming — personal reflections. Questions are set upright; the answer prose
+// is italic, mirroring the source document.
+export const becomingReflections: Chapter[] = [
+  {
+    slug: "manifesto-on-becoming",
+    number: "Jun 7, 2026 · 12:11 AM",
+    title: "Manifesto on Becoming",
+    summary: "",
+    sections: [
+      {
+        paragraphs: ["Who is it that you want to become? No bullshit."],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "I want to become the absolute fucking best at whatever I do. Whatever it is, it has to be an instant hell yes and for it to be all I think about. I should be consumed at becoming the best version of myself and leader in the field.",
+        ],
+      },
+      {
+        paragraphs: [
+          "What things do you naturally gravitate towards? What would you spend your life working on?",
+        ],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "The first is companies, deep tech companies. The idea of leading a technical effort that brings paradigm shifts to society, advances our civilization in ways we didn't think possible, is something I think about everyday. The second thing, the backbone of this, is research. I want to come up with novel ideas to support the work of this company. To go deep into the technicals and build something to show for it is what I see myself doing.",
+          "Specific fields that pertain to this are Machine Learning, Robotics, and Biology. For now. Ideas change over time.",
+          "This starts by finding things to solve from first principles.",
+        ],
+      },
+      {
+        paragraphs: ["What do you want to achieve in your lifetime?"],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "There are many things.",
+          "The first is to make superintelligent robotics systems that are deployed across the world and ones that actually work.",
+          "The second is to make superintelligence safe. For it to not destroy humanity, but for it to prosper from it.",
+          "The third is to expand our civilization. The Earth will not last forever. Colonizing exterior habitable planets that support human life is critical.",
+          "The fourth is to use these skills to cure sufferable diseases. The power of technology should be at a state wherein this doesn't have to be a worry.",
+          "The fifth is to be a trillionaire. It is a proxy for the progress I make with my companies and research effort. Getting to this stage is an indication of my progress towards my overall goals.",
+          "Everything here weaves together. One life. To not chase these goals every fucking day is a life wasted with no potential served.",
+        ],
+      },
+      {
+        paragraphs: ["What is your focus now to achieve these things?"],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "The first is to go extremely deep into robotics and biology ML research. To go all in. No looking back. To become a lead researcher with very unique insights in the field. These two are critical down the line.",
+          "This also involves joining top labs: OpenAI, Physical Intelligence, Deepmind, Tesla, xAI, World Labs, AMI.",
+          "The second is to start companies and money-making schemes very fast. One is consulting, an agents company, or even a robotics company of my own in robotics deployment. Validation and taking action towards this is critical.",
+          "The third thing is to chase status/signal. Doing things like OAI, Z Fellows, FR8, Thiel Fellowship, Perplexity Research. Chasing things of signal is of utmost importance. Aligning your work with these is critical for signals later down the line in deeptech.",
+          "The fourth is to be greedy. To activate and think of actions for a given state based on a reward function. Being a greedy reward function. Only doing things that will benefit your mission and not everything else. Have experiences, but don't let them fuck up the mission. You need the optimizer to find the minimum and not to lose momentum too early. You're running out of time, you're almost 20. Go Ghost. Go Build. Go Make It.",
+          "The last thing is to be unconventional. Fuck balance. Fuck 996. Fuck what everyone else says about you. You are the captain of the ship, the only way to stand out is to think outside the box. Whenever making a decision, be conscious of this. Make moves left and right and never look back. Don't move slow, keep moving, fuck 1% progress, make 10%, make 50%, acheive your 10 year goals in 1 year. Stop being comfortable.",
+        ],
+      },
+      {
+        paragraphs: ["What habits will get you here?"],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "The first is replacing addictions. Social Media is a killer. Replace it with books. Knowledge will grow exponentially. Books to read: Psychology of Money, Think and Grow Rich, Elon Musk, Steve Jobs, Principles, Sapiens, 0 to 1, Meditations, 48 Laws of Power.",
+          "Getting the reps in. Forcing technical conversations. Forcing sales pitches. Learn to sell yourself in a non transactional manner.",
+          "Understand how to get people to believe in you. Then your work and mission. This is a result of the signal. It could be fuck you energy or maybe a very strong technical background. Signal = belief = trust = opportunity.",
+          "Health is key. Exercise no matter how hard or intense the work becomes. Eat well. It's basic, but I neglect it too much. That needs to stop.",
+          "Log how much work you did each day and the progress you made towards your goals. Live every day as if it was your last.",
+          "Aim to have unique experiences that make you a great storyteller.",
+          "Make calculated decisions. Be strategic about everything. It's a chess game, learning to think ahead, to make sacrifices, and to confuse the opponent is necessary.",
+          "Going viral on Twitter is also the best way to get signal, but also recognition. This should be a priority. Getting what you want becomes that much easier. You can just do things. So, go and do them, there's no easy way.",
+          "Act like Harvey Specter. Think like Steve Jobs. Be early like Elon Musk. Be delusional like Sam Altman. Be as skilled as Andrej Karpathy. Be wise like Naval Ravikant. Inspire like Tony Robbins. Live like Bryan Johnson. Have as much power as the top 1%.",
+        ],
+      },
+      {
+        paragraphs: ["Who are you?"],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "I am Arjun Virk. This is my story, I'm the captain of this ship. No one else. And, I will make it. I will achieve every single goal listed in this document. Mark my words.",
         ],
       },
     ],

@@ -2,6 +2,7 @@ import {
   type Chapter,
   mlGuideChapters,
   roboticsGuideChapters,
+  becomingReflections,
 } from "./chapters";
 
 export const profile = {
@@ -243,6 +244,9 @@ export type WritingCategory = {
   key: string;
   title: string;
   description: string;
+  // "guide" (chapters numbered Chapter N) or "reflections" (entries labelled
+  // with a date/time stamp). Defaults to a guide when omitted.
+  kind?: "guide" | "reflections";
   chapters?: Chapter[];
   posts?: WritingItem[];
   link?: { label: string; href: string };
@@ -273,5 +277,12 @@ export const writing: WritingCategory[] = [
     title: "Personal Reflections",
     description: "Essays and thoughts on life, work, and everything between.",
     posts: [],
+  },
+  {
+    key: "becoming",
+    title: "Becoming",
+    description: "Reflections — raw and unedited.",
+    kind: "reflections",
+    chapters: becomingReflections,
   },
 ];

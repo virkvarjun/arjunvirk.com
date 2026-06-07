@@ -21,6 +21,8 @@ export default async function CategoryContentsPage({
     notFound();
   }
 
+  const isReflections = category.kind === "reflections";
+
   return (
     <main className="max-w-2xl mx-auto px-6 w-full">
       <div className="pt-12 pb-6">
@@ -53,8 +55,12 @@ export default async function CategoryContentsPage({
               href={`/writing/${category.key}/${chapter.slug}`}
               className="group flex items-baseline gap-4 py-3.5"
             >
-              <span className="text-xs font-mono text-[var(--muted)] w-20 shrink-0">
-                Chapter {chapter.number}
+              <span
+                className={`text-xs font-mono text-[var(--muted)] shrink-0 ${
+                  isReflections ? "w-44" : "w-20"
+                }`}
+              >
+                {isReflections ? chapter.number : `Chapter ${chapter.number}`}
               </span>
               <span className="flex-1 text-sm font-medium group-hover:underline underline-offset-2">
                 {chapter.title}

@@ -29,6 +29,7 @@ export default async function ChapterPage({
   if (idx === -1) notFound();
 
   const chapter = category.chapters[idx];
+  const isReflections = category.kind === "reflections";
   const prev = idx > 0 ? category.chapters[idx - 1] : null;
   const next =
     idx < category.chapters.length - 1 ? category.chapters[idx + 1] : null;
@@ -81,14 +82,17 @@ export default async function ChapterPage({
 
       <article>
         <p className="text-xs text-[var(--muted)] font-mono mb-2">
-          {category.title} &middot; Chapter {chapter.number}
+          {category.title} &middot;{" "}
+          {isReflections ? chapter.number : `Chapter ${chapter.number}`}
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">
           {chapter.title}
         </h1>
-        <p className="mt-3 text-base text-[var(--muted)] leading-relaxed">
-          {chapter.summary}
-        </p>
+        {chapter.summary && (
+          <p className="mt-3 text-base text-[var(--muted)] leading-relaxed">
+            {chapter.summary}
+          </p>
+        )}
 
         <div className="mt-10 space-y-7">
           {chapter.sections.map((section, i) => (
@@ -101,7 +105,10 @@ export default async function ChapterPage({
               {section.paragraphs && section.paragraphs.length > 0 && (
                 <div className="space-y-3">
                   {section.paragraphs.map((p, j) => (
-                    <p key={j} className="text-sm leading-relaxed">
+                    <p
+                      key={j}
+                      className={`text-sm leading-relaxed ${section.italic ? "italic" : ""}`}
+                    >
                       <MathText>{p}</MathText>
                     </p>
                   ))}
