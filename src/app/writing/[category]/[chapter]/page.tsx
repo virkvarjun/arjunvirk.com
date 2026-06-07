@@ -42,9 +42,12 @@ export default async function ChapterPage({
   return (
     <main className="max-w-2xl mx-auto px-6 w-full">
       <div className="pt-12 pb-6 flex items-center justify-between gap-4">
-        <Link href={`/writing/${category.key}`} className={navLink}>
+        <Link
+          href={isReflections ? "/writing" : `/writing/${category.key}`}
+          className={navLink}
+        >
           <ArrowLeft size={12} />
-          {category.title}
+          {isReflections ? "Writing" : category.title}
         </Link>
         <nav className="flex items-center gap-4">
           {prev ? (
@@ -82,8 +85,9 @@ export default async function ChapterPage({
 
       <article>
         <p className="text-xs text-[var(--muted)] font-mono mb-2">
-          {category.title} &middot;{" "}
-          {isReflections ? chapter.number : `Chapter ${chapter.number}`}
+          {isReflections
+            ? chapter.number
+            : `${category.title} · Chapter ${chapter.number}`}
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">
           {chapter.title}

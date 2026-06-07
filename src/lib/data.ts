@@ -39,16 +39,14 @@ export const landing = {
       ", based in Waterloo, ON.",
     ],
     [
-      "I like writing and learning in public — long-form guides on machine learning and robotics, plus a running ",
-      { text: "ML dictionary", href: "/writing/ml-dictionary" },
-      ".",
+      "I like writing and learning in public — long-form guides on machine learning and robotics.",
     ],
   ] as RichSegment[][],
   links: [
     { label: "linkedin", href: profile.socials.linkedin },
     { label: "github", href: profile.socials.github },
     { label: "twitter", href: profile.socials.twitter },
-    { label: "writing", href: "/writing/ml-dictionary" },
+    { label: "writing", href: "/writing" },
     { label: "mail", href: `mailto:${profile.socials.email}` },
   ],
 };
