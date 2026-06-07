@@ -26,7 +26,13 @@ export default function WritingSection() {
               </span>
               <span className="font-mono text-xs text-[var(--muted)]">
                 {category.chapters.length}{" "}
-                {category.kind === "reflections" ? "reflections" : "chapters"}
+                {category.kind === "reflections"
+                  ? category.chapters.length === 1
+                    ? "reflection"
+                    : "reflections"
+                  : category.chapters.length === 1
+                    ? "chapter"
+                    : "chapters"}
               </span>
               <ArrowRight size={13} className="text-[var(--muted)]" />
             </Link>

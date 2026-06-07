@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Calendar, Mail, MapPin } from "lucide-react";
 import { landing, profile, workSection } from "@/lib/data";
 
@@ -134,7 +135,27 @@ export default function Home() {
           {workSection.heading}
         </h2>
         <p className="mt-1.5 text-sm text-[var(--muted)]">
-          {workSection.subtitle}
+          <Link
+            href="/writing"
+            className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
+          >
+            Writing
+          </Link>
+          {", "}
+          <Link
+            href="/"
+            className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
+          >
+            research
+          </Link>
+          {", and "}
+          <Link
+            href="/"
+            className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
+          >
+            projects
+          </Link>
+          {"."}
         </p>
 
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
