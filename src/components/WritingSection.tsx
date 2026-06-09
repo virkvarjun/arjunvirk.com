@@ -6,15 +6,14 @@ export default function WritingSection() {
   return (
     <div className="space-y-10">
       {writing.map((category) => {
-        const single =
-          category.kind === "reflections" &&
-          category.chapters &&
-          category.chapters.length === 1;
+        const reflections = category.kind === "reflections";
+        const chapters = category.chapters ?? [];
+        const collapsed =
+          reflections && category.collapseSingle && chapters.length === 1;
 
-        // A single reflection is shown as its own titled link — straight to the
-        // piece, no category wrapper and no table of contents.
-        if (single && category.chapters) {
-          const r = category.chapters[0];
+        // Collapsed single reflection (e.g. Becoming): show just its title.
+        if (collapsed) {
+          const r = chapters[0];
           return (
             <section key={category.key}>
               <Link
@@ -47,26 +46,45 @@ export default function WritingSection() {
               </p>
             </div>
 
-            {category.chapters && category.chapters.length > 0 ? (
-              <Link
-                href={`/writing/${category.key}`}
-                className="group inline-flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
-              >
-                <span className="group-hover:underline underline-offset-2">
-                  Table of contents
-                </span>
-                <span className="font-mono text-xs text-[var(--muted)]">
-                  {category.chapters.length}{" "}
-                  {category.kind === "reflections"
-                    ? category.chapters.length === 1
-                      ? "reflection"
-                      : "reflections"
-                    : category.chapters.length === 1
-                      ? "chapter"
-                      : "chapters"}
-                </span>
-                <ArrowRight size={13} className="text-[var(--muted)]" />
-              </Link>
+            {chapters.length > 0 ? (
+              reflections ? (
+                // Reflections: list each entry, linking straight to the piece.
+                <div className="space-y-2">
+                  {chapters.map((r) => (
+                    <Link
+                      key={r.slug}
+                      href={`/writing/${category.key}/${r.slug}`}
+                      className="group flex items-baseline gap-3 text-sm font-medium hover:opacity-80 transition-opacity"
+                    >
+                      <span className="font-mono text-xs text-[var(--muted)] w-40 shrink-0">
+                        {r.number}
+                      </span>
+                      <span className="group-hover:underline underline-offset-2">
+                        {r.title}
+                      </span>
+                      <ArrowRight
+                        size={13}
+                        className="text-[var(--muted)] shrink-0"
+                      />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                // Guides: a table of contents.
+                <Link
+                  href={`/writing/${category.key}`}
+                  className="group inline-flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
+                >
+                  <span className="group-hover:underline underline-offset-2">
+                    Table of contents
+                  </span>
+                  <span className="font-mono text-xs text-[var(--muted)]">
+                    {chapters.length}{" "}
+                    {chapters.length === 1 ? "chapter" : "chapters"}
+                  </span>
+                  <ArrowRight size={13} className="text-[var(--muted)]" />
+                </Link>
+              )
             ) : category.link ? (
               <Link
                 href={category.link.href}

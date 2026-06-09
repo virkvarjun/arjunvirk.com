@@ -8002,3 +8002,25 @@ export const becomingReflections: Chapter[] = [
     ],
   },
 ];
+
+// Daily Insights — short reflections/essays. Same format as Becoming:
+// prompts upright, the writing itself in italic.
+export const dailyInsights: Chapter[] = [
+  {
+    slug: "living-according-to-evolution",
+    number: "Jun 9, 2026 · 10:35 AM",
+    title: "Living According to Evolution",
+    summary: "",
+    sections: [
+      {
+        paragraphs: ["Coming soon."],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "This reflection is being written — it will follow the same form as the manifesto, with prompts shown upright and the writing itself in italic.",
+        ],
+      },
+    ],
+  },
+];

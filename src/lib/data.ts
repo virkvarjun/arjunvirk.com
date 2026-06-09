@@ -2,6 +2,7 @@ import {
   type Chapter,
   mlGuideChapters,
   becomingReflections,
+  dailyInsights,
 } from "./chapters";
 
 export const profile = {
@@ -244,6 +245,10 @@ export type WritingCategory = {
   // "guide" (chapters numbered Chapter N) or "reflections" (entries labelled
   // with a date/time stamp). Defaults to a guide when omitted.
   kind?: "guide" | "reflections";
+  // For a reflections category with a single entry: collapse it to just that
+  // entry's title on the index (no category wrapper). Otherwise the category
+  // shows as a section heading with its entries listed underneath.
+  collapseSingle?: boolean;
   chapters?: Chapter[];
   posts?: WritingItem[];
   link?: { label: string; href: string };
@@ -262,6 +267,14 @@ export const writing: WritingCategory[] = [
     title: "Becoming",
     description: "Reflections — raw and unedited.",
     kind: "reflections",
+    collapseSingle: true,
     chapters: becomingReflections,
+  },
+  {
+    key: "daily-insights",
+    title: "Daily Insights",
+    description: "Short reflections, one thought at a time.",
+    kind: "reflections",
+    chapters: dailyInsights,
   },
 ];
