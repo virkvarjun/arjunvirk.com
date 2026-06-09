@@ -2,7 +2,7 @@ import {
   type Chapter,
   mlGuideChapters,
   becomingReflections,
-  dailyInsights,
+  livingReflections,
 } from "./chapters";
 
 export const profile = {
@@ -271,10 +271,11 @@ export const writing: WritingCategory[] = [
     chapters: becomingReflections,
   },
   {
-    key: "daily-insights",
-    title: "Daily Insights",
-    description: "Short reflections, one thought at a time.",
+    key: "living",
+    title: "Living According to Evolution",
+    description: "Reflections — raw and unedited.",
     kind: "reflections",
-    chapters: dailyInsights,
+    collapseSingle: true,
+    chapters: livingReflections,
   },
 ];
