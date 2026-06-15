@@ -8008,17 +8008,31 @@ export const becomingReflections: Chapter[] = [
 export const livingReflections: Chapter[] = [
   {
     slug: "living-according-to-evolution",
-    number: "Jun 9, 2026 · 10:35 AM",
+    number: "Jun 14, 2026 · 9:54 PM",
     title: "Living According to Evolution",
     summary: "",
     sections: [
       {
-        paragraphs: ["Coming soon."],
+        paragraphs: ["What is the purpose of anything?"],
       },
       {
         italic: true,
         paragraphs: [
-          "This reflection is being written — it will follow the same form as the manifesto, with prompts shown upright and the writing itself in italic.",
+          "This has been a question that has been on my mind since I was a child.",
+          "After some time contemplating and living in my own world, I've come to accept that the answer is evolution.",
+          "Evolution is the force of nature with the most conviction, persistence, and sustainability. It has been, and continues to be, a crucial aspect of maintaining life on this planet. Species, including humans, are meant to adapt to their environments and make changes to their biology to survive.",
+          "This is the natural instinct of almost every species on the planet, except for us, at least consciously.",
+          "The desires of humans are mainly materialistic and focused on a set of tangible goals. For instance, becoming a billionaire or a person of fame. In the society that we have artificially crafted, the pursuit of survival among animals and working towards evolution is not something we constantly have our minds on.",
+          "We have become distracted by social status, social media, and money/greed. These are okay to operate within our society, as they fit perfectly into it. Of course, with the ideologies and life we've created thus far, it's only natural.",
+          "But the interesting part comes after we pass. After all, the only thing that is certain for us is to leave the Earth. This is a motivating factor behind evolution, actually. So, the question becomes: what do you do during this time?",
+          "I've noticed a lot of my friends are trying to become billionaires. Their motivation is inherent to their massive ambition. While I shared similar interests and levels of ambition, I couldn't help but wonder what would happen after the goal was achieved. Either they'd want more (greed) or spend it all. Once a goal that big is achieved, what happens next? Those two scenarios never sat well with me.",
+          "Thinking from first principles, it must be to live within the boundaries of nature. These boundaries, in my opinion, are bound by evolution. You should set your goals and life's mission to push evolution, and then nature will reward you, as it is all inherent to this natural force.",
+          "Tangibly, what does this look like? For someone with ambition, it doesn't look like mass reproducing and literally becoming one with nature and pushing evolution forward in a jungle. I believe this looks like pushing the evolution of human society forward, because we've developed an artificial bubble among every other species.",
+          "A great case study of this is Apple and Steve Jobs. The Macintosh and the iPhone are both such integral parts of our daily lives. I'm writing this piece on a MacBook, and my calls come in through my iPhone. Without either, I wouldn't know how to live. And these pieces of useful technology have allowed me to open up opportunities in my life that I wouldn't have had without them. The fact that I, and billions of others, have paid to use this technology proves this point. Steve Jobs created a paradigm shift in how we, as a human society, operate and live. So much so that it has, for the last 30–40 years, \"evolved\" how humans live. This technology has pioneered so many other technological advancements and has had an unprecedented effect on society.",
+          "This is what I call modern-day human evolution. Not to be taken in the scientific sense, however.",
+          "This is where your goals and life should live. Doing something that aligns strongly with your values and makes a massive impact on society, for the better. Naturally, you will be rewarded for such a thing.",
+          "I've now converged my life's mission on this philosophy.",
+          "More soon.",
         ],
       },
     ],
