@@ -3,6 +3,7 @@ import {
   mlGuideChapters,
   becomingReflections,
   livingReflections,
+  thinkingReflections,
 } from "./chapters";
 
 export const profile = {
@@ -277,5 +278,13 @@ export const writing: WritingCategory[] = [
     kind: "reflections",
     collapseSingle: true,
     chapters: livingReflections,
+  },
+  {
+    key: "thinking",
+    title: "Thinking by Derivations",
+    description: "Reflections — raw and unedited.",
+    kind: "reflections",
+    collapseSingle: true,
+    chapters: thinkingReflections,
   },
 ];

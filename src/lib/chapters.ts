@@ -8038,3 +8038,21 @@ export const livingReflections: Chapter[] = [
     ],
   },
 ];
+
+export const thinkingReflections: Chapter[] = [
+  {
+    slug: "thinking-by-derivations",
+    number: "Jun 18, 2026",
+    title: "Thinking by Derivations",
+    summary: "",
+    sections: [
+      {
+        list: [
+          "Instead of memorizing, derive — especially for RL. It's the best way to walk through things yourself, and it builds good thinking abilities.",
+          "It connects to making decisions from first principles. It's important not to skip derivations in favor of intuition about where to get things.",
+          "It connects to storytelling, and makes your thoughts coherent.",
+        ],
+      },
+    ],
+  },
+];
