@@ -8059,6 +8059,13 @@ export const thinkingReflections: Chapter[] = [
           "Storytelling and communication are central to my career. As someone who will be a deeptech founder and CEO, this is undoubtedly one of the most important soft skills I will need to develop. From months of intentionally working to improve these communication skills, I have found that the best way to narrate, convince, and persuade is by thinking from first principles and using the same layered approach. If you start your story from something small and slowly work toward an end goal, it becomes so much more interesting. If you're trying to convince someone to believe in you and your work, starting from something both parties can agree on and understand, then inching toward a framework that brings them around, eventually it becomes easy for them to take your side.",
         ],
       },
+      {
+        paragraphs: [
+          "I believe this is a very powerful framework if applied right.",
+          "On another note, I've become more intentional about making connections like these — building insights and a deeper understanding of how to dominate in whatever I do.",
+          "More soon.",
+        ],
+      },
     ],
   },
 ];
