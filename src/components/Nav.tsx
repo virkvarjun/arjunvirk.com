@@ -5,6 +5,12 @@ import { motion } from "framer-motion";
 const tabs = ["work", "projects", "writing"] as const;
 export type Tab = (typeof tabs)[number];
 
+const tabLabels: Record<Tab, string> = {
+  work: "Work",
+  projects: "Projects",
+  writing: "Short Essays",
+};
+
 export default function Nav({
   active,
   onChange,
@@ -18,13 +24,13 @@ export default function Nav({
         <button
           key={tab}
           onClick={() => onChange(tab)}
-          className={`relative pb-3 px-1 mr-4 text-sm font-medium transition-colors capitalize ${
+          className={`relative pb-3 px-1 mr-4 text-sm font-medium transition-colors ${
             active === tab
               ? "text-[var(--foreground)]"
               : "text-[var(--muted)] hover:text-[var(--foreground)]"
           }`}
         >
-          {tab}
+          {tabLabels[tab]}
           {active === tab && (
             <motion.div
               layoutId="tab-indicator"
