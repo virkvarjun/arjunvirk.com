@@ -139,7 +139,7 @@ export default function Home() {
             href="/writing"
             className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
           >
-            Writing
+            Short Essays
           </Link>
           {", "}
           <Link
