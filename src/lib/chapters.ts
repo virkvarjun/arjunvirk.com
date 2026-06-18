@@ -8047,10 +8047,10 @@ export const thinkingReflections: Chapter[] = [
     summary: "",
     sections: [
       {
-        list: [
-          "Instead of memorizing, derive — especially for RL. It's the best way to walk through things yourself, and it builds good thinking abilities.",
-          "It connects to making decisions from first principles. It's important not to skip derivations in favor of intuition about where to get things.",
-          "It connects to storytelling, and makes your thoughts coherent.",
+        paragraphs: [
+          "Today, I spent some time watching Stanford CS224: Introduction to Deep Reinforcement Learning, on policy gradients. The lecture was quite informative — of course, given that Chelsea Finn was the instructor — but a few of the lessons I took away had nothing to do with RL math and algorithms.",
+          "The first came when Dr. Finn broke down the gradient updates in a vanilla policy gradient algorithm. The topic itself is irrelevant here; the insight came from her mathematical derivations. Once you take the time to actually start from first principles and, with each line of mathematical thinking and logic, get closer to the final result or algorithm, it teaches you something interesting. Yes, it's important to think from first principles and to have that as a baseline, but it is equally important to learn to think layer by layer — nth-order thinking. This can be a major influence on good, decisive, and logical decision-making later in life. To not skip derivations, to not be lazy in understanding, and to not simply memorize a formula and apply it — I've come to realize this not only gives you a much richer understanding of the topic and a way to come up with new ideas through this medium of thinking, but also helps you make critical decisions at the right time.",
+          "It takes time to master and effort to sit down and do it. But that is what counts.",
         ],
       },
     ],
