@@ -8048,8 +8048,8 @@ export const thinkingReflections: Chapter[] = [
     sections: [
       {
         paragraphs: [
-          "Today, I spent some time watching Stanford CS224: Introduction to Deep Reinforcement Learning, on policy gradients. The lecture was quite informative — of course, given that Chelsea Finn was the instructor — but a few of the lessons I took away had nothing to do with RL math and algorithms.",
-          "The first came when Dr. Finn broke down the gradient updates in a vanilla policy gradient algorithm. The topic itself is irrelevant here; the insight came from her mathematical derivations. Once you take the time to actually start from first principles and, with each line of mathematical thinking and logic, get closer to the final result or algorithm, it teaches you something interesting. Yes, it's important to think from first principles and to have that as a baseline, but it is equally important to learn to think layer by layer — nth-order thinking. This can be a major influence on good, decisive, and logical decision-making later in life. To not skip derivations, to not be lazy in understanding, and to not simply memorize a formula and apply it — I've come to realize this not only gives you a much richer understanding of the topic and a way to come up with new ideas through this medium of thinking, but also helps you make critical decisions at the right time.",
+          "Today, I spent some time watching Stanford CS224: Introduction to Deep Reinforcement Learning, on policy gradients. The lecture was quite informative (of course, given that Chelsea Finn was the instructor), but a few of the lessons I took away had nothing to do with RL math and algorithms.",
+          "The first came when Dr. Finn broke down the gradient updates in a vanilla policy gradient algorithm. The topic itself is irrelevant here; the insight came from her mathematical derivations. Once you take the time to actually start from first principles and, with each line of mathematical thinking and logic, get closer to the final result or algorithm, it teaches you something interesting. Yes, it's important to think from first principles and to have that as a baseline, but it is equally important to learn to think layer by layer, or nth-order thinking. This can be a major influence on good, decisive, and logical decision-making later in life. Not skipping derivations, not being lazy in understanding, and not simply memorizing a formula and applying it, I've come to realize, not only gives you a much richer understanding of the topic and a way to come up with new ideas through this medium of thinking, but also helps you make critical decisions at the right time.",
           "It takes time to master and effort to sit down and do it. But that is what counts.",
         ],
       },
@@ -8062,7 +8062,7 @@ export const thinkingReflections: Chapter[] = [
       {
         paragraphs: [
           "I believe this is a very powerful framework if applied right.",
-          "On another note, I've become more intentional about making connections like these — building insights and a deeper understanding of how to dominate in whatever I do.",
+          "On another note, I've become more intentional about making connections like these, building insights and a deeper understanding of how to dominate in whatever I do.",
           "More soon.",
         ],
       },
