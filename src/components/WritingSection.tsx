@@ -122,7 +122,7 @@ export default function WritingSection() {
               </div>
             ) : (
               <p className="text-xs text-[var(--muted)] italic">
-                Nothing here yet — coming soon.
+                Nothing here yet, coming soon.
               </p>
             )}
           </section>

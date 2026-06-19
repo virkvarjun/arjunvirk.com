@@ -25,7 +25,7 @@
   font-display: swap;
 }
 
-/* Computer Modern (CMU Serif) — used only by the chapter diagrams. */
+/* Computer Modern (CMU Serif), used only by the chapter diagrams. */
 @font-face {
   font-family: "CMU Serif";
   src: url("/fonts/cmu-serif.ttf") format("truetype");

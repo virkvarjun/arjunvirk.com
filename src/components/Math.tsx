@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import katex from "katex";
 
 // KaTeX renders to a static HTML string, so these render fine in Server
-// Components — no "use client" needed. The CSS is imported once in the root
+// Components, no "use client" needed. The CSS is imported once in the root
 // layout via "katex/dist/katex.min.css".
 
 function render(expr: string, displayMode: boolean): string {
@@ -52,8 +52,8 @@ export function MathText({ children }: { children: string }) {
 }
 
 /**
- * Renders the Markdown emphasis used in the prose — `**bold**`, `*italic*`, and
- * `` `inline code` `` — within a span of non-math text. Inline code is matched
+ * Renders the Markdown emphasis used in the prose, `**bold**`, `*italic*`, and
+ * `` `inline code` ``, within a span of non-math text. Inline code is matched
  * first (its contents are taken verbatim), then bold before italic so the
  * double-asterisk form wins over the single.
  */
@@ -94,7 +94,7 @@ function splitMath(input: string): Part[] {
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
     if (ch === "\\" && input[i + 1] === "$") {
-      // Escaped dollar sign — emit a literal "$".
+      // Escaped dollar sign, emit a literal "$".
       buf += "$";
       i++;
       continue;

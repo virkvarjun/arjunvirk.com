@@ -41,7 +41,7 @@ export const landing = {
       ", based in Waterloo, ON.",
     ],
     [
-      "I like writing and learning in public — long-form guides on machine learning and robotics.",
+      "I like writing and learning in public, long-form guides on machine learning and robotics.",
     ],
   ] as RichSegment[][],
   links: [
@@ -192,13 +192,13 @@ export const work: WorkItem[] = [
     company: "Company A",
     role: "Software Engineering Intern",
     period: "Summer 2025",
-    description: "Placeholder — add your work experience here.",
+    description: "Placeholder, add your work experience here.",
   },
   {
     company: "Company B",
     role: "Software Engineering Intern",
     period: "Winter 2025",
-    description: "Placeholder — add your work experience here.",
+    description: "Placeholder, add your work experience here.",
   },
 ];
 
@@ -214,19 +214,19 @@ export type ProjectItem = {
 export const projects: ProjectItem[] = [
   {
     name: "Project Alpha",
-    description: "Placeholder — describe your project here.",
+    description: "Placeholder, describe your project here.",
     tags: ["TypeScript", "Next.js"],
     year: "2025",
   },
   {
     name: "Project Beta",
-    description: "Placeholder — describe your project here.",
+    description: "Placeholder, describe your project here.",
     tags: ["Python", "ML"],
     year: "2024",
   },
   {
     name: "Project Gamma",
-    description: "Placeholder — describe your project here.",
+    description: "Placeholder, describe your project here.",
     tags: ["Rust", "Systems"],
     year: "2024",
   },
@@ -260,13 +260,13 @@ export const writing: WritingCategory[] = [
     key: "ml-guide",
     title: "ML Bible",
     description:
-      "A from-scratch guide to machine learning — classical algorithms, neural networks, transformers, vision, and agents.",
+      "A from-scratch guide to machine learning, classical algorithms, neural networks, transformers, vision, and agents.",
     chapters: mlGuideChapters,
   },
   {
     key: "becoming",
     title: "Becoming",
-    description: "Reflections — raw and unedited.",
+    description: "Reflections, raw and unedited.",
     kind: "reflections",
     collapseSingle: true,
     chapters: becomingReflections,
@@ -274,7 +274,7 @@ export const writing: WritingCategory[] = [
   {
     key: "living",
     title: "Living According to Evolution",
-    description: "Reflections — raw and unedited.",
+    description: "Reflections, raw and unedited.",
     kind: "reflections",
     collapseSingle: true,
     chapters: livingReflections,
@@ -282,7 +282,7 @@ export const writing: WritingCategory[] = [
   {
     key: "thinking",
     title: "Thinking by Derivations",
-    description: "Reflections — raw and unedited.",
+    description: "Reflections, raw and unedited.",
     kind: "reflections",
     collapseSingle: true,
     chapters: thinkingReflections,
