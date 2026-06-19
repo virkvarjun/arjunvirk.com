@@ -4,10 +4,10 @@ import { useState } from "react";
 import { C, MONO } from "../frame";
 
 // Four ways to spread a model + its training batch across 4 chips.
-//   Data     — replicate the model, split the batch, all-reduce gradients.
-//   Tensor   — split one layer's matrix across chips, exchange partials.
-//   Pipeline — split the layers by depth; mini-batches flow like a line.
-//   FSDP     — shard the params, gather them on demand each pass.
+//   Data    , replicate the model, split the batch, all-reduce gradients.
+//   Tensor  , split one layer's matrix across chips, exchange partials.
+//   Pipeline, split the layers by depth; mini-batches flow like a line.
+//   FSDP    , shard the params, gather them on demand each pass.
 type Strategy = "data" | "tensor" | "pipeline" | "fsdp";
 
 const STRATS: { id: Strategy; label: string }[] = [
@@ -24,7 +24,7 @@ const CHIP_Y = 64;
 const CHIP_X = [22, 130, 238, 346];
 const cx = (i: number) => CHIP_X[i] + CHIP_W / 2;
 
-// A small head pointing at (x2,y2) — used for the comm arrows.
+// A small head pointing at (x2,y2), used for the comm arrows.
 function Head({ x, y, ang, color }: { x: number; y: number; ang: number; color: string }) {
   const h = 6;
   const a1 = ang + Math.PI - 0.45;

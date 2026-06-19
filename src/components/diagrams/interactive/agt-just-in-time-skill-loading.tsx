@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Just-in-Time Skill Loading — the agent keeps only a lightweight index of
+// Just-in-Time Skill Loading, the agent keeps only a lightweight index of
 // skill names + descriptions; when a task matches, it loads that one SKILL.md
 // into context and executes. Interactive: pick a user message and watch the
 // index match a skill (or none); toggle "load all vs JIT" to see the context
@@ -151,7 +151,7 @@ export function AgtJustInTimeSkillLoading() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Keep a lightweight index of skills; pull the full SKILL.md into context only when a task matches — the same trick Claude
+        Keep a lightweight index of skills; pull the full SKILL.md into context only when a task matches, the same trick Claude
         Code uses. Flip to &ldquo;load all&rdquo; and the context meter blows past its limit; just-in-time keeps it comfortable.
       </p>
     </div>

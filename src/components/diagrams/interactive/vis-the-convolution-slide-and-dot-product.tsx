@@ -29,7 +29,7 @@ const OUT_Y = 58;
 // Readout band y-positions (own clear horizontal band below the drawing).
 const READ_Y = 250;
 
-// Fixed input image (deterministic — a diagonal-ish bright streak so an edge
+// Fixed input image (deterministic, a diagonal-ish bright streak so an edge
 // detector produces a visible response). Values are small integers 0..9.
 const IMG: number[][] = [
   [0, 1, 1, 0, 0],
@@ -168,7 +168,7 @@ export function VisConvolutionSlide() {
     return () => clearInterval(id);
   }, [playing, step]);
 
-  // Current patch (if not finished) — top-left output coords.
+  // Current patch (if not finished), top-left output coords.
   const active = pos < TOTAL;
   const curRow = Math.floor(pos / OUT);
   const curCol = pos % OUT;

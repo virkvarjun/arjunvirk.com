@@ -92,7 +92,7 @@ export function VisReluBlock() {
           ReLU and the Conv {"->"} BatchNorm {"->"} ReLU Block
         </text>
         <text x={24} y={44} fontFamily={MONO} fontSize={9.5} fill={C.muted}>
-          ReLU(x) = max(0, x) — clips negatives, gradient 1 for x{">"}0, 0 for x{"<"}0
+          ReLU(x) = max(0, x), clips negatives, gradient 1 for x{">"}0, 0 for x{"<"}0
         </text>
 
         {/* ---------- LEFT: activation curve ---------- */}

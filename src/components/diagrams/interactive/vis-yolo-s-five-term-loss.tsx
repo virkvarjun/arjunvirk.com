@@ -5,13 +5,13 @@ import { C, MONO } from "../frame";
 
 // YOLO's Five-Term Loss.
 // Detection is cast as squared-error regression over five terms:
-//   1. center (x,y)        — coord error, weighted by lambda_coord, responsible box
-//   2. size (sqrt w, h)    — coord error, weighted by lambda_coord, responsible box
-//   3. confidence (obj)    — object cells, weight 1
-//   4. confidence (noobj)  — empty cells, weighted by lambda_noobj
-//   5. class probability   — object cells only
+//   1. center (x,y)       , coord error, weighted by lambda_coord, responsible box
+//   2. size (sqrt w, h)   , coord error, weighted by lambda_coord, responsible box
+//   3. confidence (obj)   , object cells, weight 1
+//   4. confidence (noobj) , empty cells, weighted by lambda_noobj
+//   5. class probability  , object cells only
 // The sqrt on width/height makes a fixed pixel error matter more for small
-// boxes than large ones — evening out the localization penalty.
+// boxes than large ones, evening out the localization penalty.
 
 type TermKey = "xy" | "wh" | "obj" | "noobj" | "cls";
 
@@ -169,7 +169,7 @@ export function VisYoloLoss() {
           YOLO&apos;s Five-Term Loss
         </text>
         <text x={18} y={46} fontFamily={MONO} fontSize={10} fill={C.muted}>
-          Detection as squared-error regression — sum of 5 terms.
+          Detection as squared-error regression, sum of 5 terms.
         </text>
         <text x={18} y={64} fontFamily={MONO} fontSize={10} fill={C.muted}>
           Toggle a term off; click a term to inspect it.
@@ -463,7 +463,7 @@ export function VisYoloLoss() {
           Five squared-error terms turn detection into regression
         </text>
         <text x={18} y={Hsvg - 13} fontFamily={MONO} fontSize={8.5} fill={C.muted}>
-          — weights balance localization, objects, empty space.
+         , weights balance localization, objects, empty space.
         </text>
       </svg>
 

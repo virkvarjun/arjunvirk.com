@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Anatomy of a Tool Call — five stages between the Model and Your runtime.
+// Anatomy of a Tool Call, five stages between the Model and Your runtime.
 // The model only ever describes the call as JSON; your runtime executes it.
 // A boundary line marks that the model never crosses into running code, and a
 // safety-checkpoint marker sits on stage 3. Interactive: step the five stages,
@@ -121,7 +121,7 @@ export function AgtAnatomyOfAToolCall() {
         {current ? (
           <>
             <p className="font-mono text-[11px] font-semibold" style={{ color: current.side === "model" ? C.blue : C.green }}>
-              {`step ${current.n} — ${current.title}`}
+              {`step ${current.n}, ${current.title}`}
             </p>
             <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-[var(--foreground)]">{current.json}</pre>
           </>
@@ -141,8 +141,8 @@ export function AgtAnatomyOfAToolCall() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        The model only describes the call as JSON; your runtime executes it. That gap — the checkpoint at stage 3 where your code
-        decides whether to really run it — is what makes tool use safe, auditable, and gate-able.
+        The model only describes the call as JSON; your runtime executes it. That gap, the checkpoint at stage 3 where your code
+        decides whether to really run it, is what makes tool use safe, auditable, and gate-able.
       </p>
     </div>
   );

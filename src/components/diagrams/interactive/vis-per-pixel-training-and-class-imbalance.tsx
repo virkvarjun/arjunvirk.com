@@ -148,7 +148,7 @@ export function VisPerPixelImbalance() {
           Per-Pixel Training and Class Imbalance
         </text>
         <text x={16} y={42} fontSize={9.5} fill={C.muted} fontFamily={MONO}>
-          segmentation scores a loss at every pixel — a sea of background can swamp the signal
+          segmentation scores a loss at every pixel, a sea of background can swamp the signal
         </text>
         <line x1={16} y1={54} x2={W - 16} y2={54} stroke={C.line} strokeWidth={1} />
 
@@ -195,7 +195,7 @@ export function VisPerPixelImbalance() {
 
         {/* per-pixel loss-share bar */}
         <text x={shareBarX} y={shareBarY - 8} fontSize={10} fill={C.ink} fontFamily={MONO} fontWeight={700}>
-          where the loss comes from — {activeLabel}
+          where the loss comes from, {activeLabel}
         </text>
         <rect
           x={shareBarX}
@@ -281,7 +281,7 @@ export function VisPerPixelImbalance() {
           textAnchor="end"
           fontWeight={700}
         >
-          {fmtPct(pixelAcc)} — looks great
+          {fmtPct(pixelAcc)}, looks great
         </text>
 
         {/* dice */}
@@ -314,7 +314,7 @@ export function VisPerPixelImbalance() {
           fontFamily={MONO}
           fontWeight={700}
         >
-          {fmt2(diceAllBg)} — detects nothing
+          {fmt2(diceAllBg)}, detects nothing
         </text>
 
         {/* explanation lines under metrics */}
@@ -336,13 +336,13 @@ export function VisPerPixelImbalance() {
         </text>
         <text x={16} y={bandY + 16} fontSize={9} fill={C.muted} fontFamily={MONO}>
           {mode === "ce" &&
-            "plain CE weights every pixel equally — background dominates by sheer count"}
+            "plain CE weights every pixel equally, background dominates by sheer count"}
           {mode === "wce" &&
-            "weighted-CE scales each class by inverse frequency — about 50/50 either way"}
+            "weighted-CE scales each class by inverse frequency, about 50/50 either way"}
           {mode === "focal" &&
             "focal loss down-weights easy background pixels with a (1-p)^gamma factor"}
           {mode === "dice" &&
-            "Dice loss optimises object overlap directly — size-invariant, ignores easy bg"}
+            "Dice loss optimises object overlap directly, size-invariant, ignores easy bg"}
         </text>
 
         {/* object-loss emphasis readout */}

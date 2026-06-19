@@ -490,7 +490,7 @@ export function VisInductiveBiasVsScale() {
           fontSize={9}
           fill={C.muted}
         >
-          when data is abundant — the same story as language.
+          when data is abundant, the same story as language.
         </text>
       </svg>
 

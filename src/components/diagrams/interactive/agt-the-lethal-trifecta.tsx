@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// The Lethal Trifecta — three overlapping circles (private data, external
+// The Lethal Trifecta, three overlapping circles (private data, external
 // comms, untrusted content). Their three-way overlap is the exfiltration risk.
 // Interactive: toggle each leg on/off. With all three present the center lights
 // up and an attack path appears (injected instruction → take private data →
@@ -54,7 +54,7 @@ export function AgtTheLethalTrifecta() {
           />
         ))}
 
-        {/* labels — placed outside each circle (top two above, bottom one below) */}
+        {/* labels, placed outside each circle (top two above, bottom one below) */}
         {LEGS.map((l, i) => {
           // i=2 (untrusted) sits below its circle; the top two sit above theirs
           const ly = i === 2 ? l.cy + R + 18 : l.cy - R - 14;

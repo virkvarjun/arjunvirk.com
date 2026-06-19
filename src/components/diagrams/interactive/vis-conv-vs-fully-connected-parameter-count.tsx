@@ -76,7 +76,7 @@ export function VisConvVsFcParams() {
           Conv vs Fully-Connected: Parameter Count
         </text>
         <text x={16} y={42} fontFamily={MONO} fontSize={9.5} fill={C.muted}>
-          same {IMG}×{IMG}×{inCh} input — log scale
+          same {IMG}×{IMG}×{inCh} input, log scale
         </text>
 
         {/* ---- Comparison bars band ---- */}

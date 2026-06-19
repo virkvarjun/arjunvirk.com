@@ -16,7 +16,7 @@ const PATCH_OPTIONS: { size: PatchSize; grid: number; count: number }[] = [
 const IMG = 224; // logical image side
 const D = 768; // token embedding dimension
 
-// A small deterministic palette so each patch gets a stable "color" — no RNG.
+// A small deterministic palette so each patch gets a stable "color", no RNG.
 // Cycles through soft fills/strokes from the C.* palette.
 const PATCH_COLORS: { fill: string; stroke: string }[] = [
   { fill: C.blueFill, stroke: C.blue },
@@ -321,7 +321,7 @@ export function VisImageToPatchTokens() {
           textAnchor="middle"
           fill={C.muted}
         >
-          attention cost ∝ tokens² — smaller patches cost much more
+          attention cost ∝ tokens², smaller patches cost much more
         </text>
 
         {/* --- Caption band ------------------------------------------- */}
@@ -341,7 +341,7 @@ export function VisImageToPatchTokens() {
           textAnchor="middle"
           fill={C.muted}
         >
-          Chop into 16×16 patches, flatten, linearly project — the
+          Chop into 16×16 patches, flatten, linearly project, the
         </text>
         <text
           x={W / 2}

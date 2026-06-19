@@ -385,7 +385,7 @@ export function TfLoraWithoutRegret() {
           fontSize={9}
           fill={C.muted}
         >
-          ~O(1) bits/episode — ~1000x less info than SFT
+          ~O(1) bits/episode, ~1000x less info than SFT
         </text>
         <text
           x={52}
@@ -416,7 +416,7 @@ export function TfLoraWithoutRegret() {
           fontSize={9}
           fill={C.muted}
         >
-          enough capacity — and for RL, rank 1 is plenty.
+          enough capacity, and for RL, rank 1 is plenty.
         </text>
       </svg>
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { C, MONO } from "../frame";
 
 // A small fixed nudge on the input. We watch how it grows or shrinks as it
-// passes through each edge — the local derivative scales it every time.
+// passes through each edge, the local derivative scales it every time.
 const DX = 0.5;
 
 // Horizontal slots for the boxes. Index 0..3 maps to x, u, v, y. With only

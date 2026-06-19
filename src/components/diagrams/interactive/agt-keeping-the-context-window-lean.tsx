@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Keeping the Context Window Lean — a meter fills as a long task runs, with a
+// Keeping the Context Window Lean, a meter fills as a long task runs, with a
 // danger zone at 50–80% (degraded performance) and a 95% auto-compaction line.
 // Four techniques pull the meter back down. Interactive: run the task to climb
 // the meter; apply a technique to drop it; performance indicators worsen in the
@@ -102,7 +102,7 @@ export function AgtKeepingTheContextWindowLean() {
           </g>
         ))}
         <text x={250} y={150} fontSize={8} fill={C.muted} fontFamily={MONO}>
-          {critical ? "critical — compaction kicks in" : inDanger ? "in the danger zone" : "lean and on-task"}
+          {critical ? "critical, compaction kicks in" : inDanger ? "in the danger zone" : "lean and on-task"}
         </text>
       </svg>
 

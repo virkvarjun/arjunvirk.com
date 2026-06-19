@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// The Whole Agent Picture — capstone arc of the chapter. Seven stages connect
+// The Whole Agent Picture, capstone arc of the chapter. Seven stages connect
 // left to right; two through-lines can be toggled to show where "the agent
 // loop" and "just-in-time / files on disk" recur. Click a stage for its
 // summary; the final stage expands the trifecta defenses.
@@ -21,8 +21,8 @@ interface Stage {
 }
 
 const STAGES: Stage[] = [
-  { id: "loop", short: "Agent loop", sub: "think/act/observe", summary: "The single engine under every framework: reason, call a tool, observe, repeat — until a final answer.", threads: ["loop"], color: C.blue, fill: C.blueFill },
-  { id: "levels", short: "Four levels", sub: "chat → agents", summary: "Chat, Tools, Workflows, Agents — each rung adds autonomy and an equal measure of risk to manage.", threads: [], color: C.green, fill: C.greenFill },
+  { id: "loop", short: "Agent loop", sub: "think/act/observe", summary: "The single engine under every framework: reason, call a tool, observe, repeat, until a final answer.", threads: ["loop"], color: C.blue, fill: C.blueFill },
+  { id: "levels", short: "Four levels", sub: "chat → agents", summary: "Chat, Tools, Workflows, Agents, each rung adds autonomy and an equal measure of risk to manage.", threads: [], color: C.green, fill: C.greenFill },
   { id: "openclaw", short: "OpenClaw", sub: "files + heartbeat", summary: "A local gateway whose state is plain Markdown files; the agent loop runs each turn and the heartbeat makes it autonomous.", threads: ["loop", "jit"], color: C.coral, fill: C.coralFill },
   { id: "toolcall", short: "Tool call", sub: "JSON → runtime", summary: "The model only emits JSON describing the call; your runtime executes it. That gap is what makes agents auditable.", threads: [], color: C.violet, fill: "#e7e3f7" },
   { id: "mcp", short: "MCP", sub: "N+M standard", summary: "One standard of hosts, clients, and servers (tools, resources, prompts) collapses the N×M integration explosion to N+M.", threads: ["jit"], color: C.blue, fill: C.blueFill },

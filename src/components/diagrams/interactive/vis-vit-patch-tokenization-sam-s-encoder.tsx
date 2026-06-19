@@ -13,7 +13,7 @@ const EMBED = 1280; // SAM ViT-H embedding dim
 type PatchSize = 8 | 16 | 32;
 const PATCH_SIZES: PatchSize[] = [8, 16, 32];
 
-// Grid columns drawn in the diagram per patch size (visual only — the real grid
+// Grid columns drawn in the diagram per patch size (visual only, the real grid
 // is IMG/P which is too dense to draw, so we draw a representative grid).
 const DRAW_COLS: Record<PatchSize, number> = { 8: 12, 16: 8, 32: 5 };
 
@@ -364,7 +364,7 @@ export function VisVitPatchTokenization() {
           textAnchor="middle"
           fill={C.muted}
         >
-          Chop the image into 16x16 patches, project each to a token —
+          Chop the image into 16x16 patches, project each to a token,
         </text>
         <text
           x={W / 2}

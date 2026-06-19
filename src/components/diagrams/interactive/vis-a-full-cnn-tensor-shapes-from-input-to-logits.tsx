@@ -326,7 +326,7 @@ export function VisFullCnnShapes() {
           );
         })}
 
-        {/* Per-stage title (above) and shape label (below) — own clear rows */}
+        {/* Per-stage title (above) and shape label (below), own clear rows */}
         {STAGES.map((s, i) => {
           const cx = slotCenter(i);
           const isFocus = i === focus;

@@ -688,7 +688,7 @@ function ConcatInspector({
       >
         {skips
           ? `${up} upsampled + ${enc} skip = ${merged} channels into the conv.`
-          : `No skip: only ${up} upsampled channels — fine detail is lost.`}
+          : `No skip: only ${up} upsampled channels, fine detail is lost.`}
       </text>
     </g>
   );

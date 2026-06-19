@@ -4,8 +4,8 @@ import { useState } from "react";
 import { C, MONO } from "../frame";
 
 // The roofline model: arithmetic intensity (ops/byte, X) vs achievable
-// performance (FLOPs, Y). Performance is capped by two ceilings —
-// a sloped memory-bandwidth roof and a flat peak-compute roof — meeting
+// performance (FLOPs, Y). Performance is capped by two ceilings,
+// a sloped memory-bandwidth roof and a flat peak-compute roof, meeting
 // at the ridge point. achievable(I) = min(peakCompute, peakBandwidth * I).
 interface Op {
   name: string;

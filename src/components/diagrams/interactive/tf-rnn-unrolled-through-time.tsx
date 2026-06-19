@@ -264,7 +264,7 @@ export function TfRnnUnrolled() {
                 fill={lit ? C.green : C.line}
               />
 
-              {/* cell box (middle) — identical color/label for all = shared */}
+              {/* cell box (middle), identical color/label for all = shared */}
               <rect
                 x={cx - cellW / 2}
                 y={cellY}
@@ -344,7 +344,7 @@ export function TfRnnUnrolled() {
           textAnchor="middle"
           fill={C.muted}
         >
-          Same weights reused at every step — that&apos;s what handles any length.
+          Same weights reused at every step, that&apos;s what handles any length.
         </text>
       </svg>
 
@@ -379,7 +379,7 @@ export function TfRnnUnrolled() {
         <span style={{ color: C.muted, fontFamily: MONO }}>
           {active === 0
             ? "no timesteps lit yet"
-            : `lit through t=${active} — hidden state h carries a running summary of everything seen so far`}
+            : `lit through t=${active}, hidden state h carries a running summary of everything seen so far`}
         </span>
       </div>
     </div>

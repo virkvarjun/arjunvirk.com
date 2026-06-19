@@ -307,7 +307,7 @@ export function VitPatches() {
       <Arrow x1={326} y1={92} x2={350} y2={92} color={C.muted} width={1} head={5} />
       <Box x={356} y={60} w={56} h={64} label="transformer" fill={C.greenFill} stroke={C.green} size={8} />
       <Label x={220} y={188} anchor="middle" size={9} fill={C.muted}>
-        patches become tokens — then a standard transformer encoder, like BERT
+        patches become tokens, then a standard transformer encoder, like BERT
       </Label>
     </>
   );
@@ -334,7 +334,7 @@ export function Vlm() {
       <Box x={290} y={78} w={88} h={26} label="LLM (decoder)" fill={C.greenFill} stroke={C.green} size={8} />
       <Arrow x1={254} y1={57} x2={282} y2={57} color={C.muted} width={1} head={4} />
       <Label x={334} y={150} anchor="middle" size={9} fill={C.muted}>
-        image patches become tokens beside text — attention does the rest
+        image patches become tokens beside text, attention does the rest
       </Label>
     </>
   );

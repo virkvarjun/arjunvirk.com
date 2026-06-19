@@ -306,7 +306,7 @@ export function TfCrossAttention() {
           fill={C.muted}
           textAnchor="middle"
         >
-          Q from the decoder, K and V from the encoder — the decoder looks
+          Q from the decoder, K and V from the encoder, the decoder looks
           back at the input.
         </text>
       </svg>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { C, MONO, plotCurve } from "../frame";
 
 // Panel geometry: training step t on x in [0,T], learning rate eta on y in
-// [0, etaMax]. The schedule shapes eta(t) — bold early, gentle late.
+// [0, etaMax]. The schedule shapes eta(t), bold early, gentle late.
 const PX0 = 44;
 const PX1 = 424;
 const PY0 = 18;
@@ -314,7 +314,7 @@ export function LrSchedule() {
       </div>
 
       <p className="mt-3 text-xs text-[var(--muted)]">
-        The step size is itself shaped over time — bold early, gentle late.
+        The step size is itself shaped over time, bold early, gentle late.
       </p>
     </div>
   );

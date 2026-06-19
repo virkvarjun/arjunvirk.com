@@ -286,7 +286,7 @@ export function PcaExplorer() {
         </text>
         {nearPc1 && (
           <text x={12} y={67} fontSize={10} fill={C.ink} fontFamily={MONO}>
-            ≈ PC1 — maximum variance
+            ≈ PC1, maximum variance
           </text>
         )}
 

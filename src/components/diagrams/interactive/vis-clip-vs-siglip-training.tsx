@@ -76,7 +76,7 @@ type Cell = { i: number; j: number };
 export function VisClipVsSiglip() {
   const [batchIdx, setBatchIdx] = useState<number>(2);
   const [sel, setSel] = useState<Cell>({ i: 1, j: 1 });
-  // focus: "both" | "clip" | "siglip" — which loss to emphasise.
+  // focus: "both" | "clip" | "siglip", which loss to emphasise.
   const [focus, setFocus] = useState<"both" | "clip" | "siglip">("both");
 
   const clipProbs: number[][] = SIM.map((row: number[]) => clipRowProb(row));
@@ -319,7 +319,7 @@ export function VisClipVsSiglip() {
           fill={C.ink}
           textAnchor="start"
         >
-          {`cell (I${sel.i}, T${sel.j}) — ${
+          {`cell (I${sel.i}, T${sel.j}), ${
             isPos ? "POSITIVE pair" : "negative pair"
           }   sim = ${selSim.toFixed(2)}`}
         </text>
@@ -409,7 +409,7 @@ export function VisClipVsSiglip() {
           fill={C.muted}
           textAnchor="middle"
         >
-          independently — freeing it from giant batches.
+          independently, freeing it from giant batches.
         </text>
       </svg>
 

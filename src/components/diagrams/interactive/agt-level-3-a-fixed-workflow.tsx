@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Level 3: A Fixed Workflow — the human designs the chain; the AI fills fixed
+// Level 3: A Fixed Workflow, the human designs the chain; the AI fills fixed
 // slots. A support-inbox pipeline: trigger (new email) -> AI classify ->
 // route to a Slack channel -> AI draft a reply. The two AI slots are marked
 // distinctly from the human-defined structure around them.
@@ -20,9 +20,9 @@ interface Sample {
 }
 
 const SAMPLES: Sample[] = [
-  { id: "bug", category: "bug report", subject: "App crashes on upload", channel: "#engineering", draft: "Thanks for the report — we're on it." },
+  { id: "bug", category: "bug report", subject: "App crashes on upload", channel: "#engineering", draft: "Thanks for the report, we're on it." },
   { id: "billing", category: "billing", subject: "Charged twice this month", channel: "#billing", draft: "Sorry! Refunding the duplicate now." },
-  { id: "feature", category: "feature request", subject: "Please add dark mode", channel: "#product", draft: "Great idea — logged for the team." },
+  { id: "feature", category: "feature request", subject: "Please add dark mode", channel: "#product", draft: "Great idea, logged for the team." },
 ];
 
 interface Slot {
@@ -189,7 +189,7 @@ export function AgtLevel3AFixedWorkflow() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Swap the category and the routing changes — but the pipeline&rsquo;s shape never does. The AI is a smart component, not the
+        Swap the category and the routing changes, but the pipeline&rsquo;s shape never does. The AI is a smart component, not the
         driver: it fills the classify and draft slots inside a structure the human fixed in advance.
       </p>
     </div>

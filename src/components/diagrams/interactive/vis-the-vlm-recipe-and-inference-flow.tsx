@@ -620,7 +620,7 @@ export function VisVlmRecipe() {
           fontFamily={MONO}
           textAnchor="middle"
         >
-          concatenate with text, and generate — that&apos;s a VLM.
+          concatenate with text, and generate, that&apos;s a VLM.
         </text>
       </svg>
 

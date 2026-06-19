@@ -162,7 +162,7 @@ export function SumOverPathsGraph() {
           </text>
         </g>
 
-        {/* Nodes — clicking selects the path(s) through them. */}
+        {/* Nodes, clicking selects the path(s) through them. */}
         <Node
           cx={NX.x}
           cy={NY.x}
@@ -238,7 +238,7 @@ export function SumOverPathsGraph() {
           both
         </button>
         <span className="font-mono text-[var(--muted)]">
-          x reaches y by two routes — dy/dx sums them, just like a neuron feeding
+          x reaches y by two routes, dy/dx sums them, just like a neuron feeding
           many downstream neurons.
         </span>
       </div>

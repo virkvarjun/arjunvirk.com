@@ -139,7 +139,7 @@ export function AdamDecomposition() {
         />
         <polyline points={poly(S.mHat, m1.y)} fill="none" stroke={C.blue} strokeWidth={2} />
         <text x={X0} y={TRACKS[0].y0 - 6} fontSize={10} fill={C.blue} fontFamily={MONO}>
-          first moment m_t — the momentum part: which direction, smoothed
+          first moment m_t, the momentum part: which direction, smoothed
         </text>
         <text x={mapX(6)} y={m1.y(S.m[6]) + 14} fontSize={9} fill={C.blue} fontFamily={MONO} opacity={0.8}>
           m_t (raw, starts ~0)
@@ -152,7 +152,7 @@ export function AdamDecomposition() {
         <line x1={X0} y1={m2.zeroY} x2={X1} y2={m2.zeroY} stroke={C.grid} strokeWidth={1} />
         <polyline points={poly(S.v, m2.y)} fill="none" stroke={C.coral} strokeWidth={2} />
         <text x={X0} y={TRACKS[1].y0 - 6} fontSize={10} fill={C.coral} fontFamily={MONO}>
-          second moment v_t — the RMSProp part: how big the gradients have been
+          second moment v_t, the RMSProp part: how big the gradients have been
         </text>
 
         {/* track 3: final step */}
@@ -195,7 +195,7 @@ export function AdamDecomposition() {
           second moment
         </button>
         <span className="font-mono text-[var(--muted)]">
-          Adam isn&apos;t a new idea — it&apos;s the two previous ideas running at once.
+          Adam isn&apos;t a new idea, it&apos;s the two previous ideas running at once.
         </span>
       </div>
     </div>

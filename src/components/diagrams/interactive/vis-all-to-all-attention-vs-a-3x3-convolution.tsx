@@ -147,7 +147,7 @@ export function VisAttentionVsConv() {
           fontSize={10}
           fill={C.blue}
         >
-          ViT layer — attention
+          ViT layer, attention
         </text>
         <text
           x={RIGHT_X + GRID_W / 2}
@@ -157,7 +157,7 @@ export function VisAttentionVsConv() {
           fontSize={10}
           fill={C.coral}
         >
-          Conv layer — 3x3
+          Conv layer, 3x3
         </text>
 
         {/* Attention all-to-all lines (behind cells) */}

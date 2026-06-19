@@ -55,10 +55,10 @@ export function AgentLoop() {
 // 6.2 The four levels of AI usage
 export function FourLevels() {
   const levels = [
-    { n: "Level 1 — Chat", d: "ask, copy, paste", color: C.line },
-    { n: "Level 2 — Tools", d: "model calls APIs / runs code", color: C.green },
-    { n: "Level 3 — Workflows", d: "AI in fixed, human-designed slots", color: C.blue },
-    { n: "Level 4 — Agents", d: "loops, decides, acts unprompted", color: C.coral },
+    { n: "Level 1, Chat", d: "ask, copy, paste", color: C.line },
+    { n: "Level 2, Tools", d: "model calls APIs / runs code", color: C.green },
+    { n: "Level 3, Workflows", d: "AI in fixed, human-designed slots", color: C.blue },
+    { n: "Level 4, Agents", d: "loops, decides, acts unprompted", color: C.coral },
   ];
   return (
     <>
@@ -99,7 +99,7 @@ export function ToolCall() {
       <Box x={150} y={120} w={130} h={30} label="model continues" />
       <Arrow x1={310} y1={135} x2={282} y2={135} color={C.muted} width={1} head={4} />
       <Label x={217} y={172} anchor="middle" size={9} fill={C.muted}>
-        the model never touches your APIs — it describes, your harness arbitrates
+        the model never touches your APIs, it describes, your harness arbitrates
       </Label>
     </>
   );
@@ -144,7 +144,7 @@ export function McpNxM() {
         </g>
       ))}
       <Label x={233} y={206} anchor="middle" size={9} fill={C.muted}>
-        one protocol — build a server once, every client gets it
+        one protocol, build a server once, every client gets it
       </Label>
     </>
   );

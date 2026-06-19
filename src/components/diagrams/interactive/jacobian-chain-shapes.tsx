@@ -140,7 +140,7 @@ export function JacobianChainShapes() {
         role="img"
         aria-label="Jacobian chain rule shapes"
       >
-        {/* Outer dimensions m and n survive — highlight bar under result. */}
+        {/* Outer dimensions m and n survive, highlight bar under result. */}
         {placed.map((pl, i) => {
           const result = (
             <MatrixBlock
@@ -232,7 +232,7 @@ export function JacobianChainShapes() {
 
         {/* Backprop note. */}
         <text x={18} y={186} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
-          a network is a deep composition — backprop multiplies this
+          a network is a deep composition, backprop multiplies this
         </text>
         <text x={18} y={198} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
           chain of Jacobians from output back to input.

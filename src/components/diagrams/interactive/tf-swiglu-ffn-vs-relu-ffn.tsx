@@ -574,7 +574,7 @@ export function TfSwiglu() {
           fill={C.ink}
           fontFamily={MONO}
         >
-          3 matrices (W1, W2, W3) vs 2 — so SwiGLU shrinks d_ff to ~(8/3)·d_model
+          3 matrices (W1, W2, W3) vs 2, so SwiGLU shrinks d_ff to ~(8/3)·d_model
         </text>
         <text
           x={20}
@@ -608,7 +608,7 @@ export function TfSwiglu() {
           fontFamily={MONO}
           textAnchor="middle"
         >
-          A multiplicative gate lets one projection modulate the other — more
+          A multiplicative gate lets one projection modulate the other, more
           expressive per parameter.
         </text>
       </svg>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// The Agent Loop — the engine underneath every agent framework.
+// The Agent Loop, the engine underneath every agent framework.
 // Goal in -> LLM reasons -> either calls a tool or emits a final answer.
 // A tool call produces an observation that feeds back into the reasoner;
 // the loop ends only when the model emits a final answer instead of a tool.
@@ -93,7 +93,7 @@ export function AgtTheAgentLoop() {
         if (done) {
           setActive("final");
           setFinished(true);
-          push({ kind: "final", text: "final answer: emitted — loop exits. ✓" });
+          push({ kind: "final", text: "final answer: emitted, loop exits. ✓" });
         } else {
           setActive("tool");
           const f = TURN_FLAVOR[turn % TURN_FLAVOR.length];
@@ -110,7 +110,7 @@ export function AgtTheAgentLoop() {
       case "observe": {
         setActive("reason");
         setTurn((t) => t + 1);
-        push({ kind: "reason", text: "reason: that's done — what's next?" });
+        push({ kind: "reason", text: "reason: that's done, what's next?" });
         break;
       }
       default:

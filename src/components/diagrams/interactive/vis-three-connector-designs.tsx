@@ -133,7 +133,7 @@ export function VisThreeConnectors() {
           fontSize={10}
           fill={C.muted}
         >
-          Bridging a vision encoder to an LLM —{" "}
+          Bridging a vision encoder to an LLM,{" "}
           <tspan fill={d.accent}>{d.name}</tspan>
           <tspan fill={C.muted}> ({d.family})</tspan>
         </text>
@@ -230,7 +230,7 @@ export function VisThreeConnectors() {
           />
         ))}
 
-        {/* Connector region — content depends on the selected design */}
+        {/* Connector region, content depends on the selected design */}
         {/* Region frame */}
         <rect
           x={CON_X}

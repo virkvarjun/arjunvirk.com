@@ -10,7 +10,7 @@ import { C, MONO } from "../frame";
 //
 // Bottom panel: stacking L layers widens the effective receptive field of a
 // fixed query position. Layer 1 reaches w back, layer 2 reaches 2w, ...,
-// layer L reaches L*w — a "ripple" of expanding triangles.
+// layer L reaches L*w, a "ripple" of expanding triangles.
 
 // --- Top strip geometry ---
 const N = 16; // visible tokens in the strip
@@ -222,7 +222,7 @@ export function TfSlidingWindow() {
           {`L*w = ${layers} x ${w} = ${effective} tokens of effective context`}
         </text>
         <text x={DEPTH_X} y={VIEW_H - 24} fill={C.muted} fontFamily={MONO} fontSize={10}>
-          {`cost per layer ~ n*w (windowed) vs n^2 (full) — local stays cheap`}
+          {`cost per layer ~ n*w (windowed) vs n^2 (full), local stays cheap`}
         </text>
         <text x={DEPTH_X} y={VIEW_H - 10} fill={C.green} fontFamily={MONO} fontSize={9}>
           {`real model: ${realLayers} layers x ${realWindow} window = ~${realEffective.toLocaleString("en-US")}`}
@@ -268,7 +268,7 @@ export function TfSlidingWindow() {
       </div>
 
       <p className="mt-3 max-w-prose text-xs text-[var(--muted)]">
-        A small local window per layer, stacked deep, reaches far — that&rsquo;s how long
+        A small local window per layer, stacked deep, reaches far, that&rsquo;s how long
         context stays cheap.
       </p>
     </div>

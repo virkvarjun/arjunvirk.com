@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { C, MONO } from "../frame";
 
 // A fixed 4 -> 5 -> 4 -> 1 network. We illustrate signal flow with
-// hard-coded, deterministic numbers — no real training is performed.
+// hard-coded, deterministic numbers, no real training is performed.
 const SIZES = [4, 5, 4, 1] as const;
 
 // Precomputed forward activations per layer (0..1). The output layer's single

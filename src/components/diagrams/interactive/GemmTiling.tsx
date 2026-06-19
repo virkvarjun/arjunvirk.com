@@ -5,7 +5,7 @@ import { C, MONO } from "../frame";
 
 // GEMM tiling: a giant matmul C = A·B is decomposed into a grid of small
 // tile-multiplies. Each output tile C[i,j] = Σ_k A[i,k]·B[k,j] is an
-// independent accumulation — and each maps onto one tensor core that does a
+// independent accumulation, and each maps onto one tensor core that does a
 // whole small matmul per cycle. Many tiles run in parallel.
 
 const N = 4; // 4x4 grid of tiles per matrix
@@ -205,7 +205,7 @@ export function GemmTiling() {
         )}
         {all && (
           <text x={A_X} y={334} fontSize={9.5} fill={C.ink} fontFamily={MONO}>
-            {`${CORES.length} tiles compute at once — each on its own tensor core`}
+            {`${CORES.length} tiles compute at once, each on its own tensor core`}
           </text>
         )}
       </svg>
@@ -232,7 +232,7 @@ export function GemmTiling() {
 
       <p className="mt-2 text-xs text-[var(--muted)]">
         A giant matmul is many small tile-multiplies done in parallel and
-        summed. Each tile maps onto one tensor core — a unit that does a whole
+        summed. Each tile maps onto one tensor core, a unit that does a whole
         small matmul per cycle, which is why it is such a win.
       </p>
     </div>

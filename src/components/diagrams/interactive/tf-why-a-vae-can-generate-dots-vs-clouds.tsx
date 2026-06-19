@@ -74,7 +74,7 @@ export function TfVaeDotsVsClouds() {
   }
 
   // For the VAE map a sample is valid if it lands within ~1.6 sigma of any
-  // cloud's (grown) centre — clouds overlap so almost everywhere is covered.
+  // cloud's (grown) centre, clouds overlap so almost everywhere is covered.
   function vaeHit(s: { x: number; y: number }): Item | null {
     const sigma = VAE_SIGMA * (0.18 + 0.82 * grow);
     const reach = sigma * 1.6;

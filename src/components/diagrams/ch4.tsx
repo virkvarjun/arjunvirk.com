@@ -69,7 +69,7 @@ export function LstmCell() {
     <>
       <rect x={40} y={36} width={360} height={120} rx={8} fill="none" stroke={C.line} />
       <Label x={220} y={28} anchor="middle" size={10} fill={C.ink} weight={600}>
-        LSTM cell — the cell-state highway
+        LSTM cell, the cell-state highway
       </Label>
       {/* highway line */}
       <line x1={40} y1={64} x2={400} y2={64} stroke={C.coral} strokeWidth={2.5} />
@@ -337,7 +337,7 @@ export function LoRA() {
         rank r ≪ d
       </Label>
       <Label x={210} y={172} anchor="middle" size={10} fill={C.ink}>
-        W′ = W + (α/r) B·A   — train only B, A
+        W′ = W + (α/r) B·A  , train only B, A
       </Label>
     </>
   );

@@ -393,7 +393,7 @@ export function VisYoloGrid() {
           fontSize={9}
           fill={C.muted}
         >
-          An object belongs to the one cell holding its center —
+          An object belongs to the one cell holding its center,
         </text>
         <text
           x={VW / 2}

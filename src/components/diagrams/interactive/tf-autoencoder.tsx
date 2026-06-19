@@ -28,7 +28,7 @@ const FULL_DIM = GRID * GRID; // 64 "input pixels"
 
 // Deterministic reconstruction model: with a latent of size `z`, the network can
 // keep roughly z principal blocks of the image. We emulate this by averaging the
-// image into a coarse grid of bxb blocks (b grows as z shrinks) — a small z gives
+// image into a coarse grid of bxb blocks (b grows as z shrinks), a small z gives
 // a blurry, blocky reconstruction; a large z reproduces fine detail.
 function reconstruct(z: number): number[] {
   // Map latent size 1..64 to a block size 8..1 (more compression -> bigger blocks).

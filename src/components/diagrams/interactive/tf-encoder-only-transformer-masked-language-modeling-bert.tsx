@@ -48,7 +48,7 @@ const Y_INPUT = Y_ENC_TOP + ENC_H + 30; // input token chip row
 const Y_ATTN_TOP = Y_INPUT - 12; // where attention arcs spring from (chip tops)
 
 export function TfEncoderOnly() {
-  // Which masked slot is "active" (clicked) — drives the attention highlight.
+  // Which masked slot is "active" (clicked), drives the attention highlight.
   const [active, setActive] = useState<number>(MASK_IDX[0]);
   // Attention mode: encoder = bidirectional, decoder = causal/left-only.
   const [mode, setMode] = useState<"encoder" | "decoder">("encoder");
@@ -199,7 +199,7 @@ export function TfEncoderOnly() {
           textAnchor="middle"
           fontWeight={600}
         >
-          Encoder × L  —  {mode === "encoder"
+          Encoder × L ,  {mode === "encoder"
             ? "bidirectional self-attention"
             : "causal (left-only) self-attention"}
         </text>
@@ -342,7 +342,7 @@ export function TfEncoderOnly() {
         >
           {mode === "encoder"
             ? "context from BOTH sides (left + right)"
-            : "context from LEFT only — future tokens are hidden"}
+            : "context from LEFT only, future tokens are hidden"}
         </text>
 
         {/* ---- 80/10/10 masking-rule inset (bottom-left) ---- */}

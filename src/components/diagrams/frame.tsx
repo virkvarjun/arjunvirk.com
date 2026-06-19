@@ -18,7 +18,7 @@ export const C = {
 } as const;
 
 // Diagram text uses Computer Modern (CMU Serif) to match the chapter math
-// and the explainer videos. Scoped to diagrams only — the rest of the site
+// and the explainer videos. Scoped to diagrams only, the rest of the site
 // keeps its own fonts. Fallbacks apply only if CMU Serif fails to load.
 export const MONO = '"CMU Serif", ui-monospace, SFMono-Regular, Menlo, monospace';
 export const SANS = '"CMU Serif", ui-serif, Georgia, serif';
@@ -138,7 +138,7 @@ export function plotCurve(
 
 /**
  * Wrapper for an interactive diagram, which renders its own SVG plus HTML
- * controls (sliders, buttons) — so, unlike DiagramFrame, it does not provide
+ * controls (sliders, buttons), so, unlike DiagramFrame, it does not provide
  * the <svg> element itself.
  */
 export function InteractiveFrame({

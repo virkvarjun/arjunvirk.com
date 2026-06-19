@@ -390,7 +390,7 @@ export function VisVitSizes() {
           fontSize={9}
           fill={C.muted}
         >
-          Wider and deeper, MLPs 4× the hidden dim — params balloon quadratically with width.
+          Wider and deeper, MLPs 4× the hidden dim, params balloon quadratically with width.
         </text>
       </svg>
 

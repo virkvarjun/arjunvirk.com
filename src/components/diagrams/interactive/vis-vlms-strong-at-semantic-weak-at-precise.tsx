@@ -33,7 +33,7 @@ type Cap = {
   // one-line example shown in the readout band on click:
   task: string; // the question/task posed to the VLM
   result: string; // success or failure outcome
-  why: string; // why — ties back to token coarseness
+  why: string; // why, ties back to token coarseness
 };
 
 // Short labels are kept <= ~18 chars so they fit a 224px pill at fontSize 9.5.
@@ -44,7 +44,7 @@ const CAPS: Cap[] = [
     short: "Visual Q&A",
     task: "“What is happening in this scene?”",
     result: "Right: “a child flying a kite at the beach.”",
-    why: "Gist lives in coarse tokens — no exact pixels needed.",
+    why: "Gist lives in coarse tokens, no exact pixels needed.",
   },
   {
     id: "caption",
@@ -92,7 +92,7 @@ const CAPS: Cap[] = [
     short: "Exact localize",
     task: "“Give the bounding box of the left cup.”",
     result: "Wrong: box is offset by tens of pixels.",
-    why: "One token covers a wide patch — edges blur.",
+    why: "One token covers a wide patch, edges blur.",
   },
   {
     id: "count",
@@ -246,7 +246,7 @@ export function VisVlmStrengthsWeaknesses() {
           fill={C.muted}
         >
           {reframe
-            ? "Visual tokens are coarse: great for meaning, not pixel-exact — hand precision to SAM-style models."
+            ? "Visual tokens are coarse: great for meaning, not pixel-exact, hand precision to SAM-style models."
             : "Visual tokens are coarse: each one summarizes a whole patch, so fine spatial detail is lost."}
         </text>
 
@@ -365,7 +365,7 @@ export function VisVlmStrengthsWeaknesses() {
           fontSize={9}
           fill={C.muted}
         >
-          Great at what an image means, shakier on exact positions and counts —
+          Great at what an image means, shakier on exact positions and counts,
         </text>
         <text
           x={VW / 2}

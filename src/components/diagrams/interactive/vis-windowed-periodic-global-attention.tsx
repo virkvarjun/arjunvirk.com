@@ -32,7 +32,7 @@ const GRID_Y = 70;
 const GRID_W = VSIDE * STEP - GAP; // 286
 const GRID_BOTTOM = GRID_Y + GRID_W; // 356
 
-// Query token sits at visual cell (3,4) — middle-ish, away from edges.
+// Query token sits at visual cell (3,4), middle-ish, away from edges.
 const Q_R = 3;
 const Q_C = 4;
 
@@ -343,7 +343,7 @@ export function VisWindowedAttention() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Cheap local windows most layers, occasional global mixing &mdash; global
+        Cheap local windows most layers, occasional global mixing, global
         reasoning without paying O(N^2) everywhere.
       </p>
     </div>

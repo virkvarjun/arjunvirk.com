@@ -228,7 +228,7 @@ export function CostSurface() {
 
         {/* fixed note shown in both stages */}
         <text x={VW / 2} y={240} fontSize={9} fill={C.muted} fontFamily={MONO} textAnchor="middle">
-          a real network has millions of weights — same downhill logic, just more directions
+          a real network has millions of weights, same downhill logic, just more directions
         </text>
       </svg>
 

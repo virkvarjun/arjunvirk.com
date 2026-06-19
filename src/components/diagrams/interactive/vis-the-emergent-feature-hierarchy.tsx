@@ -41,7 +41,7 @@ const TIERS: Tier[] = [
   // Middle layers (center row): corners, stripes, eye-like, wheel-like parts.
   {
     name: "Middle layers",
-    blurb: "corners, stripes, curves — eye-like and wheel-like parts",
+    blurb: "corners, stripes, curves, eye-like and wheel-like parts",
     units: [
       { id: "m0", label: "corner", feeds: ["e0", "e2"] },
       { id: "m1", label: "stripes", feeds: ["e1", "e2"] },
@@ -348,7 +348,7 @@ export function VisFeatureHierarchy() {
           {`traces back through ${traceIds.size - 1} feeding features`}
         </text>
         <text x={14} y={READOUT_Y + 36} fontFamily={MONO} fontSize={9.5} fill={C.muted} textAnchor="start">
-          {`depth focus: ${TIERS[depth].name} — ${TIERS[depth].blurb.slice(0, 44)}`}
+          {`depth focus: ${TIERS[depth].name}, ${TIERS[depth].blurb.slice(0, 44)}`}
         </text>
 
         {/* ----- Caption band (very bottom, split to fit W-24) ----- */}

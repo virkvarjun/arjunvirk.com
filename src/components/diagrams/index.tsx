@@ -236,7 +236,7 @@ type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
 // Maps the `diagram.id` referenced in chapters.ts to a rendered component.
 const registry: Record<string, Entry> = {
-  // chapter 1 (Neural Networks) — interactive
+  // chapter 1 (Neural Networks), interactive
   "neuron-playground": { Comp: NeuronPlayground, interactive: true },
   "linear-collapse": { Comp: LinearCollapse, interactive: true },
   "activation-explorer": { Comp: ActivationExplorer, interactive: true },
@@ -255,7 +255,7 @@ const registry: Record<string, Entry> = {
   "adam-decomposition": { Comp: AdamDecomposition, interactive: true },
   "lr-schedule": { Comp: LrSchedule, interactive: true },
   "over-underfitting": { Comp: OverUnderfitting, interactive: true },
-  // chapter 2 (Math of Neural Networks) — interactive
+  // chapter 2 (Math of Neural Networks), interactive
   "weight-index-decoder": { Comp: WeightIndexDecoder, interactive: true },
   "jacobian-builder": { Comp: JacobianBuilder, interactive: true },
   "sum-over-paths-graph": { Comp: SumOverPathsGraph, interactive: true },
@@ -265,7 +265,7 @@ const registry: Record<string, Entry> = {
   "naive-vs-backprop": { Comp: NaiveVsBackprop, interactive: true },
   "four-equations-walk": { Comp: FourEquationsWalk, interactive: true },
   "outer-product": { Comp: OuterProduct, interactive: true },
-  // chapter 3 (Classical ML Algorithms) — interactive
+  // chapter 3 (Classical ML Algorithms), interactive
   "linreg-fit": { Comp: LinregFit, interactive: true },
   "logistic-explainer": { Comp: LogisticExplainer, interactive: true },
   "knn-playground": { Comp: KnnPlayground, interactive: true },
@@ -276,7 +276,7 @@ const registry: Record<string, Entry> = {
   "boosting-rounds": { Comp: BoostingRounds, interactive: true },
   "kmeans-motion": { Comp: KmeansMotion, interactive: true },
   "pca-explorer": { Comp: PcaExplorer, interactive: true },
-  // chapter 4 (AI Hardware and Compute) — interactive
+  // chapter 4 (AI Hardware and Compute), interactive
   "von-neumann-bottleneck": { Comp: VonNeumannBottleneck, interactive: true },
   "cpu-vs-gpu-race": { Comp: CpuVsGpuRace, interactive: true },
   "gpu-hierarchy": { Comp: GpuHierarchy, interactive: true },
@@ -287,7 +287,7 @@ const registry: Record<string, Entry> = {
   "cuda-tower": { Comp: CudaTower, interactive: true },
   "parallelism-strategies": { Comp: ParallelismStrategies, interactive: true },
   "roofline-interactive": { Comp: RooflineInteractive, interactive: true },
-  // chapter 5 (Transformers) — interactive
+  // chapter 5 (Transformers), interactive
   "tf-feedforward-neural-network": { Comp: TfFeedforward, interactive: true },
   "tf-rnn-unrolled-through-time": { Comp: TfRnnUnrolled, interactive: true },
   "tf-lstm-cell": { Comp: TfLstmCell, interactive: true },
@@ -445,7 +445,7 @@ const registry: Record<string, Entry> = {
   "mcp-nxm": { Comp: McpNxM, viewBox: "0 0 440 220" },
   "agent-patterns": { Comp: AgentPatterns, viewBox: "0 0 330 185" },
   "lethal-trifecta": { Comp: LethalTrifecta, viewBox: "0 0 380 260" },
-  // chapter 7 (Agentic Engineering) — interactive
+  // chapter 7 (Agentic Engineering), interactive
   "agt-the-agent-loop": { Comp: AgtTheAgentLoop, interactive: true },
   "agt-the-four-levels-of-ai-usage": { Comp: AgtTheFourLevelsOfAiUsage, interactive: true },
   "agt-level-2-a-single-tool-round-trip": { Comp: AgtLevel2ASingleToolRoundTrip, interactive: true },

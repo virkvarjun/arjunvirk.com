@@ -128,7 +128,7 @@ export function VisDpmSlidingWindow() {
         viewBox={`0 0 ${VW} ${VH}`}
         className="h-auto w-full"
         role="img"
-        aria-label="Pre-deep-learning object detection slides a hand-crafted classifier window across an image at many positions and several scales. The scan visits every window in turn and fires only where the score is high. A panel lists the separate, individually tuned pipeline stages — HOG features, a root template, part templates, deformation, and a combined score — showing why the approach was accurate but slow."
+        aria-label="Pre-deep-learning object detection slides a hand-crafted classifier window across an image at many positions and several scales. The scan visits every window in turn and fires only where the score is high. A panel lists the separate, individually tuned pipeline stages, HOG features, a root template, part templates, deformation, and a combined score, showing why the approach was accurate but slow."
       >
         {/* Title band */}
         <text
@@ -366,7 +366,7 @@ export function VisDpmSlidingWindow() {
           cost = positions × scales × 5 stages = {TOTAL} windows
         </text>
 
-        {/* Caption band — split so each line fits within VW - 24 px */}
+        {/* Caption band, split so each line fits within VW - 24 px */}
         <text
           x={VW / 2}
           y={VH - 26}
@@ -375,7 +375,7 @@ export function VisDpmSlidingWindow() {
           fontSize={9}
           fill={C.muted}
         >
-          Slide a hand-crafted classifier everywhere, at every scale —
+          Slide a hand-crafted classifier everywhere, at every scale,
         </text>
         <text
           x={VW / 2}

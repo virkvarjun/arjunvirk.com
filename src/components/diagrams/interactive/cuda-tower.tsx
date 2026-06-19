@@ -33,7 +33,7 @@ const LAYERS: Layer[] = [
 ];
 
 const TOP = 0;
-const MOAT = 1; // libraries band — the moat, emphasized + default selection
+const MOAT = 1; // libraries band, the moat, emphasized + default selection
 
 // Tower geometry within the 440x268 viewBox.
 const BX = 40; // left edge of bands
@@ -145,7 +145,7 @@ export function CudaTower() {
                   fill={C.coral}
                   fontFamily={MONO}
                 >
-                  the moat — a decade of optimized libraries, hard to copy
+                  the moat, a decade of optimized libraries, hard to copy
                 </text>
               )}
             </g>

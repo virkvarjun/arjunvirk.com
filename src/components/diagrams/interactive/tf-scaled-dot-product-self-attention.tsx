@@ -83,7 +83,7 @@ export function TfSelfAttention() {
   const readout: string =
     hover != null
       ? `${TOKENS[hover.i]} -> ${TOKENS[hover.j]} : ${weights[hover.i][hover.j].toFixed(2)} (token "${TOKENS[hover.i]}" attends to "${TOKENS[hover.j]}")`
-      : `row "${TOKENS[sel]}" highlighted — click a token to query it, hover a cell for its weight`;
+      : `row "${TOKENS[sel]}" highlighted, click a token to query it, hover a cell for its weight`;
 
   // Stroke width for weighted arrows from the selected query token.
   const arrowW = (w: number): number => 0.6 + w * 9;

@@ -14,7 +14,7 @@ type Block = {
   kind: Kind;
 };
 
-// LEFT — encoder layer, bottom (index 0) to top. Shape stays (n,d) throughout.
+// LEFT, encoder layer, bottom (index 0) to top. Shape stays (n,d) throughout.
 const ENCODER: Block[] = [
   {
     id: "enc-in",
@@ -53,7 +53,7 @@ const ENCODER: Block[] = [
   },
 ];
 
-// RIGHT — decoder layer, bottom (index 0) to top. Shape stays (m,d) throughout.
+// RIGHT, decoder layer, bottom (index 0) to top. Shape stays (m,d) throughout.
 const DECODER: Block[] = [
   {
     id: "dec-in",
@@ -80,7 +80,7 @@ const DECODER: Block[] = [
     id: "dec-cross",
     lines: ["Cross-Attn", "Q:dec K,V:enc"],
     shape: "(m,d)",
-    desc: "Decoder queries attend over the encoder output — stacks meet here.",
+    desc: "Decoder queries attend over the encoder output, stacks meet here.",
     kind: "head",
   },
   {
@@ -582,13 +582,13 @@ export function TfFullTrace() {
           </>
         ) : (
           <text x={16} y={captionTop + 36} fontSize={9.5} fontFamily={MONO} fill={C.muted}>
-            Same shape in, same shape out — that&apos;s why layers stack freely.
+            Same shape in, same shape out, that&apos;s why layers stack freely.
           </text>
         )}
 
         {/* Caption */}
         <text x={W / 2} y={H - 8} fontSize={9} fontFamily={MONO} textAnchor="middle" fill={C.muted}>
-          Same shape in, same shape out — that&apos;s why you can stack layers freely.
+          Same shape in, same shape out, that&apos;s why you can stack layers freely.
         </text>
       </svg>
 

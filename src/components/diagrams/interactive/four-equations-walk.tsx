@@ -6,10 +6,10 @@ import { C, MONO } from "../frame";
 // The four backprop equations, walked one at a time over a single network:
 // input(3) -> hidden(4) -> hidden(3) -> output(2).
 //
-// BP1  delta^L = (a^L - y) (.) sigma'(z^L)        — seed error at output
-// BP2  delta^l = ((W^{l+1})^T delta^{l+1}) (.) sigma'(z^l) — route back, one layer at a time
-// BP3  dC/db^l = delta^l                          — bias gradient is the local delta
-// BP4  dC/dw_{jk} = a^{l-1}_k * delta^l_j          — weight gradient = source act x dest delta
+// BP1  delta^L = (a^L - y) (.) sigma'(z^L)       , seed error at output
+// BP2  delta^l = ((W^{l+1})^T delta^{l+1}) (.) sigma'(z^l), route back, one layer at a time
+// BP3  dC/db^l = delta^l                         , bias gradient is the local delta
+// BP4  dC/dw_{jk} = a^{l-1}_k * delta^l_j         , weight gradient = source act x dest delta
 
 type Step = "idle" | "bp1" | "bp2a" | "bp2b" | "bp3" | "bp4";
 
@@ -72,7 +72,7 @@ const EQ: Record<Step, { eq: string; cap: string }> = {
   },
   bp2a: {
     eq: "δ^(ℓ) = ((W^(ℓ+1))ᵀ δ^(ℓ+1)) ⊙ σ'(z^(ℓ))",
-    cap: "BP2: route δ back through Wᵀ, then gate it by σ' — one layer at a time.",
+    cap: "BP2: route δ back through Wᵀ, then gate it by σ', one layer at a time.",
   },
   bp2b: {
     eq: "δ^(ℓ) = ((W^(ℓ+1))ᵀ δ^(ℓ+1)) ⊙ σ'(z^(ℓ))",

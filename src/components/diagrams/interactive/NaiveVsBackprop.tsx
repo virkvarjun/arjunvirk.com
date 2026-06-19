@@ -289,7 +289,7 @@ export function NaiveVsBackprop() {
           </text>
         </g>
 
-        {/* Left: naive — accumulated traced paths, thicker where re-trodden */}
+        {/* Left: naive, accumulated traced paths, thicker where re-trodden */}
         <NetEdges
           panelX0={LEFT_X0}
           colorOf={naiveEdgeColor}
@@ -301,7 +301,7 @@ export function NaiveVsBackprop() {
           strokeOf={naiveNodeStroke}
         />
 
-        {/* Right: backprop — one error per neuron, then cheap reads */}
+        {/* Right: backprop, one error per neuron, then cheap reads */}
         <NetEdges panelX0={RIGHT_X0} colorOf={bpEdgeColor} widthOf={bpEdgeWidth} />
         <NetNodes
           panelX0={RIGHT_X0}
@@ -329,7 +329,7 @@ export function NaiveVsBackprop() {
           })}
         </g>
 
-        {/* Counters — the punchline */}
+        {/* Counters, the punchline */}
         <g fontFamily={MONO}>
           <text x={LEFT_X0 + 8} y={TOP + 162} fontSize={13} fill={C.coral}>
             naive ops: {naiveOps}
@@ -354,7 +354,7 @@ export function NaiveVsBackprop() {
             fill={C.muted}
             textAnchor="middle"
           >
-            same gradients, hugely different cost — backprop never recomputes a
+            same gradients, hugely different cost, backprop never recomputes a
             shared subpath
           </text>
         </g>
@@ -383,7 +383,7 @@ export function NaiveVsBackprop() {
           Reset
         </button>
         <span className="font-mono text-[var(--muted)]">
-          naive {naiveOps} vs backprop {bpOps} ops — the gap widens with every
+          naive {naiveOps} vs backprop {bpOps} ops, the gap widens with every
           weight.
         </span>
       </div>

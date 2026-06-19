@@ -126,7 +126,7 @@ export function WarpDivergence() {
 
             {/* data array */}
             <text x={220} y={DY - 12} fontSize={10} fill={C.muted} fontFamily={MONO} textAnchor="middle">
-              data[ ] — 16 elements
+              data[ ], 16 elements
             </text>
             {Array.from({ length: N_THREADS }).map((_, i) => {
               const isActive = i === active;
@@ -171,8 +171,8 @@ export function WarpDivergence() {
               {branch === "convergent"
                 ? "all lanes: y = a * x"
                 : pass === 0
-                  ? "pass 1 — if (lane < 16): y = a * x"
-                  : "pass 2 — else: y = b - x"}
+                  ? "pass 1, if (lane < 16): y = a * x"
+                  : "pass 2, else: y = b - x"}
             </text>
 
             {/* 32 lanes */}
@@ -231,7 +231,7 @@ export function WarpDivergence() {
 
             {/* pass cost summary */}
             <text x={220} y={208} fontSize={12} fill={C.ink} fontFamily={MONO} textAnchor="middle" fontWeight={600}>
-              {branch === "convergent" ? "1 pass: all 32 lanes active" : "2 passes: half the lanes idle each pass — wasted work"}
+              {branch === "convergent" ? "1 pass: all 32 lanes active" : "2 passes: half the lanes idle each pass, wasted work"}
             </text>
             <text x={220} y={228} fontSize={10} fill={branch === "convergent" ? C.green : C.coral} fontFamily={MONO} textAnchor="middle">
               {branch === "convergent"

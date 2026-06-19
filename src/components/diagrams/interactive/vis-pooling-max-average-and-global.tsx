@@ -347,7 +347,7 @@ export function VisPooling() {
               fill={shifted ? C.green : C.muted}
             >
               {shifted
-                ? "shifted +1px — max output unchanged"
+                ? "shifted +1px, max output unchanged"
                 : "toggle shift to test invariance"}
             </text>
           </>

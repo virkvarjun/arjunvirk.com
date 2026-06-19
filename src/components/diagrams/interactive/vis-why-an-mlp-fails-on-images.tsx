@@ -7,7 +7,7 @@ import { C, MONO } from "../frame";
 // Left: flattening a WxHx3 image into a long vector and fully connecting it to
 // a hidden layer explodes the first-layer weight count (in_dim * hidden_dim).
 // Right: the same object at different positions lights up an entirely different
-// set of input neurons — an MLP has no translation invariance.
+// set of input neurons, an MLP has no translation invariance.
 
 // Discrete image-size choices for the slider (square side, 3 colour channels).
 const SIZES: readonly number[] = [32, 64, 96, 128, 160, 192, 224];

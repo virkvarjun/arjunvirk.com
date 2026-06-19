@@ -5,11 +5,11 @@ import { C, MONO } from "../frame";
 
 // Three Phases of Training an LLM.
 // A left-to-right pipeline of three stages, each clickable:
-//   1. PRETRAINING  — huge corpus (trillions of tokens), next-token prediction,
+//   1. PRETRAINING , huge corpus (trillions of tokens), next-token prediction,
 //      yields a "base model" that can complete text. Most of the compute.
-//   2. SFT          — curated (instruction, good-response) pairs, supervised
+//   2. SFT         , curated (instruction, good-response) pairs, supervised
 //      fine-tuning, teaches the assistant format / instruction following.
-//   3. RLHF         — human preference ratings train a reward model, then the
+//   3. RLHF        , human preference ratings train a reward model, then the
 //      policy is optimized against it (DPO is a reward-model-free variant);
 //      yields a helpful, harmless, aligned model.
 // Below the pipeline a compute-scale bar shows pretraining dwarfing the others.

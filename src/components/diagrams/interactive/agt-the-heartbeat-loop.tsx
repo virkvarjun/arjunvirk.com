@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// The Heartbeat Loop — what makes OpenClaw autonomous. A timer fires (every
+// The Heartbeat Loop, what makes OpenClaw autonomous. A timer fires (every
 // 30 min), the agent reads HEARTBEAT.md, decides act-or-skip, and either takes
 // action (messages you) or replies the sentinel HEARTBEAT_OK, which the gateway
 // silently drops. Interactive: tick the timer; toggle checklist items between
@@ -17,7 +17,7 @@ interface Item {
 
 const ITEMS: Item[] = [
   { id: "email", label: "Unread urgent email?" },
-  { id: "digest", label: "Monday 9am — post digest?" },
+  { id: "digest", label: "Monday 9am, post digest?" },
   { id: "issues", label: "New GitHub issues to triage?" },
   { id: "rent", label: "Rent due in 3 days?" },
 ];
@@ -166,7 +166,7 @@ export function AgtTheHeartbeatLoop() {
       )}
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        On every tick the agent reads its checklist and decides. Silence — the exact string <code className="font-mono">HEARTBEAT_OK</code> — is
+        On every tick the agent reads its checklist and decides. Silence, the exact string <code className="font-mono">HEARTBEAT_OK</code>, is
         dropped; anything else reaches you. Toggle an item to &ldquo;needs action&rdquo; and tick again to see it surface a message.
       </p>
     </div>

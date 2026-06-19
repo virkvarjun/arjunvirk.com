@@ -4,7 +4,7 @@ import { useState } from "react";
 import { C, MONO } from "../frame";
 
 // Four precision levels. `levels` = number of representable steps shown on the
-// quantization grid (a deliberately small, illustrative count — real formats
+// quantization grid (a deliberately small, illustrative count, real formats
 // have far more, but the point is "fewer bits -> coarser grid"). `bytes` is the
 // real per-weight storage cost used for the 70B memory figure.
 type Precision = {
@@ -104,7 +104,7 @@ export function TfQuantization() {
           Quantization
         </text>
         <text x={16} y={38} fontSize={9.5} fill={C.muted} fontFamily={MONO}>
-          one weight at {p.key} — {p.bits} bits, {p.levels - 1} grid steps shown
+          one weight at {p.key}, {p.bits} bits, {p.levels - 1} grid steps shown
         </text>
 
         {/* ---------- Section 1: bit-width cells ---------- */}

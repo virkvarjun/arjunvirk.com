@@ -14,7 +14,7 @@ const LEVELS = ["Chip", "GPC", "SM", "Inside SM"] as const;
 const PARTS: Array<Part & { x: number; y: number; w: number; h: number; fill: string }> = [
   {
     name: "CUDA cores",
-    desc: "128 scalar FP/INT lanes — the bulk of general-purpose math.",
+    desc: "128 scalar FP/INT lanes, the bulk of general-purpose math.",
     x: 24,
     y: 40,
     w: 150,
@@ -23,7 +23,7 @@ const PARTS: Array<Part & { x: number; y: number; w: number; h: number; fill: st
   },
   {
     name: "Tensor cores",
-    desc: "4 matrix-multiply units — accelerate the GEMMs in deep nets.",
+    desc: "4 matrix-multiply units, accelerate the GEMMs in deep nets.",
     x: 186,
     y: 40,
     w: 96,
@@ -32,7 +32,7 @@ const PARTS: Array<Part & { x: number; y: number; w: number; h: number; fill: st
   },
   {
     name: "Special Function Units",
-    desc: "SFUs: fast transcendentals — exp, sin, rsqrt, etc.",
+    desc: "SFUs: fast transcendentals, exp, sin, rsqrt, etc.",
     x: 186,
     y: 92,
     w: 96,
@@ -50,7 +50,7 @@ const PARTS: Array<Part & { x: number; y: number; w: number; h: number; fill: st
   },
   {
     name: "Register file",
-    desc: "Per-thread fast storage — 256 KB of registers per SM.",
+    desc: "Per-thread fast storage, 256 KB of registers per SM.",
     x: 294,
     y: 92,
     w: 122,

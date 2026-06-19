@@ -475,7 +475,7 @@ export function VisPromptableSegmentation() {
               fontSize={9.5}
               fill={C.muted}
             >
-              Pick a prompt below — point, box, or mask — and watch
+              Pick a prompt below, point, box, or mask, and watch
             </text>
             <text
               x={MARGIN + 12}

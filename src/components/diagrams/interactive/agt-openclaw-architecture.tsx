@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// OpenClaw Architecture — one local gateway process with five subsystems;
+// OpenClaw Architecture, one local gateway process with five subsystems;
 // the model is the only external dependency. Messaging channels (and a
 // heartbeat timer) feed in on the left; local files (workspace, memory,
 // skills) sit along the bottom; the agent runtime reaches out to a single
@@ -32,7 +32,7 @@ const SUB_H = 30;
 
 const SUBS: Sub[] = [
   { id: "adapters", title: "Channel adapters", job: "Normalize inbound messages to one internal format; serialize replies back out.", x: GW_X + 16, y: GW_Y + 30 },
-  { id: "session", title: "Session manager", job: "Resolve who's talking and in what context — DMs collapse to one session, group chats get their own.", x: GW_X + 16, y: GW_Y + 70 },
+  { id: "session", title: "Session manager", job: "Resolve who's talking and in what context, DMs collapse to one session, group chats get their own.", x: GW_X + 16, y: GW_Y + 70 },
   { id: "queue", title: "Queue", job: "Serialize runs per session so messages arriving mid-run don't cause race conditions.", x: GW_X + 16, y: GW_Y + 110 },
   { id: "runtime", title: "Agent runtime", job: "The heart: assemble context from the Markdown files and run the agent loop until done.", x: GW_X + 144, y: GW_Y + 50 },
   { id: "control", title: "Control plane", job: "A WebSocket API (port 18789) every client connects to: CLI, macOS app, web UI, mobile.", x: GW_X + 144, y: GW_Y + 110 },
@@ -149,7 +149,7 @@ export function AgtOpenclawArchitecture() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Five subsystems in one local process. The model is the only thing that lives off your machine — channels, memory, state,
+        Five subsystems in one local process. The model is the only thing that lives off your machine, channels, memory, state,
         and skills all stay on your hardware as plain files.
       </p>
     </div>

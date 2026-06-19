@@ -341,7 +341,7 @@ export function VisYoloArchitecture() {
           strokeWidth={1}
         />
         <text x={18} y={284} fontFamily={MONO} fontSize={11} fill={C.ink}>
-          Output tensor 7x7x30 &mdash; click a cell to read its 30 numbers
+          Output tensor 7x7x30, click a cell to read its 30 numbers
         </text>
 
         {/* 7x7 prediction grid (clickable) */}

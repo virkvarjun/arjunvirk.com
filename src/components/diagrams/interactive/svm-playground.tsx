@@ -323,7 +323,7 @@ export function SvmPlayground() {
           support vectors (ringed)
         </span>
         <span className="font-mono text-[var(--muted)]">
-          drag any point — the support vectors alone fix the boundary.
+          drag any point, the support vectors alone fix the boundary.
         </span>
       </div>
     </div>

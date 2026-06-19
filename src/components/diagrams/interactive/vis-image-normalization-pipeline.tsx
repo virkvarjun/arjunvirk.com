@@ -393,7 +393,7 @@ export function VisNormalizationPipeline() {
           fontFamily={MONO}
           textAnchor="middle"
         >
-          pixel value (channel {channel}) — histogram count on y
+          pixel value (channel {channel}), histogram count on y
         </text>
 
         {/* ---- caption band (bottom, own clear band) ---- */}
@@ -405,7 +405,7 @@ export function VisNormalizationPipeline() {
           fontFamily={MONO}
           textAnchor="middle"
         >
-          Scale to [0,1], then center per channel — the same at train and test.
+          Scale to [0,1], then center per channel, the same at train and test.
         </text>
       </svg>
 

@@ -374,7 +374,7 @@ export function VisWorkedConvolution() {
           fontSize={9}
           fill={C.muted}
         >
-          the top — that&apos;s a horizontal edge being detected.
+          the top, that&apos;s a horizontal edge being detected.
         </text>
       </svg>
 

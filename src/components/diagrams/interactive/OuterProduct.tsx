@@ -235,7 +235,7 @@ export function OuterProduct() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        BP4-vec: ∂C/∂W = δ aᵀ — every entry is one δ times one activation.
+        BP4-vec: ∂C/∂W = δ aᵀ, every entry is one δ times one activation.
       </p>
     </div>
   );

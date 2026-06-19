@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// MCP: Host, Clients, and Servers — one host runs many 1:1 clients, each wired
+// MCP: Host, Clients, and Servers, one host runs many 1:1 clients, each wired
 // to a server that exposes tools, resources, and prompts. Interactive: click a
 // server to reveal its primitives; toggle a client connection on/off so the
 // host gains/loses that server's capabilities; switch a server's transport

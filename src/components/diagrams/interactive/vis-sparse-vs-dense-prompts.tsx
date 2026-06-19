@@ -510,7 +510,7 @@ export function VisSparseVsDensePrompts() {
           fill={C.ink}
         >
           {toggles.mask
-            ? "added elementwise, per-pixel — no tokens"
+            ? "added elementwise, per-pixel, no tokens"
             : "no mask: image embed unchanged"}
         </text>
 

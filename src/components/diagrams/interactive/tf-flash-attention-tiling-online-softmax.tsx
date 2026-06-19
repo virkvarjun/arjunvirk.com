@@ -7,7 +7,7 @@ import { C, MONO } from "../frame";
 // key/value tiles one at a time (the "outer" loop of a fixed query block) and
 // maintain online-softmax statistics: running max m, running sum l, and an
 // accumulating (unnormalized) output. The full N x N score matrix S is never
-// stored — only one tile of scores lives in SRAM at a time.
+// stored, only one tile of scores lives in SRAM at a time.
 const N_TILES = 4; // number of K/V tiles streamed through SRAM
 const GRID = 4; // the standard S matrix is drawn as a GRID x GRID block
 
@@ -19,7 +19,7 @@ const TILE_LSUM: readonly number[] = [1.8, 1.5, 2.4, 1.3];
 
 // HBM traffic accounting (illustrative round numbers, in "units" of N*d reads).
 // Standard: write S (N^2), read S for softmax (N^2), read S again for *V (N^2),
-// plus read Q,K,V once each. Flash: read Q,K,V once, write O once — no S I/O.
+// plus read Q,K,V once each. Flash: read Q,K,V once, write O once, no S I/O.
 const STD_RW_PER_TILE = 2; // standard touches HBM ~2x more work per processed tile
 const FLASH_RW_PER_TILE = 1;
 
@@ -101,7 +101,7 @@ export function TfFlashAttention() {
           Flash Attention: Tiling + Online Softmax
         </text>
         <text x={16} y={38} fontSize={9.5} fill={C.muted} fontFamily={MONO}>
-          processed {done}/{N_TILES} K/V tiles — same math, far less HBM traffic
+          processed {done}/{N_TILES} K/V tiles, same math, far less HBM traffic
         </text>
 
         {/* ---------- Panel headers ---------- */}
@@ -396,7 +396,7 @@ export function TfFlashAttention() {
           strokeWidth={1}
         />
         <text x={16} y={446} fontSize={9} fill={C.ink} fontFamily={MONO}>
-          Never build the full attention matrix —
+          Never build the full attention matrix,
         </text>
         <text x={16} y={460} fontSize={9} fill={C.ink} fontFamily={MONO}>
           stream tiles through fast on-chip memory instead.

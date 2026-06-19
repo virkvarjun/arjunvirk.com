@@ -178,7 +178,7 @@ export function VisVitEncoderBlock() {
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full"
         role="img"
-        aria-label="The ViT encoder block: LayerNorm, multi-head self-attention, residual add, LayerNorm, MLP, residual add — the standard pre-norm transformer block over image patch tokens, repeated N times into a classification head."
+        aria-label="The ViT encoder block: LayerNorm, multi-head self-attention, residual add, LayerNorm, MLP, residual add, the standard pre-norm transformer block over image patch tokens, repeated N times into a classification head."
       >
         {/* ---- Title band ---- */}
         <text
@@ -528,7 +528,7 @@ export function VisVitEncoderBlock() {
               fontFamily={MONO}
               fill={C.coral}
             >
-              {`vanishes through ${depth} blocks — same lesson as CNNs.`}
+              {`vanishes through ${depth} blocks, same lesson as CNNs.`}
             </text>
           </>
         )}
@@ -542,7 +542,7 @@ export function VisVitEncoderBlock() {
           textAnchor="middle"
           fill={C.muted}
         >
-          Identical to a BERT block — LayerNorm, attention,
+          Identical to a BERT block, LayerNorm, attention,
         </text>
         <text
           x={W / 2}
@@ -552,7 +552,7 @@ export function VisVitEncoderBlock() {
           textAnchor="middle"
           fill={C.muted}
         >
-          residual, MLP, residual — just over image patches.
+          residual, MLP, residual, just over image patches.
         </text>
       </svg>
 

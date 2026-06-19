@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Defusing the Trifecta: Architectural Defenses — the three-circle trifecta
+// Defusing the Trifecta: Architectural Defenses, the three-circle trifecta
 // with four defense levers, each visibly removing or shrinking a leg, plus
 // three side cards (MCP server trust, scope minimization, audit logging).
 // Interactive: toggle each defense and watch which leg it neutralizes and the
-// central risk shrink. The defenses are architectural — you can't prompt your
+// central risk shrink. The defenses are architectural, you can't prompt your
 // way out.
 
 type Leg = "data" | "comms" | "untrusted";
@@ -92,7 +92,7 @@ export function AgtDefusingTheTrifectaArchitecturalDefenses() {
             </g>
           );
         })}
-        {/* leg labels — outside each circle (top two above, bottom one below) */}
+        {/* leg labels, outside each circle (top two above, bottom one below) */}
         {LEGS.map((l, i) => {
           const ly = i === 2 ? l.cy + R + 16 : l.cy - R - 12;
           return (
@@ -152,7 +152,7 @@ export function AgtDefusingTheTrifectaArchitecturalDefenses() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Don&rsquo;t ask the model not to get hacked — prompt-injection bypasses keep being found. Remove a leg structurally:
+        Don&rsquo;t ask the model not to get hacked, prompt-injection bypasses keep being found. Remove a leg structurally:
         cut the network, separate permissions, gate actions, and treat tool output as data. Then vet servers, minimize scope, and
         log everything.
       </p>

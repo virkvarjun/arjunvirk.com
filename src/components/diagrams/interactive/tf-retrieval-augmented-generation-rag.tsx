@@ -464,7 +464,7 @@ export function TfRag() {
           fill={C.muted}
           textAnchor="middle"
         >
-          Retrieve relevant text first, then answer grounded in it &#8212; no retraining needed.
+          Retrieve relevant text first, then answer grounded in it, no retraining needed.
         </text>
       </svg>
 

@@ -101,7 +101,7 @@ export function LayerMatvec() {
         role="img"
         aria-label="A layer as a matrix-vector product"
       >
-        {/* W matrix: 2 rows x 3 cols — each row is one neuron's weights */}
+        {/* W matrix: 2 rows x 3 cols, each row is one neuron's weights */}
         {Cap(wx + (3 * CELL) / 2, "W")}
         {W.map((r, i) =>
           r.map((w, j) => {

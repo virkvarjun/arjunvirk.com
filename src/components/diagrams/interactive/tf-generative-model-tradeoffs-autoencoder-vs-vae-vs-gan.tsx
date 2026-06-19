@@ -61,12 +61,12 @@ const TABLE: Record<RowId, Record<ModelId, Cell>> = {
     ae: {
       short: "gaps, holes",
       tone: "warn",
-      full: "Autoencoder latent: scattered points with empty gaps — not fillable.",
+      full: "Autoencoder latent: scattered points with empty gaps, not fillable.",
     },
     vae: {
       short: "smooth, packed",
       tone: "good",
-      full: "VAE latent: smooth packed clouds — nearby points decode to similar data.",
+      full: "VAE latent: smooth packed clouds, nearby points decode to similar data.",
     },
     gan: {
       short: "implicit noise",
@@ -95,34 +95,34 @@ const TABLE: Record<RowId, Record<ModelId, Cell>> = {
     ae: {
       short: "recon only",
       tone: "neutral",
-      full: "Autoencoder quality: n/a — it only reconstructs its inputs.",
+      full: "Autoencoder quality: n/a, it only reconstructs its inputs.",
     },
     vae: {
       short: "blurry",
       tone: "warn",
-      full: "VAE samples are slightly blurry — averaging from the probabilistic prior.",
+      full: "VAE samples are slightly blurry, averaging from the probabilistic prior.",
     },
     gan: {
       short: "sharp",
       tone: "good",
-      full: "GAN samples are sharp and realistic — the discriminator punishes blur.",
+      full: "GAN samples are sharp and realistic, the discriminator punishes blur.",
     },
   },
   stability: {
     ae: {
       short: "stable",
       tone: "good",
-      full: "Autoencoder training: stable — a plain reconstruction loss.",
+      full: "Autoencoder training: stable, a plain reconstruction loss.",
     },
     vae: {
       short: "stable",
       tone: "good",
-      full: "VAE training: stable — reconstruction plus a well-behaved KL term.",
+      full: "VAE training: stable, reconstruction plus a well-behaved KL term.",
     },
     gan: {
       short: "unstable",
       tone: "bad",
-      full: "GAN training: can be unstable — mode collapse and oscillation.",
+      full: "GAN training: can be unstable, mode collapse and oscillation.",
     },
   },
   bestat: {

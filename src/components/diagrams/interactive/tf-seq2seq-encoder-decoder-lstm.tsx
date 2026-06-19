@@ -12,7 +12,7 @@ const OUTPUT_WORDS = ["J'aime", "les", "chats"] as const;
 export function TfSeq2seq() {
   // How many decoder tokens have been generated (0..3).
   const [generated, setGenerated] = useState(0);
-  // "Input length" 3..9 — longer input strains the single h_enc arrow.
+  // "Input length" 3..9, longer input strains the single h_enc arrow.
   const [inputLen, setInputLen] = useState(3);
 
   // --- Layout ---

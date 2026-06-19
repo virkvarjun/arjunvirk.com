@@ -21,7 +21,7 @@ const IMG_W = 150;
 const IMG_H = 132;
 
 // 24 representative proposals (we *render* a subset by the slider; the label
-// says "~2000" because real R-CNN proposes that many — we show a sample).
+// says "~2000" because real R-CNN proposes that many, we show a sample).
 const PROPS: Prop[] = [
   { x: 8, y: 10, w: 30, h: 24, obj: false },
   { x: 52, y: 6, w: 44, h: 30, obj: true },
@@ -337,7 +337,7 @@ export function VisRcnnTwoStage() {
           strokeWidth={1.4}
         />
         <text x={OUT_X + 8} y={OUT_Y + 18} fontFamily={MONO} fontSize={9} fill={C.ink} textAnchor="start">
-          class: {active ? (active.obj ? "bird" : "bg") : "—"}
+          class: {active ? (active.obj ? "bird" : "bg") : "-"}
         </text>
         <text x={OUT_X + 8} y={OUT_Y + 36} fontFamily={MONO} fontSize={9} fill={C.muted} textAnchor="start">
           + refined box
@@ -449,7 +449,7 @@ export function VisRcnnTwoStage() {
 
         {/* ============ Caption band (bottom) ============ */}
         <text x={W / 2} y={H - 26} fontFamily={MONO} fontSize={9.5} fill={C.muted} textAnchor="middle">
-          Propose ~2000 boxes, then classify each: accurate, fully deep &#8212;
+          Propose ~2000 boxes, then classify each: accurate, fully deep,
         </text>
         <text x={W / 2} y={H - 12} fontFamily={MONO} fontSize={9.5} fill={C.muted} textAnchor="middle">
           but far too slow for real time.

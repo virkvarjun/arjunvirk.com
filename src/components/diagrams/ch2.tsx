@@ -51,7 +51,7 @@ export function SumOverPaths() {
         ∂y/∂u₂
       </Label>
       <Label x={200} y={186} anchor="middle" size={10} fill={C.muted}>
-        ∂y/∂x = Σ (∂y/∂uₚ)(∂uₚ/∂x) — sum over every path
+        ∂y/∂x = Σ (∂y/∂uₚ)(∂uₚ/∂x), sum over every path
       </Label>
     </>
   );

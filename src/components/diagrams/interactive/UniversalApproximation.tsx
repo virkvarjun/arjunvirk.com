@@ -4,7 +4,7 @@ import { useState } from "react";
 import { C, MONO, plotCurve } from "../frame";
 
 // A single sigmoid-step building block. Summing many of these can mold the
-// blue curve into almost any target shape — the universal approximation idea.
+// blue curve into almost any target shape, the universal approximation idea.
 interface Block {
   center: number;
   w: number;

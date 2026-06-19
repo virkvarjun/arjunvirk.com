@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// N×M vs N+M: The Integration Explosion — without a standard, N apps each need
+// N×M vs N+M: The Integration Explosion, without a standard, N apps each need
 // a custom connector to M systems (N×M lines). With MCP, each connects once to
 // a central hub (N+M). Interactive: sliders for N apps and M systems; the left
 // panel's crisscross grows as N×M while the right grows as N+M, with a live
@@ -150,7 +150,7 @@ export function AgtNXMVsNMTheIntegrationExplosion() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Standardize the connector and N×M bespoke integrations collapse to N+M — at 10 apps × 50 tools that&rsquo;s{" "}
+        Standardize the connector and N×M bespoke integrations collapse to N+M, at 10 apps × 50 tools that&rsquo;s{" "}
         <strong>500 versus 60</strong>. Once a server exists, any MCP-compatible client gets it for free, so the savings compound.
       </p>
     </div>

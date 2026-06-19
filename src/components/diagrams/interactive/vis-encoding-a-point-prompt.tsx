@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { C, MONO } from "../frame";
 
 // ===========================================================================
-// "Encoding a Point Prompt" — how SAM turns a click into a 256-dim token.
+// "Encoding a Point Prompt", how SAM turns a click into a 256-dim token.
 //
 // pixel (x,y) -> normalize to [0,1] -> Fourier features (fixed matrix B, then
 // sin & cos) -> add a learned label embedding (foreground green / background

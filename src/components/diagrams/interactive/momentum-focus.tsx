@@ -5,7 +5,7 @@ import { C, MONO } from "../frame";
 
 // loss(x,y) = 0.05*x^2 + 1.0*y^2  -> gradient (0.1*x, 2.0*y).
 // The valley is gentle along x and steep along y, so plain SGD must take a
-// tiny learning rate to avoid bouncing across the y-walls — which leaves it
+// tiny learning rate to avoid bouncing across the y-walls, which leaves it
 // crawling along the floor. Momentum accumulates speed in the consistent x
 // direction while averaging away the alternating y kicks.
 const LR = 0.12;
@@ -254,9 +254,9 @@ export function MomentumFocus() {
         </label>
         <span className="font-mono" style={{ color: C.muted }}>
           {beta === 0
-            ? "β=0 — momentum ≡ SGD"
+            ? "β=0, momentum ≡ SGD"
             : beta > 0.93
-              ? "high β — overshoots from built-up speed"
+              ? "high β, overshoots from built-up speed"
               : "momentum glides along the floor"}
         </span>
       </div>

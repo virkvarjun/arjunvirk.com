@@ -195,7 +195,7 @@ export function CpuVsGpuRace() {
           );
         })}
 
-        {/* Shared 64-tile work strip — CPU panel */}
+        {/* Shared 64-tile work strip, CPU panel */}
         {Array.from({ length: TILES }, (_, i) => {
           const p = tilePos(CPU_X, i);
           const on = i < cpuDone;

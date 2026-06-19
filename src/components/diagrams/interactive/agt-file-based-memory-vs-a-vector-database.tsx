@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// File-Based Memory vs a Vector Database — for the task "forget that Jamie's
+// File-Based Memory vs a Vector Database, for the task "forget that Jamie's
 // date nights are Thursdays". Left: MEMORY.md, one readable, auditable line to
 // delete. Right: a cloud of embeddings where the fact is hard to locate and
 // surgically remove. A scale slider grows the fact count and shows the file
@@ -15,7 +15,7 @@ const VB_H = 250;
 const FACTS = [
   "Name: Alex. they/them.",
   "Time zone: America/LA.",
-  "Spouse: Jamie — date nights Thursdays.",
+  "Spouse: Jamie, date nights Thursdays.",
   "Allergic to penicillin.",
   "Hates morning meetings.",
 ];
@@ -104,7 +104,7 @@ export function AgtFileBasedMemoryVsAVectorDatabase() {
 
         {/* scale / context-cost meter */}
         <text x={14} y={210} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
-          file in every prompt — context cost at {factCount.toLocaleString()} facts:
+          file in every prompt, context cost at {factCount.toLocaleString()} facts:
         </text>
         <rect x={14} y={218} width={300} height={12} rx={6} fill="var(--card)" stroke={C.line} />
         <rect x={14} y={218} width={300 * costFrac} height={12} rx={6} fill={costColor} opacity={0.85} />
@@ -132,7 +132,7 @@ export function AgtFileBasedMemoryVsAVectorDatabase() {
 
       <p className="mt-2 text-xs text-[var(--muted)]">
         Plain files are auditable and editable by hand: delete one line and the fact is gone. A vector DB makes you hunt for which
-        embeddings encode it. But drag the scale up — past a few thousand facts the whole-file-in-every-prompt approach gets
+        embeddings encode it. But drag the scale up, past a few thousand facts the whole-file-in-every-prompt approach gets
         wasteful, and you layer on semantic retrieval after all.
       </p>
     </div>

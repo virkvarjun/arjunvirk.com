@@ -64,7 +64,7 @@ export function VisSam2Video() {
   const predX = predOnTarget ? cur.tx : cur.dx;
   const predY = predOnTarget ? cur.ty : cur.dy;
 
-  // memory bank holds features for frames 1..frame-1 (past) — the prompted
+  // memory bank holds features for frames 1..frame-1 (past), the prompted
   // first frame plus every frame already processed.
   const memCount = memoryOn ? frame - 1 : 0;
 
@@ -431,8 +431,8 @@ export function VisSam2Video() {
         <text x={16} y={372} fontSize={9} fill={C.ink} fontFamily={MONO}>
           {cur.occluded
             ? memoryOn
-              ? "frame 4 occluded — memory re-acquires the target after it"
-              : "frame 4 occluded — per-frame SAM jumps to the wrong blob"
+              ? "frame 4 occluded, memory re-acquires the target after it"
+              : "frame 4 occluded, per-frame SAM jumps to the wrong blob"
             : memoryOn
               ? "mask conditioned on memory of all past frames"
               : "each frame segmented independently, no temporal anchor"}
@@ -485,7 +485,7 @@ export function VisSam2Video() {
 
         {/* caption (split across two lines to fit width) */}
         <text x={16} y={420} fontSize={9} fill={C.muted} fontFamily={MONO}>
-          Stream frames, remember the object across them — temporal
+          Stream frames, remember the object across them, temporal
         </text>
         <text x={16} y={434} fontSize={9} fill={C.muted} fontFamily={MONO}>
           consistency that per-frame SAM can&apos;t give.

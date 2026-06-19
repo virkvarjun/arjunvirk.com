@@ -13,7 +13,7 @@ import { C, MONO } from "../frame";
 //
 // Everything is deterministic. The number of accepted draft tokens in a round
 // is a fixed function of the "agreement rate" slider and the round index, so
-// there is no Math.random anywhere — SSR-safe.
+// there is no Math.random anywhere, SSR-safe.
 
 // --- geometry --------------------------------------------------------------
 const VB_W = 480;

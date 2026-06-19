@@ -88,7 +88,7 @@ export function TfKvCache() {
           fontFamily={MONO}
           fontWeight={700}
         >
-          naive — recompute
+          naive, recompute
         </text>
         <text x={naiveX} y={77} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
           all K,V every step
@@ -102,7 +102,7 @@ export function TfKvCache() {
           fontFamily={MONO}
           fontWeight={700}
         >
-          cached — reuse
+          cached, reuse
         </text>
         <text x={cacheX} y={77} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
           K,V for new token only

@@ -164,7 +164,7 @@ export function LinearCollapse() {
           fontFamily={MONO}
           textAnchor="end"
         >
-          {relUOn ? "curves diverge — can't collapse" : "curves coincide exactly"}
+          {relUOn ? "curves diverge, can't collapse" : "curves coincide exactly"}
         </text>
       </svg>
 

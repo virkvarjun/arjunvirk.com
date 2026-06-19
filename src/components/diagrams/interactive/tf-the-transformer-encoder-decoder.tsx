@@ -13,7 +13,7 @@ type Block = {
   kind: "attn" | "norm" | "ff" | "embed" | "head"; // colors the box
 };
 
-// LEFT — encoder layer, bottom (index 0) to top.
+// LEFT, encoder layer, bottom (index 0) to top.
 const ENCODER: Block[] = [
   {
     id: "enc-embed",
@@ -52,7 +52,7 @@ const ENCODER: Block[] = [
   },
 ];
 
-// RIGHT — decoder layer, bottom (index 0) to top.
+// RIGHT, decoder layer, bottom (index 0) to top.
 const DECODER: Block[] = [
   {
     id: "dec-embed",
@@ -78,7 +78,7 @@ const DECODER: Block[] = [
   {
     id: "dec-cross",
     lines: ["Cross-Attention", "Q:dec  K,V:enc"],
-    desc: "Decoder queries attend over the encoder's output — this is where the two stacks meet.",
+    desc: "Decoder queries attend over the encoder's output, this is where the two stacks meet.",
     formula: "softmax(Q_dec K_encᵀ/√d_k) V_enc",
     kind: "head",
   },
@@ -209,7 +209,7 @@ export function TfTransformer() {
   const encX = encCX - bw / 2;
   const decX = decCX - bw / 2;
 
-  // Bottom baseline (embedding boxes sit here) — stacks grow upward.
+  // Bottom baseline (embedding boxes sit here), stacks grow upward.
   const encBottomY = 430; // top edge of the bottom-most encoder box
   const decBottomY = 430;
 

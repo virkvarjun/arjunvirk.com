@@ -132,12 +132,12 @@ export function VisThreeSegmentations() {
           : "Only object instances are segmented here.",
       };
     }
-    if (hover.kind === "sky") return { a: "label: sky  (stuff)", b: "class-only — no instance ID." };
+    if (hover.kind === "sky") return { a: "label: sky  (stuff)", b: "class-only, no instance ID." };
     if (hover.kind === "grass")
-      return { a: "label: grass  (stuff)", b: "class-only — no instance ID." };
+      return { a: "label: grass  (stuff)", b: "class-only, no instance ID." };
     // dog
     if (mode === "semantic")
-      return { a: "label: dog  (class)", b: "semantic — same color for every dog." };
+      return { a: "label: dog  (class)", b: "semantic, same color for every dog." };
     return {
       a: `label: dog  ·  instance #${hover.instance}`,
       b: "this dog is separated from the others.",
@@ -343,7 +343,7 @@ export function VisThreeSegmentations() {
         >
           {countsInstances
             ? `${instanceCount} dogs separated`
-            : "n/a — semantic has no instances"}
+            : "n/a, semantic has no instances"}
         </text>
 
         {/* ---- Caption band ---- */}

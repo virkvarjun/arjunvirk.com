@@ -12,7 +12,7 @@ import { C, MONO } from "../frame";
 const VW = 500;
 const VH = 472;
 
-// Latent map (2-D latent space) geometry — a square plotted on the left.
+// Latent map (2-D latent space) geometry, a square plotted on the left.
 const MAP_X = 28;
 const MAP_Y = 150;
 const MAP_W = 200;
@@ -303,7 +303,7 @@ export function TfVaeTwoPulls() {
         />
         <circle cx={cloudCx} cy={cloudCy} r={2} fill={C.coral} />
 
-        {/* Pull #1: reconstruction — from cloud toward the pinned target */}
+        {/* Pull #1: reconstruction, from cloud toward the pinned target */}
         {pull < 0.97 ? (
           <line
             x1={cloudCx}
@@ -315,7 +315,7 @@ export function TfVaeTwoPulls() {
             markerEnd="url(#vaeBlue)"
           />
         ) : null}
-        {/* Pull #2: KL — from cloud toward the origin */}
+        {/* Pull #2: KL, from cloud toward the origin */}
         {pull > 0.03 ? (
           <line
             x1={cloudCx}
@@ -450,7 +450,7 @@ export function TfVaeTwoPulls() {
           return (
             <g>
               <text x={28} y={gy - 14} fontFamily={MONO} fontSize={9.5} fill={C.muted}>
-                generation mode — encoder discarded, sample from N(0,I) &amp; decode
+                generation mode, encoder discarded, sample from N(0,I) &amp; decode
               </text>
               {/* sample box */}
               <rect

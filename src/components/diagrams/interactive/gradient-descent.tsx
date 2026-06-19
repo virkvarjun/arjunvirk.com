@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { C, MONO } from "../frame";
 
 // Elliptical loss bowl centered at (CX, CY). Curvature differs per axis, so
-// the two coordinates converge at different rates — which is what makes a
+// the two coordinates converge at different rates, which is what makes a
 // too-large learning rate oscillate and then diverge.
 const CX = 250;
 const CY = 122;
@@ -154,7 +154,7 @@ export function GradientDescentInteractive() {
           Reset
         </button>
         <span className="font-mono" style={{ color: diverging ? C.coral : C.muted }}>
-          {diverging ? "diverging — lower η" : `loss ≈ ${loss.toFixed(2)}`}
+          {diverging ? "diverging, lower η" : `loss ≈ ${loss.toFixed(2)}`}
         </span>
       </div>
     </div>

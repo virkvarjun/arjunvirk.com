@@ -8,7 +8,7 @@ import { C, MONO } from "../frame";
 // receptive field of one neuron in the top layer, measured back on the input,
 // grows by 2 per added 3x3 layer: RF = 2*depth + 1.
 // A pooling / stride-2 layer (inserted after the first conv) doubles the
-// "jump" so every later 3x3 layer then adds 4 instead of 2 — the window
+// "jump" so every later 3x3 layer then adds 4 instead of 2, the window
 // onto the input widens much faster.
 //
 // rf(depth, pooling):
@@ -89,7 +89,7 @@ export function VisReceptiveField() {
         </text>
         <text x={16} y={38} fontSize={9.5} fill={C.muted} fontFamily={MONO}>
           {depth} stacked 3x3 layer{depth === 1 ? "" : "s"}
-          {pooling ? " + stride-2 pool" : ""} — one deep neuron looks back at the input
+          {pooling ? " + stride-2 pool" : ""}, one deep neuron looks back at the input
         </text>
 
         {/* ---------- Readout band ---------- */}
@@ -261,7 +261,7 @@ export function VisReceptiveField() {
         {/* ---------- Caption band ---------- */}
         <line x1={16} y1={gridY + gridSize + 28} x2={W - 16} y2={gridY + gridSize + 28} stroke={C.line} strokeWidth={1} />
         <text x={16} y={gridY + gridSize + 46} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
-          Stack layers and the window onto the input widens —
+          Stack layers and the window onto the input widens,
         </text>
         <text x={16} y={gridY + gridSize + 60} fontSize={8.5} fill={C.muted} fontFamily={MONO}>
           until a single deep neuron can see the entire object.

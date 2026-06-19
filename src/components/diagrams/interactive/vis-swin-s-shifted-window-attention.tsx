@@ -253,7 +253,7 @@ export function VisSwinShiftedWindow() {
 
       <p className="mt-2 text-xs text-[var(--muted)]">
         Local windows for cheap attention, shifted each layer so information
-        still spreads &mdash; linear cost, global reach over depth.
+        still spreads, linear cost, global reach over depth.
       </p>
     </div>
   );

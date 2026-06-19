@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Four Multi-Agent Patterns — a 2×2 of ReAct, Orchestrator+workers,
+// Four Multi-Agent Patterns, a 2×2 of ReAct, Orchestrator+workers,
 // Evaluator+optimizer, and Planner+executor, each with a tiny glyph. Click a
 // pattern to expand its description and ideal use case; or pick a task type
 // (simple / research / quality-critical / well-structured) and watch the
@@ -21,9 +21,9 @@ interface Pattern {
 }
 
 const PATTERNS: Pattern[] = [
-  { id: "react", name: "ReAct", glyph: "think → act ↺", use: "Simple tasks", taskType: "simple", detail: "One agent interleaves reasoning with tool calls. Fewest moving parts, easiest to debug — the right default.", color: C.blue, fill: C.blueFill },
+  { id: "react", name: "ReAct", glyph: "think → act ↺", use: "Simple tasks", taskType: "simple", detail: "One agent interleaves reasoning with tool calls. Fewest moving parts, easiest to debug, the right default.", color: C.blue, fill: C.blueFill },
   { id: "orch", name: "Orchestrator + workers", glyph: "lead → ⋔ workers", use: "Research / broad search", taskType: "research", detail: "A lead decomposes the goal and hands sub-tasks to parallel workers, each in its own fresh context, then merges results.", color: C.green, fill: C.greenFill },
-  { id: "eval", name: "Evaluator + optimizer", glyph: "gen ⇄ critic", use: "Quality matters", taskType: "quality", detail: "A generator produces output, a critic critiques it, and they loop until the critic approves — translation, writing, code review.", color: C.coral, fill: C.coralFill },
+  { id: "eval", name: "Evaluator + optimizer", glyph: "gen ⇄ critic", use: "Quality matters", taskType: "quality", detail: "A generator produces output, a critic critiques it, and they loop until the critic approves, translation, writing, code review.", color: C.coral, fill: C.coralFill },
   { id: "plan", name: "Planner + executor", glyph: "plan → execute", use: "Known structure", taskType: "structured", detail: "One pass plans all the steps up front; an executor carries them out in order. Use when you can decompose ahead of time.", color: C.violet, fill: "#e7e3f7" },
 ];
 
@@ -104,13 +104,13 @@ export function AgtFourMultiAgentPatterns() {
       {/* detail */}
       <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
         <p className="font-mono text-xs font-semibold" style={{ color: active.color }}>
-          {active.name} — {active.use}
+          {active.name}, {active.use}
         </p>
         <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{active.detail}</p>
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        None is &ldquo;best&rdquo; — pick the structure that fits the task: one loop, parallel workers, a critic loop, or
+        None is &ldquo;best&rdquo;, pick the structure that fits the task: one loop, parallel workers, a critic loop, or
         plan-then-execute.
       </p>
     </div>

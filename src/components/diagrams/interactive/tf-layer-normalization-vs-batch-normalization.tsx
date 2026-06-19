@@ -268,7 +268,7 @@ export function TfLayerNorm() {
           fontSize={9}
           fill={C.muted}
         >
-          Layer norm normalizes across one token&apos;s features —
+          Layer norm normalizes across one token&apos;s features,
         </text>
         <text
           x={VW / 2}

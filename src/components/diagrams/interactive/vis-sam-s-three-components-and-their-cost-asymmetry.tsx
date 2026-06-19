@@ -167,7 +167,7 @@ export function VisSamComponents() {
           fontFamily={MONO}
           textAnchor="middle"
         >
-          encode image once (heavy) — then many cheap prompts
+          encode image once (heavy), then many cheap prompts
         </text>
 
         {/* ================= HEAVY IMAGE ENCODER ================= */}

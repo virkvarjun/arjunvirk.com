@@ -5,7 +5,7 @@ import { C, MONO } from "../frame";
 
 // SAM's Three-Stage Data Engine.
 // A stepper walks through three co-improvement stages. At each stage the model
-// labels data, humans correct/add, the dataset grows, and the model retrains —
+// labels data, humans correct/add, the dataset grows, and the model retrains,
 // shifting effort from mostly-human to fully-automatic while the cumulative
 // mask count grows from 4.3M -> 10.2M -> 1.1B.
 //   1. Assisted-Manual : human + early SAM, +4.3M masks, ~34s -> ~14s / mask.
@@ -459,7 +459,7 @@ export function VisSamDataEngine() {
 
       <p className="mt-2 text-xs text-[var(--muted)]">
         The model labels its own ever-growing dataset: each stage retrains SAM on
-        more masks, so annotation gets faster and more automatic — ending at 1.1B
+        more masks, so annotation gets faster and more automatic, ending at 1.1B
         masks, about 400x bigger than COCO.
       </p>
     </div>

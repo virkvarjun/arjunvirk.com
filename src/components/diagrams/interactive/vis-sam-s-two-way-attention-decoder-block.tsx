@@ -137,7 +137,7 @@ export function VisTwoWayAttention() {
           fill={C.muted}
           textAnchor="middle"
         >
-          tokens and image features attend to each other &#8212; stacked x2
+          tokens and image features attend to each other, stacked x2
         </text>
 
         {/* "x2 blocks" badge in the top-right corner */}

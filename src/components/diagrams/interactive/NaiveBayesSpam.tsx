@@ -108,7 +108,7 @@ export function NaiveBayesSpam() {
         </text>
         {activeWords.length === 0 ? (
           <text x={LIKE_X} y={40} fontSize={10} fill={C.muted} fontFamily={MONO}>
-            no words present — using priors
+            no words present, using priors
           </text>
         ) : (
           activeWords.map((w, i) => {

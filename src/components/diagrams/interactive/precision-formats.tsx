@@ -53,7 +53,7 @@ export function PrecisionFormats() {
       <svg viewBox="0 0 440 232" className="h-auto w-full" role="img" aria-label="Precision formats">
         {/* Header */}
         <text x={BAR_X} y={14} fontSize={10} fill={C.muted} fontFamily={MONO}>
-          bit layout — scaled, {PPB}px = 1 bit
+          bit layout, scaled, {PPB}px = 1 bit
         </text>
         <text x={430} y={14} fontSize={10} fill={C.muted} fontFamily={MONO} textAnchor="end">
           sign · exponent · mantissa
@@ -155,7 +155,7 @@ export function PrecisionFormats() {
       {/* Readout for the selected format */}
       <div className="mt-3 rounded border border-[var(--border)] bg-[var(--background)] p-3 text-xs">
         <div className="font-mono font-bold text-[var(--foreground)]">
-          {selected.name} — {selected.total} bits ({selected.total / 8} bytes / number)
+          {selected.name}, {selected.total} bits ({selected.total / 8} bytes / number)
         </div>
         <div className="mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
           <span className="font-mono" style={{ color: C.coral }}>
@@ -173,7 +173,7 @@ export function PrecisionFormats() {
         {selected.key === "bf16" && (
           <div className="mt-2 font-mono" style={{ color: C.violet }}>
             note: BF16 keeps FP32&apos;s 8-bit exponent (same range) but trims the
-            mantissa 23 → 7 bits — fewer precision steps, half the memory.
+            mantissa 23 → 7 bits, fewer precision steps, half the memory.
           </div>
         )}
         <div className="mt-2 font-mono text-[var(--muted)]">

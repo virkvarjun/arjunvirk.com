@@ -190,7 +190,7 @@ export function ChainRuleWalk() {
           the shared green factors are the reusable error signal
         </text>
         <text x={32} y={209} fontSize={9.5} fontFamily={MONO} fill={C.green}>
-          δ = (a2 − y)·σ'(z2) — this is what backprop saves and propagates.
+          δ = (a2 − y)·σ'(z2), this is what backprop saves and propagates.
         </text>
       </svg>
 

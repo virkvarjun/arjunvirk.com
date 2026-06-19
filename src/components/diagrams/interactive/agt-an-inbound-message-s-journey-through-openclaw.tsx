@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// An Inbound Message's Journey Through OpenClaw — a single message travels
+// An Inbound Message's Journey Through OpenClaw, a single message travels
 // the five subsystems in order: adapter (normalize) -> session manager (which
 // conversation?) -> queue (run now or hold?) -> agent runtime (think/act/
 // observe) -> reply serialized back out the adapter.
@@ -175,7 +175,7 @@ export function AgtAnInboundMessageSJourneyThroughOpenclaw() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Normalize, identify the conversation, serialize the run, loop — then reply back through the same adapter. A DM collapses
+        Normalize, identify the conversation, serialize the run, loop, then reply back through the same adapter. A DM collapses
         into the main session; a group chat gets its own. A message arriving mid-run is held by the queue instead of racing.
       </p>
     </div>

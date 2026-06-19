@@ -230,7 +230,7 @@ export function WeightIndexDecoder() {
           {showMatrix ? "hide" : "show"} W(ℓ) matrix
         </button>
         <span style={{ fontFamily: MONO, color: C.muted }}>
-          selected: w(ℓ)_<span style={{ color: C.coral }}>{`${j}${k}`}</span> — dest j={j}, src k=
+          selected: w(ℓ)_<span style={{ color: C.coral }}>{`${j}${k}`}</span>, dest j={j}, src k=
           {k}
         </span>
       </div>

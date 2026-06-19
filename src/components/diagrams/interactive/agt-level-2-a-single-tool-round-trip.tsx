@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Level 2: A Single Tool Round-Trip — the seed of everything agentic.
+// Level 2: A Single Tool Round-Trip, the seed of everything agentic.
 // User asks -> model picks a tool -> tool runtime makes a live call -> the
 // model answers, now grounded in real data, and the answer returns to the user.
 // Interactive: a "run" button advances the round trip stage by stage; a
@@ -143,7 +143,7 @@ export function AgtLevel2ASingleToolRoundTrip() {
 
         {/* grounding callout */}
         <text x={VB_W / 2} y={ROW_Y - 16} fontSize={9} fill={C.muted} fontFamily={MONO} textAnchor="middle">
-          the unlock: grounding — the answer is anchored to something real
+          the unlock: grounding, the answer is anchored to something real
         </text>
       </svg>
 
@@ -173,7 +173,7 @@ export function AgtLevel2ASingleToolRoundTrip() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        One round trip: the model decides, the tool runs, the model answers — now anchored to real data. Grounding kills a whole
+        One round trip: the model decides, the tool runs, the model answers, now anchored to real data. Grounding kills a whole
         class of hallucinations, but introduces new ways to fail: pick the wrong tool, write a bad query, or misread the result.
       </p>
     </div>

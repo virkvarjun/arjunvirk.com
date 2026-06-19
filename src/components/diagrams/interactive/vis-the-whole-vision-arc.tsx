@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// The Whole Vision Arc — capstone summary of the Vision chapter.
+// The Whole Vision Arc, capstone summary of the Vision chapter.
 // A connected journey of milestones, each one fixing a limitation of the
 // previous: pixels/tensor -> CNN -> YOLO (detection) -> U-Net (segmentation)
 // -> Mask R-CNN (instances) -> SAM (any prompt) -> ViT (drop convolution)
@@ -34,7 +34,7 @@ const MILESTONES: Milestone[] = [
     solved: "The raw input: an H x W x 3 grid of numbers.",
     detail: [
       "A flat MLP on pixels needs too many params and has",
-      "no translation invariance — the same cat shifted looks new.",
+      "no translation invariance, the same cat shifted looks new.",
     ],
     threads: [],
     color: C.muted,
@@ -85,7 +85,7 @@ const MILESTONES: Milestone[] = [
     sub: "instances",
     solved: "Fixed pixels: separates each object instance.",
     detail: [
-      "Detect boxes, then predict a mask inside each one — so two",
+      "Detect boxes, then predict a mask inside each one, so two",
       "overlapping cats become two distinct masks, not one blob.",
     ],
     threads: ["skip"],
@@ -99,7 +99,7 @@ const MILESTONES: Milestone[] = [
     solved: "Fixed per-class: one model segments any prompt.",
     detail: [
       "A ViT encoder + prompt decoder segment whatever you click",
-      "or box — no retraining for new object categories.",
+      "or box, no retraining for new object categories.",
     ],
     threads: ["skip", "attn"],
     color: C.blue,
@@ -462,7 +462,7 @@ export function VisWholeVisionArc() {
             ? `recurring heroes here: ${active.threads
                 .map((t) => (t === "skip" ? "skip/residual" : "attention/tokens"))
                 .join("  +  ")}`
-            : "the starting point — no learned machinery yet"}
+            : "the starting point, no learned machinery yet"}
         </text>
 
         {/* caption */}
@@ -474,7 +474,7 @@ export function VisWholeVisionArc() {
           fontFamily={MONO}
           textAnchor="middle"
         >
-          Every model fixes the previous one&apos;s weak point —
+          Every model fixes the previous one&apos;s weak point,
         </text>
         <text
           x={VB_W / 2}

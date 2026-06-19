@@ -366,8 +366,8 @@ export function VonNeumannBottleneck() {
         </button>
         <span className="font-mono text-[var(--muted)]">
           {cache
-            ? "cache on — most fetches are local, channel idle"
-            : "cache off — every fetch crawls the shared channel"}
+            ? "cache on, most fetches are local, channel idle"
+            : "cache off, every fetch crawls the shared channel"}
         </span>
       </div>
     </div>

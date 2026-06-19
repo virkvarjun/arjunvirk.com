@@ -5,7 +5,7 @@ import { C, MONO } from "../frame";
 
 // Position-wise Feed-Forward Network.
 // Each token vector (d_model = 512) is expanded to 4x (2048) by W1, passed
-// through ReLU, then contracted back to 512 by W2 — the SAME weights applied
+// through ReLU, then contracted back to 512 by W2, the SAME weights applied
 // independently to every token in the sequence.
 
 // Token labels for the parallel copies (identical FFN applied to each).
@@ -142,7 +142,7 @@ export function TfFFN() {
         />
 
         {/* Contraction trapezoid (W2): 2048 -> 512.
-            When ReLU is off the two linear maps collapse — dim the glyph. */}
+            When ReLU is off the two linear maps collapse, dim the glyph. */}
         {Trap(
           xRelu,
           halfWide,
@@ -235,7 +235,7 @@ export function TfFFN() {
           fill={hoverExpand ? C.coral : C.muted}
         >
           {hoverExpand
-            ? "~4M params here — most of the model's knowledge"
+            ? "~4M params here, most of the model's knowledge"
             : relu
               ? "ReLU on: a true nonlinearity between W1 and W2"
               : "ReLU off: W2·W1 collapses into one linear map"}
@@ -254,8 +254,8 @@ export function TfFFN() {
         </button>
         <span className="font-mono text-[var(--muted)]">
           {relu
-            ? "nonlinear — two distinct layers"
-            : "linear — the two layers collapse into one"}
+            ? "nonlinear, two distinct layers"
+            : "linear, the two layers collapse into one"}
         </span>
       </div>
     </div>

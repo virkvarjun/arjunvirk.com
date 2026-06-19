@@ -468,7 +468,7 @@ export function TfPrefillDecode() {
               ? "limited by: compute (arithmetic units)"
               : phase === "decode"
                 ? "limited by: memory bandwidth"
-                : "limited by: — (idle)"}
+                : "limited by:, (idle)"}
           </text>
         )}
       </svg>

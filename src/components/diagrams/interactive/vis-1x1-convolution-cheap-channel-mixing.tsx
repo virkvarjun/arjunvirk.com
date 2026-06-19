@@ -16,7 +16,7 @@ const C_IN = 512;
 const OUT_CHOICES: readonly number[] = [64, 128, 256, 384, 512];
 
 // Vertical sample of input channels shown as a stack (we draw a few rungs,
-// not all 512 — the label states the true count).
+// not all 512, the label states the true count).
 const IN_RUNGS = 8;
 const OUT_RUNGS = 5;
 

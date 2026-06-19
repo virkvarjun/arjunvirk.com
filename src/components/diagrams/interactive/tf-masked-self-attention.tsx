@@ -207,7 +207,7 @@ export function TfMaskedAttention() {
               : revealed === 0
                 ? "press step to generate"
                 : `generated up to "${TOKENS[revealed - 1]}"`
-            : "mask OFF — model can cheat"}
+            : "mask OFF, model can cheat"}
         </text>
       </svg>
 

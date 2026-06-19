@@ -162,7 +162,7 @@ export function TfGan() {
           fill={C.muted}
           textAnchor="middle"
         >
-          {`step ${step + 1}/${STEPS.length} — ${
+          {`step ${step + 1}/${STEPS.length}, ${
             trainingG ? "Phase 2: freeze D, train G" : "Phase 1: freeze G, train D"
           }`}
         </text>
@@ -440,7 +440,7 @@ export function TfGan() {
           fill={C.green}
           textAnchor="middle"
         >
-          gradient back to G — D is G&apos;s only teacher
+          gradient back to G, D is G&apos;s only teacher
         </text>
 
         {/* real/fake labels -> D (short upward tick) */}

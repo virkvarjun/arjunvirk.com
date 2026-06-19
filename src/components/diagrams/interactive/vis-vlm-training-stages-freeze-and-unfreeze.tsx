@@ -8,10 +8,10 @@ import { C, MONO } from "../frame";
 // connector/adapter that projects image features into the LLM's token space,
 // and the (pretrained) LLM. Training proceeds in stages, each freezing or
 // unfreezing parts:
-//   1. Pretrained init  — all three frozen (nothing trains yet).
-//   2. Alignment        — train ONLY the adapter; encoder + LLM frozen.
-//   3. Instruction tune — unfreeze the LLM (+ adapter); encoder usually frozen.
-//   4. Preference align — RLHF/DPO; LLM + adapter train; encoder frozen.
+//   1. Pretrained init , all three frozen (nothing trains yet).
+//   2. Alignment       , train ONLY the adapter; encoder + LLM frozen.
+//   3. Instruction tune, unfreeze the LLM (+ adapter); encoder usually frozen.
+//   4. Preference align, RLHF/DPO; LLM + adapter train; encoder frozen.
 // The stepper flips the lock/unlock icons per part and shows what data feeds
 // each stage. Hovering a part reports whether it is learning in that stage.
 

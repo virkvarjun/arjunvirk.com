@@ -196,7 +196,7 @@ export function VisRoiAlign() {
           />
         )}
 
-        {/* The TRUE (exact, fractional) RoI box — always shown, dashed. */}
+        {/* The TRUE (exact, fractional) RoI box, always shown, dashed. */}
         <rect
           x={fx(x0)}
           y={fy(y0)}
@@ -402,7 +402,7 @@ export function VisRoiAlign() {
           fontSize={9}
           fill={C.muted}
         >
-          Don&apos;t round — interpolate. 7x7 sub-pixel sampling lifts
+          Don&apos;t round, interpolate. 7x7 sub-pixel sampling lifts
         </text>
         <text
           x={VW / 2}

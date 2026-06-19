@@ -120,7 +120,7 @@ export function VisHypernetworkMask() {
   const gridSize = 152;
   const cell = gridSize / GRID;
   const maskX = 300;
-  const featY = 80; // (feature grid sits behind / above conceptually — we draw mask grid)
+  const featY = 80; // (feature grid sits behind / above conceptually, we draw mask grid)
 
   // For the upsampled-features mini panel above the mask grid.
 

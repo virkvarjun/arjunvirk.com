@@ -546,7 +546,7 @@ export function VisFcn() {
           fontSize={9.5}
           fill={C.ink}
         >
-          Turn the classifier fully convolutional, upsample to a mask &mdash;
+          Turn the classifier fully convolutional, upsample to a mask,
         </text>
         <text
           x={M}

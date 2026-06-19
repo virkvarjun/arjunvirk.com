@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// The Four Levels of AI Usage — a ladder where each rung adds autonomy AND
+// The Four Levels of AI Usage, a ladder where each rung adds autonomy AND
 // the risk you have to manage. Click a level to read it and see who's driving
 // (human vs AI), what the human's job becomes, and the autonomy/risk meters
 // rising together as you climb.
@@ -24,7 +24,7 @@ const LEVELS: Level[] = [
     n: 1,
     name: "Chat",
     blurb: "Ask, copy, paste. Human does everything else.",
-    detail: "No memory, no files, no actions — just text. Right when the hard part is thinking, not doing.",
+    detail: "No memory, no files, no actions, just text. Right when the hard part is thinking, not doing.",
     driver: 0.1,
     humanJob: "integrator",
     color: C.muted,
@@ -34,7 +34,7 @@ const LEVELS: Level[] = [
     n: 2,
     name: "Tools",
     blurb: "Model calls APIs, runs code, fetches data on demand.",
-    detail: "One round trip grounds the answer in real data — but adds tool-use failure modes (wrong tool, bad query).",
+    detail: "One round trip grounds the answer in real data, but adds tool-use failure modes (wrong tool, bad query).",
     driver: 0.35,
     humanJob: "supervisor",
     color: C.green,
@@ -65,7 +65,7 @@ const LEVELS: Level[] = [
 const VB_W = 480;
 const VB_H = 300;
 
-// ladder geometry — bottom (level 1) to top (level 4)
+// ladder geometry, bottom (level 1) to top (level 4)
 const BAR_X = 70;
 const BAR_W = 250;
 const BAR_H = 46;
@@ -190,7 +190,7 @@ export function AgtTheFourLevelsOfAiUsage() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Each rung hands more of the work to the model — and an equal measure of risk to you. The human shifts from doing the work
+        Each rung hands more of the work to the model, and an equal measure of risk to you. The human shifts from doing the work
         (integrator) to setting the goal and supervising (goal-setter) as you climb.
       </p>
     </div>

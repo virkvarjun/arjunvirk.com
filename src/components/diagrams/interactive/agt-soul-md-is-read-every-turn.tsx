@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// SOUL.md Is Read Every Turn — the agent's constitution is re-injected into
+// SOUL.md Is Read Every Turn, the agent's constitution is re-injected into
 // context on every pass of the loop, so a hard rule stays in front of the
 // model even when a tool result tries to talk it out of one.
 // Interactive: step the loop and watch SOUL.md re-load each turn; inject a
@@ -149,7 +149,7 @@ export function AgtSoulMdIsReadEveryTurn() {
 
       {/* editable hard rules */}
       <div className="mt-3">
-        <p className="font-mono text-[11px] text-[var(--muted)]"># Hard rules (editable — delete the &ldquo;send&rdquo; rule to break the defense)</p>
+        <p className="font-mono text-[11px] text-[var(--muted)]"># Hard rules (editable, delete the &ldquo;send&rdquo; rule to break the defense)</p>
         <textarea
           value={rules}
           onChange={(e) => setRules(e.target.value)}

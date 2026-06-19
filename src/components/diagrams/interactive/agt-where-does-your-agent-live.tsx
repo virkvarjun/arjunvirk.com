@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { C, MONO } from "../frame";
 
-// Where Does Your Agent Live? — four Level-4 agents plotted on runs-locally ↔
+// Where Does Your Agent Live?, four Level-4 agents plotted on runs-locally ↔
 // hosted (x) and you-own-state ↔ vendor-owns-state (y). Click an agent to
 // expand its table row; toggle the convenience-vs-control lens to shade the
 // local (private, you're the sysadmin) and hosted (easy, vendor holds data)
@@ -147,7 +147,7 @@ export function AgtWhereDoesYourAgentLive() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        The real axis isn&rsquo;t features — it&rsquo;s where the agent runs and who owns what it learns about you. Hosted agents are
+        The real axis isn&rsquo;t features, it&rsquo;s where the agent runs and who owns what it learns about you. Hosted agents are
         an easy start but the vendor holds your data; local agents are private and controllable but make you the sysadmin.
       </p>
     </div>

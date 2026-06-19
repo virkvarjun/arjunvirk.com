@@ -394,7 +394,7 @@ export function TfLora() {
           fontSize={9.5}
           fill={C.muted}
         >
-          Freeze W, learn a tiny low-rank correction B·A — its real
+          Freeze W, learn a tiny low-rank correction B·A, its real
         </text>
         <text
           x={cmpX}

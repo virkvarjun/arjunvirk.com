@@ -450,7 +450,7 @@ export function VisTokenizeEverything() {
               textAnchor="middle"
               fill={C.ink}
             >
-              {`all tokens share one hidden dim (${HIDDEN_DIM}) —`}
+              {`all tokens share one hidden dim (${HIDDEN_DIM}),`}
             </text>
             <text
               x={W / 2}
@@ -494,7 +494,7 @@ export function VisTokenizeEverything() {
           textAnchor="middle"
           fill={C.muted}
         >
-          Any modality you can turn into tokens enters the same LLM —
+          Any modality you can turn into tokens enters the same LLM,
         </text>
         <text
           x={W / 2}

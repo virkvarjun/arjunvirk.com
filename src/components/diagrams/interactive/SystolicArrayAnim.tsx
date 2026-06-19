@@ -9,7 +9,7 @@ import { C, MONO } from "../frame";
 // right operands meet inside each cell. On every clock tick a cell multiplies
 // the A value arriving from its left by the B value arriving from its top, adds
 // the product to its accumulator, and passes both values on. Each A/B value is
-// loaded once at an edge and reused across its whole row/column — no re-fetch.
+// loaded once at an edge and reused across its whole row/column, no re-fetch.
 
 const A = [
   [1, 2, 3],
@@ -328,7 +328,7 @@ export function SystolicArrayAnim() {
         Each A value enters once on the left and walks rightward across its row;
         each B value enters once on the top and walks down its column. A cell
         multiplies the pair currently passing through it and adds it to a
-        running total — so every value is loaded once and reused across the
+        running total, so every value is loaded once and reused across the
         whole grid with no memory re-fetch. That reuse is the systolic
         array&apos;s advantage.
       </p>
