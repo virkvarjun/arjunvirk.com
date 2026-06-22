@@ -78,12 +78,12 @@ export const workSection = {
       imagePosition: "30% center",
     },
     {
-      title: "PicoChem: Transformer from Scratch in numpy + Custom CUDA Kernels",
+      title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
       category: "Research",
       date: "Apr 2026",
       description:
         "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
-      href: "https://github.com/virkvarjun/ChemKernel",
+      href: "https://virkvarjun.github.io/KhemKernel/",
       image: "/projects/picochem.png",
     },
     {
