@@ -8069,3 +8069,44 @@ export const thinkingReflections: Chapter[] = [
     ],
   },
 ];
+
+// Manifesto on Becoming Section II, Part 2 of the Becoming manifesto, same
+// format as the reflections above (prompts upright, the writing itself in
+// italic).
+export const manifestoTwoReflections: Chapter[] = [
+  {
+    slug: "manifesto-on-becoming-ii",
+    number: "Jun 24, 2026 · 11:11 PM",
+    title: "Manifesto on Becoming Section II",
+    summary: "",
+    sections: [
+      {
+        italic: true,
+        paragraphs: [
+          "There's been an introspection I've been having recently regarding my Manifesto on Becoming, one that I think required a bit of maturity and clear thinking to come about. The amendment, or contribution, is as follows:",
+        ],
+      },
+      {
+        paragraphs: ["The Universe Responds to You. So stop trying so damn hard."],
+      },
+      {
+        paragraphs: ["What does that mean?"],
+      },
+      {
+        italic: true,
+        paragraphs: [
+          "I was watching a video yesterday about the ancient text, the Bhagavad Gita, and one of the quotes was, \"You have a right to perform your prescribed duties, but you are not entitled to the fruits of your actions.\" The idea is that, ironically, when you expect nothing, you actually receive everything. What kind of paradox is this? How does this make any sense? How is it that when you don't put in effort, set goals, and try really hard to achieve them, the opposite is what gets you the result? I feel this is the contrapositive to everything we are taught in society.",
+          "I think there's a bit of nuance to understand first.",
+          "Stemming from an idea in Buddhism and from Siddhartha Gautama, attachment is the cause of all suffering. The derivation of this comes from the cycle of wanting something. You unconsciously place your desire on a pedestal. It consumes you; it narrows your vision into only wanting and working toward that. This signals to your subconscious that it is forever out of reach, creating more friction, anger, and frustration. It makes you feel behind.",
+          "There's always something you're missing, always something to do, someone to talk to, and so on. It's a cycle.",
+          "The solution here is paradoxical: it's to let go of the outcome and focus on the journey to get there, the work that needs to be done. Roger Federer, in his commencement speech at Dartmouth College, one of the best speeches for life advice in my opinion, described how you have to love the hard work, the times when no one is watching. Only then do you become effortless and win slams.",
+          "\"When you're playing a point, it is the most important thing in the world, and it has to be. But when it's over, it's over.\" He won almost 80% of his matches but only 54% of the points he played. The process was to be loved, not the immediate outcome.",
+          "There's also the more abstract idea of becoming. Continuing from the piece I wrote called \"Manifesto on Becoming,\" I'm finding it challenging to embody everything I preached. There's this constant tug of war in my mind, trying to find the optimal path, and a feeling of being behind. This leads me to stagnancy and mid-tier outcomes in the face of my desires.",
+          "The solution here, I believe, is again to simply detach yourself from the outcome and manifest the person you want to become; act and think like that person. The mind is so malleable that it doesn't understand the difference between reality and a very good narrative. This can be observed in hyper-realistic dreams: you have to force your mind to discard them because they weren't real. In the same way, carrying yourself as the person who has achieved the goals you aspire to subconsciously brings you toward that goal. This way, it doesn't feel hard, and there's no sense of slowing down.",
+          "I believe there is overlooked, or underexplored, merit in taming the subconscious layer of the mind. The impacts are profound.",
+          "More to come very soon.",
+        ],
+      },
+    ],
+  },
+];

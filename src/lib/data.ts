@@ -4,6 +4,7 @@ import {
   becomingReflections,
   livingReflections,
   thinkingReflections,
+  manifestoTwoReflections,
 } from "./chapters";
 
 export const profile = {
@@ -286,5 +287,13 @@ export const writing: WritingCategory[] = [
     kind: "reflections",
     collapseSingle: true,
     chapters: thinkingReflections,
+  },
+  {
+    key: "manifesto-ii",
+    title: "Manifesto on Becoming Section II",
+    description: "Reflections, raw and unedited.",
+    kind: "reflections",
+    collapseSingle: true,
+    chapters: manifestoTwoReflections,
   },
 ];
