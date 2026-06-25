@@ -1,5 +1,6 @@
 import type { ChapterSection } from "./chapters";
 import { vista } from "./reviews/vista";
+import { phys2real } from "./reviews/phys2real";
 
 export type Paper = {
   slug: string;
@@ -29,7 +30,7 @@ export const literatureReviews: LiteratureCategory[] = [
     title: "Robot Learning",
     description:
       "Reviews of papers on robot perception, exploration, manipulation, and policy learning.",
-    papers: [vista],
+    papers: [vista, phys2real],
   },
   {
     key: "machine-learning",
