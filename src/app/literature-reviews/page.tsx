@@ -23,6 +23,29 @@ export default function LiteratureReviewsPage() {
         </p>
       </header>
 
+      <section>
+        <h2 className="text-xs uppercase tracking-wider text-[var(--muted)]">
+          Table of Contents
+        </h2>
+        <ul className="mt-4 space-y-2 text-base">
+          {[
+            { label: "Robot Learning", id: "robot-learning" },
+            { label: "Machine Learning", id: "machine-learning" },
+            { label: "Reinforcement Learning", id: "reinforcement-learning" },
+            { label: "Biology/Medical", id: "biology-medical" },
+          ].map((item) => (
+            <li key={item.id}>
+              <a
+                href={`#${item.id}`}
+                className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
+              >
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <footer className="py-10 mt-16 border-t border-[var(--border)]">
         <p className="text-xs text-[var(--muted)]">
           built with next.js in waterloo, {new Date().getFullYear()}
