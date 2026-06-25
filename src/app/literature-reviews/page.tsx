@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
+import { literatureReviews } from "@/lib/literature";
 
 export default function LiteratureReviewsPage() {
   return (
@@ -23,28 +24,32 @@ export default function LiteratureReviewsPage() {
         </p>
       </header>
 
-      <section>
-        <h2 className="text-xs uppercase tracking-wider text-[var(--muted)]">
-          Table of Contents
-        </h2>
-        <ul className="mt-4 space-y-2 text-base">
-          {[
-            { label: "Robot Learning", id: "robot-learning" },
-            { label: "Machine Learning", id: "machine-learning" },
-            { label: "Reinforcement Learning", id: "reinforcement-learning" },
-            { label: "Biology/Medical", id: "biology-medical" },
-          ].map((item) => (
-            <li key={item.id}>
-              <a
-                href={`#${item.id}`}
-                className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
-              >
-                {item.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)] mb-4">
+        Table of contents
+      </p>
+
+      <ol className="border-t border-[var(--border)]">
+        {literatureReviews.map((category) => (
+          <li key={category.key} className="border-b border-[var(--border)]">
+            <Link
+              href={`/literature-reviews/${category.key}`}
+              className="group flex items-baseline gap-4 py-3.5"
+            >
+              <span className="flex-1 text-sm font-medium group-hover:underline underline-offset-2">
+                {category.title}
+              </span>
+              <span className="shrink-0 text-xs font-mono text-[var(--muted)]">
+                {category.papers.length}{" "}
+                {category.papers.length === 1 ? "paper" : "papers"}
+              </span>
+              <ArrowRight
+                size={14}
+                className="mt-0.5 shrink-0 text-[var(--border)] transition-colors group-hover:text-[var(--foreground)]"
+              />
+            </Link>
+          </li>
+        ))}
+      </ol>
 
       <footer className="py-10 mt-16 border-t border-[var(--border)]">
         <p className="text-xs text-[var(--muted)]">
