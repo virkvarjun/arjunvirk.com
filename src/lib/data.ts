@@ -69,6 +69,24 @@ export const workSection = {
   subtitle: "Writing, research, and projects.",
   projects: [
     {
+      title: "OpenPI for Distributed Training with JAX",
+      category: "Research",
+      date: "Jun 2026",
+      description:
+        "An implementation of OpenPI for multi-node distributed training in JAX.",
+      href: "#",
+      image: "/projects/openpi.png",
+    },
+    {
+      title: "ECE 657: Course Collaborator",
+      category: "Teaching",
+      date: "Jun 2026",
+      description:
+        "Collaborating with Prof. Amir-Hossein Karimi on Machine Learning Fundamentals at UWaterloo Graduate ECE Department. More soon.",
+      href: "#",
+      image: "/projects/uwaterloo.jpg",
+    },
+    {
       title: "Machine Learning Bible",
       category: "Writing",
       date: "May 2026",
