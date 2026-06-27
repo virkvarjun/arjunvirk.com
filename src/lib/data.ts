@@ -62,6 +62,9 @@ export type WorkProject = {
   href: string;
   image?: string;
   imagePosition?: string;
+  // When true, render the image with object-contain + padding (for logos)
+  // instead of the default object-cover crop.
+  imageContain?: boolean;
 };
 
 export const workSection = {
@@ -75,7 +78,8 @@ export const workSection = {
       description:
         "An implementation of OpenPI for multi-node distributed training in JAX.",
       href: "#",
-      image: "/projects/openpi.png",
+      image: "/projects/jax.png",
+      imageContain: true,
     },
     {
       title: "ECE 657: Course Collaborator",
@@ -84,7 +88,8 @@ export const workSection = {
       description:
         "Collaborating with Prof. Amir-Hossein Karimi on Machine Learning Fundamentals at UWaterloo Graduate ECE Department. More soon.",
       href: "#",
-      image: "/projects/uwaterloo.jpg",
+      image: "/projects/uwaterloo-logo.png",
+      imageContain: true,
     },
     {
       title: "Machine Learning Bible",

@@ -161,9 +161,11 @@ export default function Home() {
               <img
                 src={project.image}
                 alt={project.title}
-                className="h-full w-full object-cover"
+                className={`h-full w-full ${
+                  project.imageContain ? "object-contain p-5" : "object-cover"
+                }`}
                 style={
-                  project.imagePosition
+                  project.imagePosition && !project.imageContain
                     ? { objectPosition: project.imagePosition }
                     : undefined
                 }
