@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inference Engineering — A Deep Dive · Arjun Virk</title>
+<meta name="description" content="My notes on how generative-model inference actually works in production, from a single CUDA kernel up to multi-cloud autoscaling." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css" />
+
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['$$', '$$']] },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" id="MathJax-script" async></script>
+
+<style>
+:root{
+  --paper:#f6f3ec; --paper-2:#efeadf; --ink:#1f2421; --ink-soft:#454d47;
+  --rule:#d8d1c2; --accent:#1f7a5a; --accent-2:#c2611f; --code-bg:#21252b;
+  --accent-soft:rgba(31,122,90,.10); --amber-soft:rgba(194,97,31,.10);
+  --maxcol:840px; --sidebar:288px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Newsreader",Georgia,serif; font-size:19px; line-height:1.62;
+  font-optical-sizing:auto; -webkit-font-smoothing:antialiased;
+}
+/* progress bar */
+#progress{position:fixed; top:0; left:0; height:3px; width:0%;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2)); z-index:60;
+  transition:width .08s linear;}
+
+/* layout */
+.layout{display:grid; grid-template-columns:var(--sidebar) minmax(0,1fr); gap:0; max-width:1280px; margin:0 auto;}
+.sidebar{position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+  padding:34px 20px 60px 28px; border-right:1px solid var(--rule); background:var(--paper);}
+.content{padding:64px clamp(20px,5vw,72px) 140px; min-width:0;}
+.col{max-width:var(--maxcol); margin:0 auto;}
+
+/* sidebar */
+.brand{font-family:"Fraunces",serif; font-weight:600; font-size:18px; line-height:1.2; letter-spacing:-.01em;}
+.brand small{display:block; font-family:"JetBrains Mono",monospace; font-weight:400;
+  font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); margin-top:8px;}
+.toc{margin-top:26px; font-family:"JetBrains Mono",monospace; font-size:12.5px;}
+.toc ol{list-style:none; margin:0; padding:0;}
+.toc .chap{margin:2px 0;}
+.toc .chap > a{display:flex; gap:9px; align-items:baseline; padding:6px 8px; border-radius:6px;
+  color:var(--ink-soft); text-decoration:none; line-height:1.35; transition:background .15s,color .15s;}
+.toc .chap > a .num{color:var(--accent); font-weight:600; min-width:16px;}
+.toc .chap > a:hover{background:var(--paper-2); color:var(--ink);}
+.toc .chap.active > a{color:var(--ink); background:var(--accent-soft);}
+.toc .subs{list-style:none; margin:0 0 4px 0; padding:0 0 0 25px;
+  max-height:0; overflow:hidden; transition:max-height .28s ease;}
+.toc .chap.active .subs, .toc .chap.open .subs{max-height:340px;}
+.toc .subs a{display:block; padding:3.5px 8px; color:var(--ink-soft); text-decoration:none;
+  border-left:1.5px solid transparent; border-radius:0 4px 4px 0; font-size:11.5px; transition:.15s;}
+.toc .subs a:hover{color:var(--ink);}
+.toc .subs a.active{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:500;}
+
+/* header */
+.doc-head{border-bottom:1px solid var(--rule); padding-bottom:30px; margin-bottom:14px;}
+.kicker{font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--accent); font-weight:600;}
+h1.title{font-family:"Fraunces",serif; font-weight:600; font-size:clamp(34px,5vw,52px);
+  line-height:1.04; letter-spacing:-.02em; margin:16px 0 0;}
+.subtitle{font-size:21px; color:var(--ink-soft); margin:18px 0 0; max-width:36em; font-style:italic;}
+.byline{font-family:"JetBrains Mono",monospace; font-size:11.5px; letter-spacing:.06em;
+  color:var(--ink-soft); margin-top:22px;}
+
+/* typography */
+.content h2{font-family:"Fraunces",serif; font-weight:600; font-size:clamp(26px,3.4vw,34px);
+  letter-spacing:-.015em; line-height:1.12; margin:0 0 6px; scroll-margin-top:22px;}
+.content h3{font-family:"Fraunces",serif; font-weight:600; font-size:21px; letter-spacing:-.01em;
+  margin:42px 0 2px; scroll-margin-top:22px;}
+.chap-num{font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); font-weight:600; display:block; margin-bottom:6px;}
+section.chapter{padding-top:64px; border-top:1px solid var(--rule); margin-top:60px;}
+section.chapter:first-of-type{border-top:none;}
+p{margin:18px 0;}
+a{color:var(--accent); text-underline-offset:2px;}
+strong{font-weight:600; color:var(--ink);}
+em{font-style:italic;}
+ul,ol{padding-left:1.3em;} li{margin:7px 0;}
+.lede{font-size:21px; line-height:1.55; color:var(--ink-soft);}
+hr.soft{border:none; border-top:1px solid var(--rule); margin:40px 0;}
+
+/* inline + block code */
+code{font-family:"JetBrains Mono",monospace; font-size:.86em; background:var(--paper-2);
+  padding:1.5px 5px; border-radius:4px; color:#9a4a12;}
+pre{background:var(--code-bg); border-radius:10px; padding:18px 20px; overflow-x:auto;
+  margin:24px 0; font-size:13.5px; line-height:1.55; border:1px solid #2c313a;}
+pre code{font-family:"JetBrains Mono",monospace; background:none; padding:0; color:#abb2bf; font-size:13.5px;}
+
+/* callouts */
+.callout{margin:26px 0; padding:16px 20px 16px 18px; border-radius:10px; border:1px solid var(--rule);
+  background:var(--paper-2); font-size:17px; line-height:1.55;}
+.callout .label{font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:.14em;
+  text-transform:uppercase; font-weight:600; display:block; margin-bottom:6px; color:var(--ink-soft);}
+.callout p:first-of-type{margin-top:0;} .callout p:last-child{margin-bottom:0;}
+.callout.tip{border-left:3px solid var(--accent); background:var(--accent-soft);}
+.callout.tip .label{color:var(--accent);}
+.callout.warning{border-left:3px solid var(--accent-2); background:var(--amber-soft);}
+.callout.warning .label{color:var(--accent-2);}
+.callout.note{border-left:3px solid var(--rule);}
+.aside{font-size:16.5px; color:var(--ink-soft); border-left:2px solid var(--accent-2);
+  padding:2px 0 2px 16px; margin:22px 0; font-style:italic;}
+.aside b, .aside strong{font-style:normal;}
+
+/* figures */
+figure{margin:34px 0; text-align:center;}
+figure svg{max-width:100%; height:auto; display:block; margin:0 auto;}
+figcaption{font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.04em;
+  color:var(--ink-soft); margin-top:12px; text-align:center;}
+.svg-wrap{background:var(--paper-2); border:1px solid var(--rule); border-radius:12px; padding:22px 18px;}
+text{font-family:"JetBrains Mono",monospace;}
+
+/* tables */
+.tbl{width:100%; border-collapse:collapse; margin:26px 0; font-size:15.5px;}
+.tbl th,.tbl td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--rule); vertical-align:top;}
+.tbl th{font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-soft); font-weight:600;}
+.tbl td code{font-size:.82em;}
+
+/* drills */
+.drills{margin:40px 0 8px; padding:22px 24px; border:1px dashed var(--rule); border-radius:12px; background:var(--paper-2);}
+.drills h4{font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 10px; font-weight:600;}
+details{border-bottom:1px solid var(--rule); padding:12px 0;}
+details:last-child{border-bottom:none;}
+summary{cursor:pointer; font-weight:500; list-style:none; display:flex; gap:10px; align-items:baseline;
+  font-size:17px; color:var(--ink);}
+summary::-webkit-details-marker{display:none;}
+summary::before{content:"▸"; color:var(--accent); font-size:13px; transition:transform .18s;}
+details[open] summary::before{transform:rotate(90deg);}
+details .ans{margin:12px 0 2px 22px; font-size:16.5px; color:var(--ink-soft);}
+.dl-gloss{margin:26px 0;}
+.dl-gloss dt{font-family:"JetBrains Mono",monospace; font-weight:600; font-size:13.5px; color:var(--accent); margin-top:16px;}
+.dl-gloss dd{margin:3px 0 0; font-size:16.5px; color:var(--ink-soft);}
+
+/* mobile */
+.menu-toggle{display:none;}
+@media (max-width:900px){
+  body{font-size:18px;}
+  .layout{grid-template-columns:1fr;}
+  .sidebar{position:fixed; z-index:50; top:0; left:0; width:min(86vw,330px); height:100vh;
+    transform:translateX(-100%); transition:transform .25s ease; box-shadow:0 0 40px rgba(0,0,0,.12);}
+  .sidebar.open{transform:none;}
+  .content{padding:74px 20px 120px;}
+  .menu-toggle{display:flex; position:fixed; top:12px; left:12px; z-index:55; align-items:center; gap:8px;
+    background:var(--ink); color:var(--paper); border:none; border-radius:8px; padding:9px 13px;
+    font-family:"JetBrains Mono",monospace; font-size:12px; cursor:pointer;}
+  .scrim{display:none; position:fixed; inset:0; background:rgba(20,20,18,.4); z-index:45;}
+  .scrim.show{display:block;}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<button class="menu-toggle" id="menuToggle">☰ Contents</button>
+<div class="scrim" id="scrim"></div>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">Inference Engineering
+      <small>Notes · Arjun Virk</small>
+    </div>
+    <nav class="toc" id="toc">
+      <ol>
+        <li class="chap" data-chap="intro"><a href="#intro"><span class="num">·</span><span>Introduction</span></a></li>
+        <li class="chap" data-chap="ch0"><a href="#ch0"><span class="num">0</span><span>What inference even is</span></a>
+          <ol class="subs">
+            <li><a href="#ch0-layers">The three layers</a></li>
+            <li><a href="#ch0-open">Why open models made this a field</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch1"><a href="#ch1"><span class="num">1</span><span>Prerequisites</span></a>
+          <ol class="subs">
+            <li><a href="#ch1-tradeoffs">Latency, throughput, quality</a></li>
+            <li><a href="#ch1-req">Knowing your requirements</a></li>
+            <li><a href="#ch1-selection">Model selection</a></li>
+            <li><a href="#ch1-metrics">The metrics</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch2"><a href="#ch2"><span class="num">2</span><span>Models</span></a>
+          <ol class="subs">
+            <li><a href="#ch2-nn">Neural nets, fast</a></li>
+            <li><a href="#ch2-llm">LLM mechanics</a></li>
+            <li><a href="#ch2-attn">Attention</a></li>
+            <li><a href="#ch2-bottlenecks">Where the bottlenecks live</a></li>
+            <li><a href="#ch2-diffusion">Image &amp; video gen</a></li>
+            <li><a href="#ch2-optattn">Optimizing attention</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch3"><a href="#ch3"><span class="num">3</span><span>Hardware</span></a>
+          <ol class="subs">
+            <li><a href="#ch3-model">The GPU mental model</a></li>
+            <li><a href="#ch3-memory">Memory hierarchy</a></li>
+            <li><a href="#ch3-skus">Generations &amp; SKUs</a></li>
+            <li><a href="#ch3-interconnect">Instances &amp; interconnects</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch4"><a href="#ch4"><span class="num">4</span><span>Software</span></a>
+          <ol class="subs">
+            <li><a href="#ch4-cuda">CUDA &amp; kernels</a></li>
+            <li><a href="#ch4-frameworks">Frameworks</a></li>
+            <li><a href="#ch4-engines">Inference engines</a></li>
+            <li><a href="#ch4-bench">Benchmarking vs profiling</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch5"><a href="#ch5"><span class="num">5</span><span>Techniques</span></a>
+          <ol class="subs">
+            <li><a href="#ch5-quant">Quantization</a></li>
+            <li><a href="#ch5-spec">Speculative decoding</a></li>
+            <li><a href="#ch5-cache">Prefix caching</a></li>
+            <li><a href="#ch5-parallel">Model parallelism</a></li>
+            <li><a href="#ch5-disagg">Disaggregation</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch6"><a href="#ch6"><span class="num">6</span><span>Modalities</span></a>
+          <ol class="subs">
+            <li><a href="#ch6-arch">Two archetypes</a></li>
+            <li><a href="#ch6-vlm">VLMs</a></li>
+            <li><a href="#ch6-embed">Embeddings</a></li>
+            <li><a href="#ch6-audio">ASR &amp; TTS</a></li>
+            <li><a href="#ch6-imgvid">Image &amp; video</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="ch7"><a href="#ch7"><span class="num">7</span><span>Production</span></a>
+          <ol class="subs">
+            <li><a href="#ch7-container">Containers &amp; deps</a></li>
+            <li><a href="#ch7-autoscale">Autoscaling</a></li>
+            <li><a href="#ch7-cold">Cold starts</a></li>
+            <li><a href="#ch7-multicloud">Multi-cloud</a></li>
+          </ol>
+        </li>
+        <li class="chap" data-chap="playbook"><a href="#playbook"><span class="num">★</span><span>Playbook &amp; glossary</span></a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <div class="col">
+      <header class="doc-head" id="intro">
+        <span class="kicker">Notes · Systems</span>
+        <h1 class="title">Inference Engineering</h1>
+        <p class="subtitle">How generative-model inference actually works in production — from a single CUDA kernel up to multi-cloud autoscaling.</p>
+        <p class="byline">Arjun Virk · my notes, synthesized from Philip Kiely's <em>Inference Engineering</em> (Baseten Books, 2026)</p>
+      </header>
+
+      <p class="lede">I can train a model. I can also stand one up behind an API and watch it fall over the moment two people use it at once. That gap — between "the weights exist" and "the weights serve a thousand users fast and cheap and reliably" — is the whole subject here.</p>
+
+      <p>I worked through Philip Kiely's <em>Inference Engineering</em> because I do robot inference and kept hitting walls I didn't have the vocabulary for. These are my notes from that read, rewritten in my own words. I'm not reproducing the book; I'm explaining the things to myself the way I'd explain them to a friend who knows ML but has never had to <em>serve</em> a model. If a sentence sounds like a textbook, I failed and I'll fix it.</p>
+
+      <p>The shape of the thing: we start from what inference even is, get the product framing straight, then go deep on where the bottlenecks live (a GPU has exactly two things you can run out of, and knowing which one decides everything). Then hardware, software, the applied-research techniques that actually move numbers, the per-modality wrinkles, and finally the production reality of containers and autoscaling and cold starts. Math renders where the book has math. Each chapter ends with the kind of self-check questions an infra interviewer would actually ask, because that's how I revise.</p>
+
+      <section class="chapter" id="ch0">
+        <span class="chap-num">Chapter 0</span>
+        <h2>What inference even is</h2>
+        <p class="lede">Training is where you learn the weights. Inference is where you make those weights earn their keep. Everyone obsesses over the first one. The second is where the money and the misery live.</p>
+
+        <p>Here's the thing that took me embarrassingly long to internalize: a trained model is just a big file of numbers. It does nothing. Inference is the act of running a forward pass over that file to turn an input into an output, and doing it fast enough, often enough, and cheaply enough that a real product can stand on top of it. For most of ML history this was a non-event. You trained an XGBoost model, you pickled it, you called <code>.predict()</code> on a CPU, and you went home. Classic ML inference is genuinely easy.</p>
+
+        <p>Generative inference is not easy, and pretending otherwise is how teams light money on fire. You cannot just grab the weights, rent some GPUs, and expect a fast, reliable service to fall out. A 70B-parameter model in half precision is 140 GB before you've served a single token. The model is autoregressive, so generating 500 tokens means 500 sequential forward passes, each one waiting on the last. The thing that makes it feel instant to a user (streaming tokens out one at a time) is the exact thing that makes it a nightmare to schedule across thousands of concurrent requests. None of that shows up when you're prototyping in a notebook.</p>
+
+        <h3 id="ch0-layers">The three layers that all have to work</h3>
+        <p>The cleanest way I've found to think about the whole field is as three layers, stacked, each one useless without the others.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 640 300" role="img" aria-label="The three-layer inference stack">
+            <rect x="120" y="24" width="400" height="64" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="320" y="50" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">RUNTIME</text>
+            <text x="320" y="72" text-anchor="middle" font-size="11" fill="var(--ink-soft)">one model, one instance, as fast as physics allows</text>
+
+            <rect x="120" y="118" width="400" height="64" rx="10" fill="var(--paper)" stroke="var(--accent)" stroke-width="1.5"/>
+            <text x="320" y="144" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">INFRASTRUCTURE</text>
+            <text x="320" y="166" text-anchor="middle" font-size="11" fill="var(--ink-soft)">scale across clusters / regions / clouds, high uptime</text>
+
+            <rect x="120" y="212" width="400" height="64" rx="10" fill="var(--amber-soft)" stroke="var(--accent-2)" stroke-width="1.5"/>
+            <text x="320" y="238" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">TOOLING</text>
+            <text x="320" y="260" text-anchor="middle" font-size="11" fill="var(--ink-soft)">the right abstraction — not too black-box, not raw compute</text>
+
+            <line x1="320" y1="88" x2="320" y2="118" stroke="var(--rule)" stroke-width="1.5"/>
+            <line x1="320" y1="182" x2="320" y2="212" stroke="var(--rule)" stroke-width="1.5"/>
+            <text x="92" y="60" text-anchor="end" font-size="10" fill="var(--ink-soft)">fast</text>
+            <text x="92" y="154" text-anchor="end" font-size="10" fill="var(--ink-soft)">reliable</text>
+            <text x="92" y="248" text-anchor="end" font-size="10" fill="var(--ink-soft)">usable</text>
+          </svg>
+          </div>
+          <figcaption>Fig 0.1 — runtime makes one box fast, infra makes many boxes reliable, tooling makes the whole thing usable.</figcaption>
+        </figure>
+
+        <p>The <strong>runtime</strong> is the bottom of the stack: one model running on one instance, squeezed for every drop of speed. This is batching, KV caching, quantization, speculative decoding, parallelism, disaggregation — the techniques that show up again in Chapter 5 and are most of what people mean when they say "inference optimization."</p>
+
+        <p>The <strong>infrastructure</strong> layer takes that fast single box and makes it a service: autoscaling across a cluster, spreading load over regions and even clouds, surviving a node dying at 3am without anyone noticing. A blazing runtime behind flaky infra is a demo, not a product.</p>
+
+        <p>The <strong>tooling</strong> layer is the abstraction you hand the people building on top. Too black-box (weights in, API out) and you can't tune anything; too raw (here are some CUDA primitives, good luck) and nobody ships. The art is sitting in the middle.</p>
+
+        <div class="callout tip">
+          <span class="label">Intuition</span>
+          <p>When something is slow, the first question isn't "which technique do I add." It's "which layer is this." A slow single request is a runtime problem. A service that's fast when idle and slow under load is an infra problem. If your engineers can't express what they need, it's a tooling problem. Diagnosing the layer first saves you from optimizing a kernel when your autoscaler is the thing on fire.</p>
+        </div>
+
+        <h3 id="ch0-open">Why open models turned this into a field</h3>
+        <p>You could ignore all of this and just call a hosted API, and for a lot of products you should. So why does dedicated inference exist as a discipline? Three reasons, and they're the same three axes the whole book optimizes along.</p>
+        <ul>
+          <li><strong>Latency.</strong> Shared APIs are tuned for aggregate throughput across everyone's traffic, not for your one request being fast. When you control the deployment you can tune for <em>your</em> latency budget.</li>
+          <li><strong>Availability.</strong> A public API gives you maybe two nines and a rate limit that moves without warning. A dedicated deployment you control can hit four-plus nines because the failure modes are yours to engineer around.</li>
+          <li><strong>Cost.</strong> At scale, running your own optimized deployment is frequently 80%+ cheaper than per-token API pricing, because you're not paying someone else's margin on idle capacity.</li>
+        </ul>
+        <p>Open-weight models (Llama, Qwen, DeepSeek, Mistral) are what made this reachable. The moment you can legally hold the weights, all three levers become yours. That's the whole reason inference engineering is a job instead of a billing question.</p>
+
+        <div class="drills">
+          <h4>Drills — Chapter 0</h4>
+          <details><summary>Why is classic ML inference (say, gradient-boosted trees) easy while LLM inference is hard, in one sentence each?</summary>
+            <div class="ans">Trees: a small model, one cheap pass, no sequential dependency, fits on a CPU. LLMs: enormous weights that must be streamed from GPU memory, an autoregressive loop where token <em>N+1</em> waits on token <em>N</em>, and per-request state (the KV cache) that has to be scheduled across many concurrent users.</div>
+          </details>
+          <details><summary>A model serves a single request in 200 ms but P90 latency under production load is 4 s. Which of the three layers do you investigate, and why?</summary>
+            <div class="ans">Infrastructure. The runtime is clearly capable (200 ms when alone), so the tail is coming from queueing, batching delays, cold replicas, or routing — all infra concerns. Reaching for a faster kernel here would be optimizing the wrong layer.</div>
+          </details>
+          <details><summary>Name a case where the right answer is "don't do dedicated inference at all."</summary>
+            <div class="ans">Low or bursty traffic where a hosted API's price and reliability already clear your bar. You only take on dedicated inference when one of latency, availability, or cost is a constraint the API can't meet — paying GPU-hours to serve a trickle of requests is worse on all three axes.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch1">
+        <span class="chap-num">Chapter 1</span>
+        <h2>Prerequisites: the product thinking before you optimize</h2>
+        <p class="lede">Optimization is not "make the number go up." It's picking the least-bad tradeoff among things that fight each other. If you skip this chapter you'll spend a week shaving 30 ms off a latency that nobody's budget cared about.</p>
+
+        <h3 id="ch1-tradeoffs">Latency, throughput, quality — pick your sacrifice</h3>
+        <p>There are three quantities you're always trading: <strong>latency</strong> (how fast one user gets their answer), <strong>throughput</strong> (how many tokens the whole system pushes per second), and <strong>quality</strong> (how good the outputs are). You do not get to maximize all three. Bigger batches lift throughput but hurt per-user latency. Quantization lifts both but can dent quality. The job is finding the point on that surface your product actually needs.</p>
+        <p>The analogy that stuck with me: an NFL athlete isn't the maximal human, they're the <em>specialized</em> one. A lineman optimized for a 40-yard dash would be worse at being a lineman. Same here. A deployment tuned to win a throughput benchmark is often a bad fit for a latency-sensitive chat product. You're building a specialist for one job, not chasing a leaderboard.</p>
+
+        <div class="callout note">
+          <span class="label">Note</span>
+          <p>More constraints make this <em>easier</em>, not harder. "Make it fast" is unanswerable. "P90 time-to-first-token under 400 ms, at 50 requests/sec, for under $X per million tokens, on inputs that average 2k tokens" is a spec you can actually engineer toward. Vague requirements are how you end up optimizing the wrong axis.</p>
+        </div>
+
+        <h3 id="ch1-req">Know your requirements</h3>
+        <p>Before touching a GPU I want four things pinned down: the <strong>application interface</strong> (streaming chat? batch jobs? a tool-call inside an agent that blocks until it returns?), the <strong>latency budget</strong> (what does "too slow" mean to a user), the <strong>unit economics</strong> (cost per request / per user / per month that keeps the product viable), and the <strong>usage pattern</strong> (steady? spiky at business hours? a few giant requests among many tiny ones?). Every later decision keys off these.</p>
+        <p>One axis that confuses people: <strong>shared vs dedicated</strong> is not the same as <strong>open vs closed</strong>. Shared inference bills per token on capacity you share with strangers. Dedicated inference bills per GPU-hour on capacity that's yours. You can run an open model on a shared endpoint, or pay for a dedicated deployment of one. The pricing model and the model's license are two different choices.</p>
+
+        <h3 id="ch1-selection">Model selection</h3>
+        <p>Evals first, always. Pick the smallest model that clears your quality bar on <em>your</em> task, not the one topping a generic leaderboard. Two tools change the calculus:</p>
+        <ul>
+          <li><strong>Fine-tuning</strong> buys domain quality at a smaller size. A text-to-SQL fine-tune of a few-billion-parameter model can match a 100B+ general model on that one task, and it's dramatically cheaper to serve. Specialization beats raw scale when the task is narrow.</li>
+          <li><strong>Distillation</strong> trains a small student to mimic a big teacher's full <em>probability distribution</em>, not just its final answers — the soft targets carry more signal than the hard labels. Worth knowing: the small and large models in a released family are usually trained independently, not distilled from each other. DeepSeek-R1's Llama/Qwen distillations are the famous exception, not the rule.</li>
+        </ul>
+
+        <h3 id="ch1-metrics">The metrics — this is the vocabulary for the whole guide</h3>
+        <p>Get these exactly right, because every chapter after this leans on them.</p>
+        <ul>
+          <li><strong>TTFT (time to first token).</strong> How long until the user sees <em>anything</em>. Gated by <strong>prefill</strong>, which is compute-bound. This is the metric a streaming chat UI lives and dies on.</li>
+          <li><strong>TPS (tokens per second)</strong> is ambiguous and you must say which one you mean. <em>Perceived TPS</em> is one user's stream speed; <em>total TPS</em> is the system's aggregate. <strong>ITL (inter-token latency)</strong> is the cleaner per-user number: 10 ms ITL = 100 tokens/sec/user. Reading speed is ~10 tok/s, so anything past that feels instant to a human.</li>
+          <li><strong>Non-streamed calls</strong> (an agent's tool call that blocks until the full JSON is back) don't care about TTFT — measure total response time instead.</li>
+          <li><strong>Percentiles, not means.</strong> Latency is right-skewed: a few slow requests drag the average somewhere no real request lives. Report P50/P90/P99 (the 1-in-2, 1-in-10, 1-in-100 slowest). Good perf work pulls in the <em>tail</em>, not the mean.</li>
+          <li><strong>Inference-only vs end-to-end.</strong> If the model is fast but the user-visible request is slow, your problem is infra (network, queueing, pre/post-processing), not the model. Always measure both so you know which one to chase.</li>
+        </ul>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 640 250" role="img" aria-label="Right-skewed latency distribution with mean and percentiles">
+            <line x1="60" y1="200" x2="610" y2="200" stroke="var(--ink-soft)" stroke-width="1.2"/>
+            <line x1="60" y1="40" x2="60" y2="200" stroke="var(--ink-soft)" stroke-width="1.2"/>
+            <path d="M60 200 C 120 200, 150 60, 210 60 C 250 60, 270 120, 320 150 C 380 185, 460 192, 610 197 L 610 200 Z" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+            <line x1="200" y1="55" x2="200" y2="200" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <text x="200" y="46" text-anchor="middle" font-size="10" fill="var(--ink)">P50</text>
+            <line x1="300" y1="120" x2="300" y2="200" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <text x="300" y="112" text-anchor="middle" font-size="10" fill="var(--accent)">mean</text>
+            <line x1="400" y1="150" x2="400" y2="200" stroke="var(--accent-2)" stroke-width="1.4"/>
+            <text x="400" y="142" text-anchor="middle" font-size="10" fill="var(--accent-2)">P90</text>
+            <line x1="520" y1="170" x2="520" y2="200" stroke="var(--accent-2)" stroke-width="1.4"/>
+            <text x="520" y="162" text-anchor="middle" font-size="10" fill="var(--accent-2)">P99</text>
+            <text x="335" y="222" text-anchor="middle" font-size="10" fill="var(--ink-soft)">latency →</text>
+            <text x="60" y="232" text-anchor="middle" font-size="10" fill="var(--ink-soft)">fast</text>
+          </svg>
+          </div>
+          <figcaption>Fig 1.1 — the mean sits to the right of P50 and lies about the typical request. The tail (P90/P99) is where your worst users live, and it's what perf work should target.</figcaption>
+        </figure>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 640 170" role="img" aria-label="Streaming timeline showing TTFT then inter-token latency">
+            <line x1="40" y1="90" x2="610" y2="90" stroke="var(--ink-soft)" stroke-width="1.2"/>
+            <rect x="40" y="74" width="150" height="32" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+            <text x="115" y="95" text-anchor="middle" font-size="11" fill="var(--ink)">prefill → TTFT</text>
+            <g fill="var(--accent-2)">
+              <circle cx="220" cy="90" r="5"/><circle cx="270" cy="90" r="5"/><circle cx="320" cy="90" r="5"/>
+              <circle cx="370" cy="90" r="5"/><circle cx="420" cy="90" r="5"/><circle cx="470" cy="90" r="5"/>
+              <circle cx="520" cy="90" r="5"/><circle cx="570" cy="90" r="5"/>
+            </g>
+            <line x1="220" y1="100" x2="270" y2="100" stroke="var(--ink-soft)" stroke-width="1"/>
+            <text x="245" y="120" text-anchor="middle" font-size="10" fill="var(--ink-soft)">ITL</text>
+            <text x="395" y="142" text-anchor="middle" font-size="10.5" fill="var(--ink-soft)">decode: one token per step, spaced by inter-token latency →</text>
+            <text x="115" y="58" text-anchor="middle" font-size="10" fill="var(--accent)">compute-bound</text>
+            <text x="395" y="58" text-anchor="middle" font-size="10" fill="var(--accent-2)">memory-bound</text>
+          </svg>
+          </div>
+          <figcaption>Fig 1.2 — a single streamed response: one compute-bound prefill gives you TTFT, then a run of memory-bound decode steps spaced by ITL. Two different bottlenecks in one request.</figcaption>
+        </figure>
+
+        <div class="drills">
+          <h4>Drills — Chapter 1</h4>
+          <details><summary>A teammate reports "average latency is 600 ms, we're fine." Why might you still have a problem?</summary>
+            <div class="ans">Because latency is right-skewed and the mean hides the tail. P99 could be 5 s while the mean sits at 600 ms — meaning 1 in 100 requests is awful. If those are your biggest customers or longest sessions, the average is actively misleading. Ask for P90/P99.</div>
+          </details>
+          <details><summary>For an agent that makes blocking tool calls (no streaming), which metric matters and which is irrelevant?</summary>
+            <div class="ans">Total response time matters; TTFT is irrelevant. Nobody watches tokens stream — the call blocks until the full structured output returns, so first-token timing is meaningless. Optimizing TTFT here would be wasted effort.</div>
+          </details>
+          <details><summary>Inference benchmarks look great but users say the app is sluggish. First hypothesis?</summary>
+            <div class="ans">The gap is end-to-end overhead, not the model: network round-trips, queueing, auth, pre/post-processing, or a slow client. Measure inference-only vs e2e side by side; if inference is fast and e2e is slow, it's an infra problem and no kernel will save you.</div>
+          </details>
+          <details><summary>Why does adding constraints to a spec tend to produce a better deployment?</summary>
+            <div class="ans">Each constraint removes part of the tradeoff surface and tells you which axis to sacrifice. "Fast" is unsolvable because latency, throughput, and quality conflict; a tight latency budget plus a cost ceiling plus a known traffic shape pins you to a small region of viable configs you can actually optimize within.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch2">
+        <span class="chap-num">Chapter 2</span>
+        <h2>Models: where the bottlenecks live</h2>
+        <p class="lede">This is the chapter that actually changed how I think. Everything before it is framing; here we get to the physics. The punchline you can tattoo on your arm: <strong>prefill is compute-bound, decode is memory-bound.</strong> Once that clicks, half of inference optimization stops being a grab-bag of tricks and becomes obvious.</p>
+
+        <h3 id="ch2-nn">Neural nets, fast</h3>
+        <p>A linear layer is a matrix multiply plus a bias: \( y = Wx + b \). That's it. Stack two of them and you've gained nothing — \( W_2(W_1 x) = (W_2 W_1)x \) is just one bigger linear layer, because the composition of linear maps is linear. The thing that saves you is the <strong>nonlinearity</strong> between them: ReLU, SiLU/Swish, SwiGLU. Slip a nonlinear function between the matmuls and the layers stop collapsing, so depth starts buying you real expressive power, while staying (mostly) differentiable so you can still train it.</p>
+        <p>Framing-wise: modern LLMs are <strong>decoder-only</strong>. The BERT-style encoder-only models that ran NLP in 2019 are rare now (they survive in embeddings, Chapter 6). Encoder-<em>decoder</em> still shows up when the input is a different modality than the output — Whisper turning audio into text, for instance.</p>
+
+        <h3 id="ch2-llm">LLM mechanics</h3>
+        <p>An LLM generates one token at a time, autoregressively: each new token is conditioned on everything before it. A few mechanics people gloss over and then get bitten by:</p>
+        <ul>
+          <li><strong>Tokenization is not a neural net.</strong> It's a deterministic string ↔ integer map (subword units), vocab usually 100k+. No model, no GPU, just a lookup. It runs before and after the network.</li>
+          <li><strong>The chat template</strong> is the exact string format that merges system/user/assistant roles, tool definitions, and multimodal placeholders into one flat sequence. It has to be implemented <em>byte-for-byte</em> right; a wrong template silently tanks quality because the model sees a distribution it was never trained on.</li>
+          <li><strong>Context window</strong> = input tokens + any reasoning tokens the model generates + output tokens. Reasoning models eat into the same budget, which is easy to forget when you size a deployment.</li>
+        </ul>
+        <p>Generation has two phases with completely different cost profiles:</p>
+        <ul>
+          <li><strong>Prefill</strong> processes the entire input prompt in parallel in one shot, building the KV cache. One big batched forward pass.</li>
+          <li><strong>Decode</strong> is the autoregressive loop: one forward pass per output token, each waiting on the last, each reading the whole KV cache.</li>
+        </ul>
+        <p>Each decode step produces a <strong>logit vector</strong> the length of the vocabulary. Normalize it to probabilities and sample. <strong>Temperature</strong> scales the logits before the softmax (higher = flatter = more random); <strong>top-k</strong> keeps the k most likely tokens; <strong>top-p</strong> keeps the smallest set whose mass exceeds p. Temperature 0 (or top-k 1) is greedy and deterministic. You can also bias specific logits or constrain decoding to a grammar — that's how structured JSON and reliable tool calls get enforced.</p>
+
+        <h3>Reading a model off <code>config.json</code></h3>
+        <p>You can infer an enormous amount from the architecture string. Parse <code>Qwen3MoeForCausalLM</code>: family (<code>Qwen</code>), version (<code>3</code>), it's a mixture-of-experts (<code>Moe</code>), and it's a causal language model (<code>ForCausalLM</code>) — left-to-right masked attention, as opposed to a masked/bidirectional LM. One architecture covers many sizes, fine-tunes, and LoRAs, which is exactly why a single optimized runtime can serve a whole family of variants.</p>
+
+        <p>The block structure: an embedding layer maps token IDs to vectors, then <em>N</em> identical transformer blocks (each = attention + a feed-forward MLP + normalization), then an LM head projects back to vocab logits. By parameter count, the <strong>FFN dominates</strong>, attention is second, and the norms and activations are rounding error. Worth remembering when you think about where the memory traffic goes.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 250" role="img" aria-label="Transformer block structure">
+            <rect x="30" y="105" width="80" height="40" rx="6" fill="var(--paper-2)" stroke="var(--rule)"/>
+            <text x="70" y="129" text-anchor="middle" font-size="11" fill="var(--ink)">embed</text>
+            <rect x="150" y="60" width="300" height="130" rx="10" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="5 4"/>
+            <text x="300" y="50" text-anchor="middle" font-size="10" fill="var(--accent)">× N blocks</text>
+            <rect x="170" y="95" width="110" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+            <text x="225" y="117" text-anchor="middle" font-size="11" fill="var(--ink)">attention</text>
+            <rect x="320" y="95" width="110" height="34" rx="6" fill="var(--amber-soft)" stroke="var(--accent-2)"/>
+            <text x="375" y="117" text-anchor="middle" font-size="11" fill="var(--ink)">FFN / MLP</text>
+            <text x="300" y="160" text-anchor="middle" font-size="9.5" fill="var(--ink-soft)">+ norm, residual</text>
+            <text x="375" y="146" text-anchor="middle" font-size="8.5" fill="var(--accent-2)">most of the weights</text>
+            <rect x="490" y="105" width="80" height="40" rx="6" fill="var(--paper-2)" stroke="var(--rule)"/>
+            <text x="530" y="123" text-anchor="middle" font-size="11" fill="var(--ink)">LM head</text>
+            <text x="530" y="138" text-anchor="middle" font-size="8.5" fill="var(--ink-soft)">→ logits</text>
+            <line x1="110" y1="125" x2="150" y2="125" stroke="var(--ink-soft)"/><line x1="450" y1="125" x2="490" y2="125" stroke="var(--ink-soft)"/>
+            <line x1="280" y1="112" x2="320" y2="112" stroke="var(--ink-soft)"/>
+          </svg>
+          </div>
+          <figcaption>Fig 2.1 — embedding → N blocks (attention + FFN + norm) → LM head. The FFN holds the bulk of the parameters.</figcaption>
+        </figure>
+
+        <h3 id="ch2-attn">Attention, properly</h3>
+        <p>Scaled dot-product attention is the core operation:</p>
+        $$ \text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^{\top}}{\sqrt{d_k}}\right) V $$
+        <p>Each token emits a query \(Q\), a key \(K\), and a value \(V\). The query dotted against every key gives attention scores; softmax turns them into weights; the weighted sum of values is the output. <strong>Multi-head</strong> runs several of these in parallel on slices of the vector. LLMs use <strong>self-attention</strong> with a <strong>causal mask</strong> (a token may only attend to earlier tokens); image and multimodal models also use <strong>cross-attention</strong> (one sequence attending to another).</p>
+        <p>The scary fact: \(QK^{\top}\) is \(N \times N\) for sequence length \(N\), so attention is naively <strong>\(O(N^2)\)</strong>. The thing that rescues you in practice is the <strong>KV cache</strong>. During decode, the keys and values for all previous tokens never change, so you store them and look them up instead of recomputing. The cache is <em>built</em> during prefill and <em>read and grown by one</em> on every decode step. With it, each decode step is linear in sequence length rather than quadratic — the single most important systems trick in LLM serving.</p>
+        <p><strong>MoE</strong> changes the accounting: a router picks a few experts per token out of many, so the model has far more <em>total</em> parameters than <em>active</em> parameters per token. That decouples capacity from per-token compute and rewrites the throughput story (and the parallelism story in Chapter 5).</p>
+
+        <h3 id="ch2-bottlenecks">The bottleneck math — don't skip this, it's the best part</h3>
+        <p>A GPU has exactly two resources you can run out of: <strong>compute</strong> (floating-point ops per second) and <strong>memory bandwidth</strong> (bytes per second moved between HBM and the compute units). At any moment one is saturated and the other is sitting idle. That idle one is your bottleneck, and which one it is determines every optimization decision.</p>
+        <p>Each chip has an <strong>ops:byte ratio</strong> — its break-even arithmetic intensity. For an H100 in FP16:</p>
+        $$ \frac{989 \times 10^{12}\ \text{FLOP/s}}{3.35 \times 10^{12}\ \text{bytes/s}} \approx 295\ \text{ops/byte} $$
+        <p>So the H100 can do ~295 floating-point operations in the time it takes to move one byte. <strong>Arithmetic intensity</strong> is the matching property of your <em>algorithm</em>: total compute work ÷ total memory traffic, per kernel. Compare the two:</p>
+        <ul>
+          <li>Algorithm intensity <strong>below</strong> 295 → you finish the math before the bytes arrive → <strong>memory-bound</strong>.</li>
+          <li>Algorithm intensity <strong>above</strong> 295 → the bytes are there but the math lags → <strong>compute-bound</strong>.</li>
+        </ul>
+        <p>The <strong>roofline model</strong> draws this: a diagonal bandwidth ceiling that rises with intensity, meeting a flat compute ceiling at the <em>ridge point</em>. Left of the ridge you're memory-bound; right of it, compute-bound.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 280" role="img" aria-label="Roofline model">
+            <line x1="60" y1="40" x2="60" y2="230" stroke="var(--ink-soft)"/>
+            <line x1="60" y1="230" x2="560" y2="230" stroke="var(--ink-soft)"/>
+            <line x1="60" y1="230" x2="300" y2="70" stroke="var(--accent)" stroke-width="2"/>
+            <line x1="300" y1="70" x2="560" y2="70" stroke="var(--accent)" stroke-width="2"/>
+            <circle cx="300" cy="70" r="4" fill="var(--accent-2)"/>
+            <text x="300" y="60" text-anchor="middle" font-size="10" fill="var(--accent-2)">ridge (~295)</text>
+            <rect x="60" y="70" width="240" height="160" fill="var(--accent-soft)" opacity="0.5"/>
+            <rect x="300" y="70" width="260" height="160" fill="var(--amber-soft)" opacity="0.6"/>
+            <text x="175" y="160" text-anchor="middle" font-size="12" fill="var(--accent)">memory-bound</text>
+            <text x="175" y="178" text-anchor="middle" font-size="9.5" fill="var(--ink-soft)">decode lives here</text>
+            <text x="430" y="160" text-anchor="middle" font-size="12" fill="var(--accent-2)">compute-bound</text>
+            <text x="430" y="178" text-anchor="middle" font-size="9.5" fill="var(--ink-soft)">prefill lives here</text>
+            <text x="300" y="255" text-anchor="middle" font-size="10" fill="var(--ink-soft)">arithmetic intensity (ops/byte) →</text>
+            <text x="48" y="135" text-anchor="middle" font-size="10" fill="var(--ink-soft)" transform="rotate(-90 48 135)">attainable FLOP/s →</text>
+          </svg>
+          </div>
+          <figcaption>Fig 2.2 — the roofline. Bandwidth ceiling (diagonal) meets compute ceiling (flat) at the ridge. Your kernel's intensity decides which side it lands on.</figcaption>
+        </figure>
+
+        <p>Now the headline result. <strong>Prefill</strong> loads each weight once and then does big matmuls against the whole prompt at once — lots of compute per byte loaded, high intensity, lands right of the ridge → <strong>compute-bound → it sets TTFT</strong>. <strong>Decode</strong> reloads the entire model's weights from HBM to generate <em>one</em> token via skinny vector-matrix mults — almost no compute per byte, low intensity, lands left of the ridge → <strong>memory-bound → it sets TPS</strong>. Decode spends its life waiting on memory while the tensor cores twiddle their thumbs.</p>
+
+        <div class="callout tip">
+          <span class="label">Worked example — decode attention intensity</span>
+          <p>Take \(d = 128\), \(N = 4096\), FP16 (2 bytes/element). The tensors: \(Q, K, V\) are \(N \times d\); the score and probability matrices \(S, P\) are \(N \times N\); output \(O\) is \(N \times d\). A \(4096 \times 4096\) FP16 matrix is ~32 MiB, so those \(N\times N\) intermediates dominate the traffic. Walk each line of attention as read → compute → write, sum the bytes for traffic and the FLOPs for work, and the ratio comes out to roughly <strong>62 ops/byte</strong>. That's far under the H100's 295, so decode attention is solidly <strong>memory-bound</strong>. This is an intuition-building exercise, not something you compute daily — but doing it once makes the roofline stop being abstract.</p>
+        </div>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 200" role="img" aria-label="Prefill vs decode arithmetic intensity">
+            <line x1="200" y1="30" x2="200" y2="170" stroke="var(--accent-2)" stroke-width="1.3" stroke-dasharray="5 4"/>
+            <text x="200" y="22" text-anchor="middle" font-size="9.5" fill="var(--accent-2)">H100 break-even ≈ 295</text>
+            <rect x="60" y="55" width="90" height="30" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+            <text x="55" y="75" text-anchor="end" font-size="11" fill="var(--ink)">decode</text>
+            <text x="158" y="75" font-size="9" fill="var(--ink-soft)">~62 → memory-bound</text>
+            <rect x="60" y="115" width="430" height="30" rx="4" fill="var(--amber-soft)" stroke="var(--accent-2)"/>
+            <text x="55" y="135" text-anchor="end" font-size="11" fill="var(--ink)">prefill</text>
+            <text x="498" y="135" font-size="9" fill="var(--ink-soft)">high → compute-bound</text>
+          </svg>
+          </div>
+          <figcaption>Fig 2.3 — same model, two phases, opposite sides of the ridge. This single picture is why disaggregation (Ch 5) exists.</figcaption>
+        </figure>
+
+        <div class="aside"><b>The aside:</b> the first time I really sat with the decode number I was annoyed. The tensor cores — the most expensive, most marketed part of the GPU — are mostly <em>idle</em> during decode. You bought a Ferrari to sit in traffic. That waste is exactly the opening that batching and speculative decoding exploit: there's spare compute lying around, so go find work for it.</div>
+
+        <p>Two consequences fall straight out. <strong>Batching makes decode less memory-bound</strong>: if you load the weights once and run many sequences' decode steps against them together, you amortize the byte cost over more compute, pushing intensity up toward the ridge. And <strong>image/video generation is compute-bound</strong>, the opposite of LLM decode — which is why its optimization playbook differs.</p>
+
+        <h3 id="ch2-diffusion">Image and video generation (lighter touch)</h3>
+        <p>Diffusion models generate by <strong>iterative denoising</strong>: start from pure noise in a compressed latent space and, over many steps, subtract predicted noise until a coherent latent emerges, then decode it to pixels. An SDXL-era pipeline is text encoder → denoiser (UNet) → VAE decoder. Modern ones are heavier: Qwen-Image uses a full VLM as the text encoder, a ~20B denoiser, and a dual VAE. <strong>Few-step models</strong> (≤8 steps via latent consistency or distillation) cut 80–90% of the work for some quality loss.</p>
+        <p>Video adds a time axis: the latent is over X, Y, <strong>and T</strong>. You hold the whole clip and denoise every frame each step. Do it frame-by-frame instead and errors accumulate down the timeline (Self-Forcing and friends fight this). In practice that means batch size 1 on a full 8-GPU node, ~50 steps, enormous latents. The mental model I keep: <em>video gen in 2025 feels like LLMs in 2023</em> — expensive, fast-moving, and about to get an order of magnitude cheaper.</p>
+
+        <h3 id="ch2-optattn">Optimizing attention</h3>
+        <p>Two roads. The first keeps the math identical and just runs it smarter (lossless); the second changes the math (lossy-ish, trades a little quality for a lot of speed).</p>
+        <p><strong>Better implementations (lossless):</strong></p>
+        <ul>
+          <li><strong>FlashAttention</strong> fuses the attention kernels so the giant \(N \times N\) score matrix never gets written to HBM — it's computed in tiles in fast on-chip memory, killing redundant reads and writes. It's hardware-specific (H100 and B200 want different code) and shines for compute-bound prefill and video.</li>
+          <li><strong>PagedAttention</strong> stores the KV cache in non-contiguous fixed-size pages addressed through a lookup table, the way an OS pages virtual memory. That kills the fragmentation you'd otherwise get from variable-length sequences and lets you pack far more concurrent requests into the same VRAM. (This is vLLM's origin trick.)</li>
+        </ul>
+        <p><strong>Better algorithms (lossy-ish):</strong> sliding-window attention drops \(O(N^2)\) to \(O(Nw)\) by only attending within a window \(w\); gated, linear, and compressed variants approximate the full thing; multi-latent attention (MLA) shrinks the KV cache itself. And you can leave attention behind entirely: <strong>Mamba</strong> and other SSMs carry a recurrent state instead of an all-pairs comparison, and hybrids like Nemotron Nano interleave SSM and transformer layers to get most of the quality at a fraction of the KV cost.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 210" role="img" aria-label="Standard vs FlashAttention memory movement">
+            <text x="150" y="24" text-anchor="middle" font-size="11" fill="var(--ink)">standard attention</text>
+            <rect x="60" y="40" width="80" height="30" rx="5" fill="var(--paper-2)" stroke="var(--rule)"/><text x="100" y="60" text-anchor="middle" font-size="9" fill="var(--ink)">QKᵀ</text>
+            <rect x="60" y="85" width="80" height="30" rx="5" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="100" y="105" text-anchor="middle" font-size="8.5" fill="var(--ink)">write N×N</text>
+            <rect x="60" y="130" width="80" height="30" rx="5" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="100" y="150" text-anchor="middle" font-size="8.5" fill="var(--ink)">read N×N</text>
+            <rect x="60" y="175" width="80" height="26" rx="5" fill="var(--paper-2)" stroke="var(--rule)"/><text x="100" y="193" text-anchor="middle" font-size="9" fill="var(--ink)">·V</text>
+            <text x="180" y="105" font-size="9" fill="var(--accent-2)">HBM round-trips</text>
+
+            <line x1="300" y1="40" x2="300" y2="200" stroke="var(--rule)"/>
+            <text x="450" y="24" text-anchor="middle" font-size="11" fill="var(--ink)">FlashAttention</text>
+            <rect x="380" y="60" width="140" height="100" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="450" y="100" text-anchor="middle" font-size="9.5" fill="var(--ink)">tiled in SRAM,</text>
+            <text x="450" y="116" text-anchor="middle" font-size="9.5" fill="var(--ink)">fused, never</text>
+            <text x="450" y="132" text-anchor="middle" font-size="9.5" fill="var(--ink)">spills N×N to HBM</text>
+          </svg>
+          </div>
+          <figcaption>Fig 2.4 — standard attention writes and re-reads the full score matrix from HBM; FlashAttention keeps it on-chip in tiles. Same answer, far fewer bytes moved.</figcaption>
+        </figure>
+
+        <div class="drills">
+          <h4>Drills — Chapter 2</h4>
+          <details><summary>State why prefill and decode land on opposite sides of the roofline.</summary>
+            <div class="ans">Prefill loads each weight once and does large matmuls over the whole prompt — high compute per byte, high arithmetic intensity, compute-bound (sets TTFT). Decode reloads all weights from HBM to produce a single token with thin vector-matrix mults — tiny compute per byte, low intensity, memory-bound (sets TPS).</div>
+          </details>
+          <details><summary>The KV cache turns attention from \(O(N^2)\) to linear per step. What exactly is cached, and when is it built vs. used?</summary>
+            <div class="ans">The keys and values of all previous tokens (they're fixed once computed). It's built in prefill (all prompt tokens at once) and then on each decode step you append one token's K/V and reuse the rest instead of recomputing — so each step is \(O(N)\), not \(O(N^2)\).</div>
+          </details>
+          <details><summary>You compute an algorithm's arithmetic intensity as 62 ops/byte on a chip whose ops:byte is 295. Bound by what? How might you move it?</summary>
+            <div class="ans">Memory-bound (62 ≪ 295). To push intensity up, do more compute per byte loaded: batch more sequences together (amortize weight loads), fuse kernels to cut HBM traffic, or quantize to halve the bytes moved. You can't fix it by buying more FLOPs — the tensor cores are already idle.</div>
+          </details>
+          <details><summary>FlashAttention and PagedAttention are both "lossless." What does each actually optimize, and are they competing?</summary>
+            <div class="ans">Not competing — orthogonal. FlashAttention optimizes the attention <em>compute</em> by tiling/fusing so the \(N\times N\) matrix never hits HBM (saves bandwidth during the op). PagedAttention optimizes KV cache <em>storage</em> via non-contiguous paging to eliminate fragmentation and pack more concurrent requests. You typically run both.</div>
+          </details>
+          <details><summary>Why does batching reduce decode's memory-bound-ness, and where's the limit?</summary>
+            <div class="ans">A weight load is amortized across every sequence in the batch, so compute-per-byte (intensity) rises toward the ridge. The limit is VRAM for the growing per-sequence KV caches and the latency cost of waiting to assemble a batch — past a point you're compute-bound or you've blown your per-user latency budget.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch3">
+        <span class="chap-num">Chapter 3</span>
+        <h2>Hardware: the GPU mental model</h2>
+        <p class="lede">You don't need to write CUDA to do inference well, but you do need a true picture of the machine, or the roofline stays a cartoon. The one-liner: a CPU is built to do one thing after another quickly; a GPU is built to do the same thing to thousands of numbers at once. Matmuls are exactly that shape, which is why they live on GPUs.</p>
+
+        <h3 id="ch3-model">Compute units</h3>
+        <p>A GPU is a grid of <strong>streaming multiprocessors (SMs)</strong>, and each SM packs three kinds of cores:</p>
+        <ul>
+          <li><strong>CUDA cores</strong> — scalar/vector arithmetic, the general-purpose workhorses.</li>
+          <li><strong>Tensor cores</strong> — dedicated matrix-multiply-accumulate (MMA) units. This is the part that matters for inference; when a spec sheet quotes "989 TFLOP/s FP16," it means Tensor-core FLOPs. Measure inference compute here, not in CUDA-core numbers.</li>
+          <li><strong>SFUs (special function units)</strong> — transcendentals like sin/cos/exp/log, which is where the <code>exp</code> in your softmax actually runs.</li>
+        </ul>
+
+        <h3 id="ch3-memory">Memory hierarchy</h3>
+        <p>Memory is a pyramid: tiny-and-instant at the top, huge-and-slow at the bottom. Registers → shared memory / L1 (per-SM, on-chip) → L2 (shared across SMs) → <strong>HBM (VRAM)</strong>, the big pool off-chip. Every level up the pyramid trades capacity for bandwidth. The reason decode is memory-bound is right here: those model weights live in HBM, and HBM bandwidth — fast as it is in absolute terms — is the wall decode keeps slamming into. FlashAttention is fast precisely because it does its work up in SRAM instead of round-tripping to HBM.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 250" role="img" aria-label="GPU memory hierarchy pyramid with bandwidth">
+            <polygon points="300,30 240,80 360,80" fill="var(--accent)" opacity="0.85"/>
+            <text x="300" y="66" text-anchor="middle" font-size="9.5" fill="#fff">registers</text>
+            <rect x="220" y="84" width="160" height="40" fill="var(--accent)" opacity="0.55"/>
+            <text x="300" y="104" text-anchor="middle" font-size="10" fill="var(--ink)">SMEM / L1</text>
+            <text x="300" y="117" text-anchor="middle" font-size="8" fill="var(--ink-soft)">on-chip, ~tens of TB/s</text>
+            <rect x="180" y="128" width="240" height="44" fill="var(--accent)" opacity="0.32"/>
+            <text x="300" y="148" text-anchor="middle" font-size="10" fill="var(--ink)">L2 cache</text>
+            <text x="300" y="161" text-anchor="middle" font-size="8" fill="var(--ink-soft)">shared across SMs</text>
+            <rect x="120" y="176" width="360" height="54" fill="var(--accent)" opacity="0.16" stroke="var(--accent)"/>
+            <text x="300" y="198" text-anchor="middle" font-size="11" fill="var(--ink)">HBM / VRAM</text>
+            <text x="300" y="213" text-anchor="middle" font-size="8.5" fill="var(--accent-2)">~3.35 TB/s on H100 — the decode wall</text>
+            <text x="500" y="55" font-size="9" fill="var(--ink-soft)">faster ↑</text>
+            <text x="500" y="210" font-size="9" fill="var(--ink-soft)">bigger ↓</text>
+          </svg>
+          </div>
+          <figcaption>Fig 3.1 — the memory pyramid. Capacity grows downward, bandwidth grows upward, and HBM bandwidth is what caps decode throughput.</figcaption>
+        </figure>
+
+        <h3 id="ch3-skus">Generations and SKUs</h3>
+        <p>The naming is a mess, so here's the map. NVIDIA datacenter generations: <strong>Hopper</strong> (H100, H200), <strong>Ada Lovelace</strong> (L4, L40S, plus the RTX line), <strong>Blackwell</strong> (B200, GB200), with <strong>Rubin</strong> next. The <strong>Grace</strong> and <strong>Vera</strong> CPUs pair with GPUs into "superchips" (Grace-Hopper, Grace-Blackwell) sharing fast coherent memory. Disambiguate the tiers: datacenter (H100, B200), workstation (RTX Pro 6000), and consumer (RTX 5090) cards differ enormously in memory, interconnect, and whether you're even licensed to run them in a datacenter.</p>
+
+        <h3 id="ch3-interconnect">Instances and interconnects</h3>
+        <p>Real deployments are multi-GPU nodes, and how those GPUs talk decides your parallelism strategy. <strong>NVLink / NVSwitch</strong> connect GPUs <em>within</em> a node at high bandwidth; <strong>InfiniBand</strong> connects nodes <em>to each other</em>, slower. Both are a <em>fraction</em> of a single GPU's VRAM bandwidth — and that gap is the entire reason multi-GPU inference has to be topology-aware. Moving data between GPUs is expensive relative to feeding one GPU, so you design to minimize it.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 200" role="img" aria-label="Node interconnect: NVLink within, InfiniBand between">
+            <rect x="40" y="40" width="220" height="120" rx="10" fill="none" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="150" y="32" text-anchor="middle" font-size="10" fill="var(--accent)">node A (NVLink inside)</text>
+            <rect x="60" y="60" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="80" y="82" text-anchor="middle" font-size="9">G0</text>
+            <rect x="120" y="60" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="140" y="82" text-anchor="middle" font-size="9">G1</text>
+            <rect x="60" y="106" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="80" y="128" text-anchor="middle" font-size="9">G2</text>
+            <rect x="120" y="106" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="140" y="128" text-anchor="middle" font-size="9">G3</text>
+            <line x1="100" y1="77" x2="120" y2="77" stroke="var(--accent)"/><line x1="100" y1="123" x2="120" y2="123" stroke="var(--accent)"/>
+            <line x1="80" y1="94" x2="80" y2="106" stroke="var(--accent)"/><line x1="140" y1="94" x2="140" y2="106" stroke="var(--accent)"/>
+            <rect x="340" y="40" width="220" height="120" rx="10" fill="none" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="450" y="32" text-anchor="middle" font-size="10" fill="var(--accent)">node B</text>
+            <rect x="360" y="60" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><rect x="420" y="60" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+            <rect x="360" y="106" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><rect x="420" y="106" width="40" height="34" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+            <line x1="260" y1="100" x2="340" y2="100" stroke="var(--accent-2)" stroke-width="2" stroke-dasharray="6 4"/>
+            <text x="300" y="92" text-anchor="middle" font-size="9" fill="var(--accent-2)">InfiniBand</text>
+            <text x="300" y="118" text-anchor="middle" font-size="8" fill="var(--ink-soft)">(slower)</text>
+          </svg>
+          </div>
+          <figcaption>Fig 3.2 — fast NVLink inside a node, slower InfiniBand between nodes. Both are well under a single GPU's HBM bandwidth, which is why crossing a node boundary is something you architect around.</figcaption>
+        </figure>
+
+        <p><strong>MIG (multi-instance GPU)</strong> goes the other way: slice one big GPU into isolated hardware partitions, each with its own memory and compute, so a small model that can't saturate an H100 gets a right-sized slice instead of wasting the whole card.</p>
+        <p>A few orientation notes for the rest of the landscape. <strong>Cloud vs on-prem</strong> is a capital-vs-flexibility call. Among clouds, the <strong>hyperscalers</strong> (AWS/GCP/Azure) sell everything; the <strong>neoclouds</strong> (CoreWeave, Nebius, and friends) specialize in GPUs and often win on price and availability. Non-NVIDIA accelerators exist — Google TPUs, AWS Trainium/Inferentia — with their own software stacks, and at the small end there's genuine local inference on desktops and phones. All real, all mostly out of scope for a GPU-serving deep dive.</p>
+
+        <div class="drills">
+          <h4>Drills — Chapter 3</h4>
+          <details><summary>Why do we quote inference compute in Tensor-core FLOPs rather than CUDA-core FLOPs?</summary>
+            <div class="ans">Because the dominant inference op is matrix multiply, and Tensor cores are purpose-built MMA units that do it at many times the CUDA-core rate. The CUDA-core number would massively understate the chip's real matmul throughput, which is what the roofline's compute ceiling is made of.</div>
+          </details>
+          <details><summary>NVLink and InfiniBand are both "fast." Why does the distinction dominate multi-GPU design?</summary>
+            <div class="ans">Both are far slower than a single GPU's HBM bandwidth, and NVLink (intra-node) is meaningfully faster than InfiniBand (inter-node). So crossing a node boundary is the expensive move — you prefer parallelism schemes that keep chatty syncs (like tensor-parallel all-reduces) inside a node and only spend InfiniBand on cheaper, less frequent communication.</div>
+          </details>
+          <details><summary>You're serving a 3B model that uses 15% of an H100. What hardware feature helps, and what's the tradeoff?</summary>
+            <div class="ans">MIG — slice the H100 into isolated partitions so the small model gets a right-sized chunk and the rest of the card serves other work. Tradeoff: partitions are fixed-size and isolated, so you lose the flexibility to burst into the whole GPU, and very latency-spiky workloads may prefer a dedicated smaller card.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch4">
+        <span class="chap-num">Chapter 4</span>
+        <h2>Software: from CUDA up to inference engines</h2>
+        <p class="lede">Almost nobody writes the kernels. What you actually do is pick the right <em>engine</em> and configure it well. But you can't pick well without knowing what's underneath, so we climb the ladder from kernels to orchestrators.</p>
+
+        <h3 id="ch4-cuda">CUDA and kernels</h3>
+        <p>A <strong>kernel</strong> is a function that runs on the GPU. Two ideas matter at this level even if you never write one. <strong>Kernel selection</strong>: for a given matmul there are many implementations, and the fastest depends on the exact shape, dtype, and chip — a good engine picks the right one for your situation. <strong>Kernel fusion</strong>: combine several ops into one kernel so intermediate results stay in fast on-chip memory instead of bouncing to HBM and back. Fusing an activation into the preceding matmul, for example, saves a full HBM round-trip. Cutting round-trips is the whole game for memory-bound work.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 150" role="img" aria-label="Kernel fusion before and after">
+            <text x="150" y="24" text-anchor="middle" font-size="10" fill="var(--ink)">unfused</text>
+            <rect x="50" y="40" width="60" height="28" rx="4" fill="var(--paper-2)" stroke="var(--rule)"/><text x="80" y="58" text-anchor="middle" font-size="9">matmul</text>
+            <rect x="130" y="40" width="46" height="28" rx="4" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="153" y="58" text-anchor="middle" font-size="8">HBM</text>
+            <rect x="196" y="40" width="60" height="28" rx="4" fill="var(--paper-2)" stroke="var(--rule)"/><text x="226" y="58" text-anchor="middle" font-size="9">act.</text>
+            <line x1="110" y1="54" x2="130" y2="54" stroke="var(--ink-soft)"/><line x1="176" y1="54" x2="196" y2="54" stroke="var(--ink-soft)"/>
+            <text x="150" y="86" text-anchor="middle" font-size="8" fill="var(--accent-2)">extra write + read</text>
+            <text x="450" y="24" text-anchor="middle" font-size="10" fill="var(--ink)">fused</text>
+            <rect x="370" y="40" width="160" height="28" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="450" y="58" text-anchor="middle" font-size="9">matmul + act. (one kernel)</text>
+            <text x="450" y="86" text-anchor="middle" font-size="8" fill="var(--accent)">intermediate stays on-chip</text>
+          </svg>
+          </div>
+          <figcaption>Fig 4.1 — fusion removes the HBM round-trip between two ops by keeping the intermediate in SRAM.</figcaption>
+        </figure>
+
+        <h3 id="ch4-frameworks">Frameworks and formats</h3>
+        <p><strong>PyTorch</strong> is the substrate everything sits on. Weights ship as files: <strong>safetensors</strong> (safe, the default now) over <strong>pickle</strong> (can execute arbitrary code on load — avoid), and <strong>GGUF</strong> for the llama.cpp/local world. For graph-compiled paths there's <strong>ONNX Runtime</strong> and <strong>TensorRT</strong>; for quick model and pipeline access there's Hugging Face <strong>Transformers</strong> and <strong>Diffusers</strong>. These are the building blocks; the engines below wrap them into something you'd actually serve.</p>
+
+        <h3 id="ch4-engines">Inference engines — compare them honestly</h3>
+        <p>This is where most of your leverage is. The honest comparison:</p>
+        <table class="tbl">
+          <thead><tr><th>Engine</th><th>What it's best at</th><th>The catch</th></tr></thead>
+          <tbody>
+            <tr><td><strong>vLLM</strong></td><td>Origin of PagedAttention; broad model support; fast to stand up; the safe first choice for new or fragmented architectures, including VLMs.</td><td>Not always the absolute fastest once a model is stable and you'd compile it.</td></tr>
+            <tr><td><strong>SGLang</strong></td><td>Structured and agentic workloads; RadixAttention reuses shared prefixes across requests aggressively.</td><td>Smaller ecosystem; shines most when your traffic has heavy prefix sharing.</td></tr>
+            <tr><td><strong>TensorRT-LLM</strong></td><td>Top-end performance via a hardware-specific compile step. A config-and-benchmark workflow.</td><td>The engine build takes minutes and is pinned to an exact GPU/CUDA combo — you must cache the built engine and rebuild on any change.</td></tr>
+            <tr><td><strong>NVIDIA Dynamo</strong></td><td>Orchestration <em>above</em> the engines: large-scale distributed serving and disaggregation.</td><td>It's a layer, not a single-box engine — overkill until you're at real scale (sets up Ch 5).</td></tr>
+          </tbody>
+        </table>
+        <p>Standing one up is genuinely a one-liner, which is part of why vLLM is the default starting point:</p>
+        <pre><code class="language-bash">vllm serve Qwen/Qwen3-8B \
+  --tensor-parallel-size 2 \
+  --max-model-len 32768 \
+  --kv-cache-dtype fp8 \
+  --enable-prefix-caching</code></pre>
+        <p>Every flag there is a Chapter 5 technique in disguise: tensor parallelism, context length (KV budget), KV-cache quantization, prefix caching. The engine is where the theory becomes a config value.</p>
+
+        <h3 id="ch4-bench">Benchmarking vs profiling</h3>
+        <p>These get used interchangeably and they're not the same thing. <strong>Benchmarking</strong> produces a number: "P90 TTFT is 350 ms at 40 req/s." <strong>Profiling</strong> tells you <em>why</em> that number is what it is, op by op (PyTorch Profiler for the framework view, Nsight Systems for the timeline, Nsight Compute for a single kernel). Most engineers only ever benchmark, and that's correct — you reach for a profiler when you're writing kernels, contributing to vLLM/SGLang, or bringing up a brand-new modality.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 130" role="img" aria-label="Software stack ladder">
+            <g font-size="11" fill="var(--ink)" text-anchor="middle">
+              <rect x="30" y="50" width="110" height="40" rx="6" fill="var(--paper-2)" stroke="var(--rule)"/><text x="85" y="74">CUDA / kernels</text>
+              <rect x="170" y="50" width="110" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="225" y="74">framework</text>
+              <rect x="310" y="50" width="110" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="365" y="74">engine</text>
+              <rect x="450" y="50" width="120" height="40" rx="6" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="510" y="74">orchestrator</text>
+            </g>
+            <line x1="140" y1="70" x2="170" y2="70" stroke="var(--ink-soft)"/><line x1="280" y1="70" x2="310" y2="70" stroke="var(--ink-soft)"/><line x1="420" y1="70" x2="450" y2="70" stroke="var(--ink-soft)"/>
+            <text x="85" y="40" text-anchor="middle" font-size="8" fill="var(--ink-soft)">you rarely touch</text>
+            <text x="365" y="40" text-anchor="middle" font-size="8" fill="var(--accent)">you live here</text>
+          </svg>
+          </div>
+          <figcaption>Fig 4.2 — the ladder. Most of your work is at the engine layer, configuring primitives the lower layers implement.</figcaption>
+        </figure>
+
+        <div class="callout warning">
+          <span class="label">Foot-gun</span>
+          <p>Benchmarks lie when they're unrealistic. Replay <em>real</em> traffic shapes (input/output length distributions, arrival bursts), separate warm from cold runs, and fix your seeds. A number from a single fixed-length prompt at concurrency 1 will look beautiful and tell you nothing about production.</p>
+        </div>
+
+        <div class="drills">
+          <h4>Drills — Chapter 4</h4>
+          <details><summary>You're bringing up a freshly released MoE VLM nobody has optimized yet. Which engine, and why not TensorRT-LLM on day one?</summary>
+            <div class="ans">vLLM (or SGLang) — broad, fast-moving model support and quick to stand up, which is what you need for a new/fragmented architecture. TensorRT-LLM needs a hardware-specific compile step and mature support; spending minutes-long engine builds on a model whose graph is still settling is premature. Compile it once it's stable and throughput is the priority.</div>
+          </details>
+          <details><summary>What does kernel fusion buy you, in roofline terms?</summary>
+            <div class="ans">It cuts HBM traffic by keeping intermediates on-chip, which lowers the bytes side of arithmetic intensity — pushing a memory-bound op rightward toward the ridge. For bandwidth-limited work that's a direct speedup with zero quality cost.</div>
+          </details>
+          <details><summary>When is profiling (not benchmarking) the right tool?</summary>
+            <div class="ans">When you need to know <em>why</em> a number is what it is at the op/kernel level: writing or tuning kernels, contributing to an engine, or debugging a new modality where the bottleneck is unknown. For "is config A faster than config B," benchmarking is enough.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch5">
+        <span class="chap-num">Chapter 5</span>
+        <h2>Techniques: the applied-research chapter</h2>
+        <p class="lede">This is the fun part and the part with the most rope to hang yourself. Two framing rules carry the whole chapter: more constraints unlock more perf, and more traffic makes more techniques worth their complexity. You don't reach for tensor parallelism across eight GPUs or dynamic disaggregation to serve a hundred requests a day.</p>
+        <p>And the techniques interact. Some are <strong>symbiotic</strong> — KV-cache quantization frees memory that makes disaggregation cheaper. Some <strong>conflict</strong> — bigger batches eat the spare compute that speculative decoding needs to do its job. There's a Baseten story about grinding through <strong>77 configurations to land a 2× TPS win</strong>, and that's the honest texture of this work: patient, empirical, one variable at a time. There's no config that's optimal in general, only optimal for your spec.</p>
+
+        <h3 id="ch5-quant">Quantization</h3>
+        <p>Drop the numeric precision of the model: BF16/FP16 down to FP8, even FP4. The payoff is double-barreled. Prefill gets roughly <strong>2× the Tensor-core FLOPs</strong> at lower precision (it's compute-bound, so that's free speed). Decode effectively <strong>doubles its memory bandwidth</strong>, because each weight is half the bytes to move (it's memory-bound, so that's exactly the resource it was short on). Real-world gains run ~30–50% per precision level, not a clean 2× — there's always overhead.</p>
+        <p>The risk is <strong>compounding precision error</strong>. Think of \(\pi\): keep it as 3.14159 and \(\pi^3\) is basically right; round to 3.14 and the error grows when you cube it; round to 3 and \(\pi^3 \approx 27\) versus the true ~31 is a disaster. Low-precision errors compound the same way as they flow through layers and, worse, token-to-token through the KV cache.</p>
+        <p><strong>Number formats</strong> matter more than the bit count suggests. INT8 vs FP8 (the E4M3 and E5M2 variants trade mantissa for dynamic range); FP4 and MXFP4; <strong>microscaling (MX)</strong> formats that attach shared scales to small blocks. And the scale granularity is a dial: per-tensor (coarse, cheap) → per-channel → per-group (fine, accurate). Finer scales preserve more dynamic range at a little overhead.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 130" role="img" aria-label="Quantization risk gradient">
+            <defs><linearGradient id="rg" x1="0" x2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient></defs>
+            <rect x="40" y="55" width="520" height="22" rx="11" fill="url(#rg)"/>
+            <text x="90" y="100" text-anchor="middle" font-size="10" fill="var(--ink)">weights /</text>
+            <text x="90" y="113" text-anchor="middle" font-size="10" fill="var(--ink)">activations</text>
+            <text x="90" y="44" text-anchor="middle" font-size="9" fill="var(--accent)">low risk</text>
+            <text x="300" y="100" text-anchor="middle" font-size="10" fill="var(--ink)">KV cache</text>
+            <text x="300" y="44" text-anchor="middle" font-size="9" fill="var(--ink-soft)">moderate</text>
+            <text x="510" y="100" text-anchor="middle" font-size="10" fill="var(--ink)">attention</text>
+            <text x="510" y="44" text-anchor="middle" font-size="9" fill="var(--accent-2)">high risk</text>
+            <circle cx="90" cy="66" r="5" fill="#fff" stroke="var(--accent)"/><circle cx="300" cy="66" r="5" fill="#fff" stroke="var(--ink-soft)"/><circle cx="510" cy="66" r="5" fill="#fff" stroke="var(--accent-2)"/>
+          </svg>
+          </div>
+          <figcaption>Fig 5.1 — the quantization risk gradient. Push precision down on weights freely; be careful with the KV cache; keep softmax/attention in full precision unless you've measured carefully.</figcaption>
+        </figure>
+
+        <p>So there's a <strong>risk gradient</strong>: weights and activations tolerate low precision well; the KV cache is moderately sensitive; <strong>attention is the danger zone</strong> — it's sensitive to dynamic range and its errors compound token-to-token, so you generally keep the softmax in full precision. Approaches range from weights-only (safest) to weight-plus-activation (more gain, more risk), and you usually leave the input and output layers at original precision because they're disproportionately sensitive.</p>
+        <p>Measure quality like you mean it: perplexity for a cheap signal, real benchmarks (MMLU, SWE-bench) for capability, and custom evals on <em>your</em> task for what actually matters. The target is a quality delta indistinguishable from noise. Quantization is a dial, not a switch — and if you genuinely cannot risk any quality, note that everything else in this chapter is lossless.</p>
+
+        <h3 id="ch5-spec">Speculative decoding</h3>
+        <p>Remember decode's idle tensor cores? Speculative decoding spends them. The idea: a cheap <strong>speculator</strong> drafts several tokens ahead, then the real <strong>target</strong> model <em>validates the whole draft in a single parallel forward pass</em>, accepts the longest correct prefix, and tacks on its own next token. Best case you emit \(N+1\) tokens for the price of one decode step. The analogy that makes it click: a sudoku is hard to solve but trivial to check — drafting is the guess, validation is the cheap check.</p>
+        <p>Crucial property: it only helps <strong>TPS / ITL, never TTFT</strong> (prefill is unchanged). Three levers govern whether it's a win: <strong>draft cost</strong>, <strong>draft length</strong>, and <strong>acceptance rate</strong>. Acceptance is high for the first drafted token and decays the deeper you draft, and one rejection throws away the rest of that draft. Higher temperature hurts acceptance (more entropy = harder to guess), subject matter matters, and — this is the gotcha — you <strong>turn it off at high batch sizes</strong>, because then there's no spare compute to spend; the tensor cores are already busy.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 170" role="img" aria-label="Speculative decoding flow">
+            <rect x="30" y="65" width="100" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="80" y="83" text-anchor="middle" font-size="10">speculator</text><text x="80" y="97" text-anchor="middle" font-size="8" fill="var(--ink-soft)">drafts k tokens</text>
+            <g><rect x="170" y="60" width="22" height="22" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><rect x="196" y="60" width="22" height="22" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><rect x="222" y="60" width="22" height="22" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/><rect x="248" y="60" width="22" height="22" rx="3" fill="var(--accent-soft)" stroke="var(--accent)"/></g>
+            <rect x="300" y="55" width="110" height="40" rx="6" fill="var(--paper-2)" stroke="var(--rule)"/><text x="355" y="73" text-anchor="middle" font-size="10">target validates</text><text x="355" y="87" text-anchor="middle" font-size="8" fill="var(--ink-soft)">one parallel pass</text>
+            <g><rect x="450" y="60" width="22" height="22" rx="3" fill="var(--accent)" /><rect x="476" y="60" width="22" height="22" rx="3" fill="var(--accent)"/><rect x="502" y="60" width="22" height="22" rx="3" fill="var(--accent)"/><rect x="528" y="60" width="22" height="22" rx="3" fill="var(--accent-2)"/></g>
+            <text x="487" y="105" font-size="8" fill="var(--accent)">accepted prefix</text><text x="539" y="105" text-anchor="middle" font-size="8" fill="var(--accent-2)">+1 free</text>
+            <line x1="130" y1="85" x2="170" y2="71" stroke="var(--ink-soft)"/><line x1="270" y1="71" x2="300" y2="75" stroke="var(--ink-soft)"/><line x1="410" y1="75" x2="450" y2="71" stroke="var(--ink-soft)"/>
+            <text x="300" y="140" text-anchor="middle" font-size="9" fill="var(--ink-soft)">N+1 tokens emitted in one target forward pass — when there's spare compute</text>
+          </svg>
+          </div>
+          <figcaption>Fig 5.2 — draft cheaply, validate in parallel, keep the correct prefix plus the target's own next token. Helps TPS, not TTFT.</figcaption>
+        </figure>
+
+        <p>The algorithm zoo, weakest to strongest:</p>
+        <ul>
+          <li><strong>Draft-target</strong>: a small off-the-shelf model drafts. Simple, but CPU round-trips and mediocre acceptance limit it.</li>
+          <li><strong>Medusa</strong>: bolt 2–4 extra decoder heads onto the target to draft in parallel. Cheap, but limited draft depth.</li>
+          <li><strong>EAGLE</strong>: a purpose-built draft module that ingests the target's <em>hidden states</em> (mid/late layer), under 1B params, drafts up to ~8 tokens with high acceptance, and fuses into the same module so there's no CPU round-trip. The current go-to when you can train the heads.</li>
+          <li><strong>N-gram / Lookahead</strong>: no draft model at all — build an n-gram dictionary from the context during prefill and match prefixes to suffixes. Long drafts, and it <em>only</em> wins when output closely echoes input (code completion), where it actually beats EAGLE.</li>
+        </ul>
+
+        <div class="aside"><b>The aside:</b> the EAGLE "ingest the target's hidden states" trick is the part I find genuinely elegant. The draft model isn't guessing blind — it gets to peek at what the big model is already thinking mid-stack, which is why a sub-1B drafter can hit acceptance rates a standalone small model never would.</div>
+
+        <h3 id="ch5-cache">Caching / prefix caching</h3>
+        <p>The KV cache isn't just reusable <em>within</em> one request — it's reusable <em>across</em> requests that share a prefix. Two prompts that both start "You are a helpful assistant… The weather in " share all the KV up to the first differing token, so the second request skips recomputing that prefill entirely. The shared prefix ends at the first token that differs, which has a sharp practical implication: <strong>put the variable stuff last</strong>. Stable system prompt and tools first, user-specific text at the end, and you maximize cache hits. That's a context-engineering decision with a real latency payoff.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 180" role="img" aria-label="Prefix cache tree">
+            <rect x="40" y="78" width="150" height="34" rx="6" fill="var(--accent)" opacity="0.85"/><text x="115" y="100" text-anchor="middle" font-size="10" fill="#fff">shared system prompt</text>
+            <rect x="220" y="78" width="80" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="260" y="100" text-anchor="middle" font-size="9" fill="var(--ink)">"weather in"</text>
+            <line x1="190" y1="95" x2="220" y2="95" stroke="var(--ink-soft)"/>
+            <line x1="300" y1="95" x2="340" y2="55" stroke="var(--ink-soft)"/><line x1="300" y1="95" x2="340" y2="135" stroke="var(--ink-soft)"/>
+            <rect x="340" y="38" width="120" height="32" rx="6" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="400" y="58" text-anchor="middle" font-size="9" fill="var(--ink)">"Tokyo?" (new)</text>
+            <rect x="340" y="120" width="120" height="32" rx="6" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="400" y="140" text-anchor="middle" font-size="9" fill="var(--ink)">"Lagos?" (new)</text>
+            <text x="115" y="68" text-anchor="middle" font-size="8" fill="var(--accent)">cached once, reused</text>
+            <text x="400" y="168" text-anchor="middle" font-size="8.5" fill="var(--ink-soft)">only the diverging suffix is recomputed</text>
+          </svg>
+          </div>
+          <figcaption>Fig 5.3 — shared prefixes are computed once and reused; the cache "branches" at the first differing token. Variable content belongs at the end.</figcaption>
+        </figure>
+
+        <p>The big winners are long system prompts, agent scaffolds, RAG context, code context, and multi-turn chat — anywhere a large stable chunk leads every request. This is literally why APIs bill cache-hit tokens cheaper. At the infra layer it pairs with <strong>cache-aware routing</strong>: send a request to the replica that already holds its prefix, instead of a random one that would recompute it. For prompts that outgrow VRAM there's <strong>long-context handling</strong> — offloading cold KV to CPU/host memory and paging it back.</p>
+
+        <h3 id="ch5-parallel">Model parallelism</h3>
+        <p>First, sizing. A rough floor for GPU count is <em>precision (bytes) × parameters × a KV-cache allowance</em>, rounded up to an instance size. E.g. a 70B model in FP16 is ~140 GB of weights plus KV headroom, so it won't fit one 80 GB card — you need multiple, and often more than the minimum to hold bigger KV or hit a latency target. The thing that makes this hard is the same gap from Chapter 3: <strong>inter-GPU communication is far slower than VRAM</strong>, so you choose a split that minimizes crossing. Three forms:</p>
+        <ul>
+          <li><strong>Pipeline parallelism (PP)</strong> — split the layers across GPUs, like an assembly line. Cheap on communication but plagued by pipeline <em>bubbles</em> (GPUs idle waiting for the stage before them), so latency and utilization suffer. Mostly a multi-node tool.</li>
+          <li><strong>Tensor parallelism (TP)</strong> — split each layer's tensors across GPUs. Needs an <strong>all-reduce</strong> sync every layer, which is chatty, so it wants the fast NVLink fabric inside one node. Great intra-node latency; your <strong>default</strong>. Doesn't cross node boundaries gracefully.</li>
+          <li><strong>Expert parallelism (EP)</strong> — for MoE, shard whole experts across GPUs. Communication is just token routing, not a per-layer all-reduce, so it's lighter and scales across nodes. Throughput-oriented. EP8 over 8 GPUs with 128 experts puts 16 experts on each.</li>
+        </ul>
+        <p>In practice you <em>mix</em>: TP for the dense attention layers, EP for the sparse MoE layer. Across nodes over InfiniBand you keep the chatty part local — TP within a node, PP across nodes (e.g. <strong>TP8PP2</strong>) for dense models, or <strong>EP16</strong> for MoE. TP8PP2 minimizes per-user latency; EP16 maximizes throughput. And often the right answer isn't naive multi-node at all but horizontal replicas or disaggregation.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 180" role="img" aria-label="Pipeline vs tensor vs expert parallelism">
+            <text x="100" y="24" text-anchor="middle" font-size="10" fill="var(--ink)">Pipeline (PP)</text>
+            <rect x="50" y="40" width="100" height="22" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="100" y="55" text-anchor="middle" font-size="8">layers 0–n → G0</text>
+            <rect x="50" y="66" width="100" height="22" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="100" y="81" text-anchor="middle" font-size="8">layers n+ → G1</text>
+            <text x="100" y="108" text-anchor="middle" font-size="8" fill="var(--accent-2)">bubbles, low latency win</text>
+
+            <text x="300" y="24" text-anchor="middle" font-size="10" fill="var(--ink)">Tensor (TP)</text>
+            <rect x="250" y="40" width="48" height="48" fill="var(--accent-soft)" stroke="var(--accent)"/><rect x="302" y="40" width="48" height="48" fill="var(--accent-soft)" stroke="var(--accent)"/>
+            <text x="300" y="66" text-anchor="middle" font-size="8">split each layer</text>
+            <text x="300" y="108" text-anchor="middle" font-size="8" fill="var(--accent-2)">all-reduce / layer · intra-node</text>
+
+            <text x="500" y="24" text-anchor="middle" font-size="10" fill="var(--ink)">Expert (EP)</text>
+            <rect x="450" y="40" width="30" height="22" fill="var(--amber-soft)" stroke="var(--accent-2)"/><rect x="484" y="40" width="30" height="22" fill="var(--amber-soft)" stroke="var(--accent-2)"/><rect x="518" y="40" width="30" height="22" fill="var(--amber-soft)" stroke="var(--accent-2)"/>
+            <rect x="450" y="66" width="30" height="22" fill="var(--amber-soft)" stroke="var(--accent-2)"/><rect x="484" y="66" width="30" height="22" fill="var(--amber-soft)" stroke="var(--accent-2)"/><rect x="518" y="66" width="30" height="22" fill="var(--amber-soft)" stroke="var(--accent-2)"/>
+            <text x="500" y="108" text-anchor="middle" font-size="8" fill="var(--accent)">route tokens · scales multi-node</text>
+          </svg>
+          </div>
+          <figcaption>Fig 5.4 — PP splits layers (bubbles), TP splits tensors within a layer (chatty, intra-node default), EP shards MoE experts (light comms, multi-node throughput).</figcaption>
+        </figure>
+
+        <h3 id="ch5-disagg">Disaggregation</h3>
+        <p>This is the technique the whole roofline discussion was building toward. Prefill is compute-bound, decode is memory-bound, and under load they <em>fight each other</em> for the same GPU's resources. So split them onto <strong>separate engines/GPUs</strong>. Three steps: prefill builds the KV cache and the first token → ships the KV over the interconnect → decode does the rest. <strong>Conditional disaggregation</strong> is the smart default: a request hits the decode engine first, and if it's short or already cached it's handled locally, otherwise it's shipped to a prefill engine.</p>
+        <p>When is it worth the complexity? High volume (~100M–1B tokens/day), large models (~100B+ params), and prefill-heavy/long-input workloads — code editors with huge context are the textbook case. <strong>Dynamic disaggregation</strong> (NVIDIA Dynamo) makes it adaptive: a prefill queue, routing decisions based on input-length-after-prefix and queue depth, and NIXL-based KV transfer that transposes layout across differing TP configs. The notation is <strong><code>xPyD</code></strong> — 5P3D means 5 prefill workers, 3 decode workers, and you can retune the ratio at runtime as traffic shifts.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 160" role="img" aria-label="Disaggregated prefill and decode with KV transfer">
+            <rect x="40" y="55" width="150" height="56" rx="8" fill="var(--amber-soft)" stroke="var(--accent-2)" stroke-width="1.4"/>
+            <text x="115" y="78" text-anchor="middle" font-size="11" fill="var(--ink)">prefill engine</text><text x="115" y="95" text-anchor="middle" font-size="8.5" fill="var(--ink-soft)">compute-bound · 5P</text>
+            <rect x="410" y="55" width="150" height="56" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/>
+            <text x="485" y="78" text-anchor="middle" font-size="11" fill="var(--ink)">decode engine</text><text x="485" y="95" text-anchor="middle" font-size="8.5" fill="var(--ink-soft)">memory-bound · 3D</text>
+            <line x1="190" y1="83" x2="410" y2="83" stroke="var(--ink-soft)" stroke-width="1.4" stroke-dasharray="6 4" marker-end="url(#ar)"/>
+            <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--ink-soft)"/></marker></defs>
+            <text x="300" y="74" text-anchor="middle" font-size="9" fill="var(--ink)">KV transfer (NIXL)</text>
+            <text x="300" y="100" text-anchor="middle" font-size="8" fill="var(--ink-soft)">over the interconnect</text>
+            <text x="300" y="135" text-anchor="middle" font-size="9" fill="var(--accent-2)">xPyD — retunable at runtime as traffic shifts</text>
+          </svg>
+          </div>
+          <figcaption>Fig 5.5 — prefill and decode run on separate pools so opposite bottlenecks stop competing. KV ships across the interconnect; the xPyD ratio flexes with load.</figcaption>
+        </figure>
+
+        <p>It's not free: you invent <strong>new</strong> bottlenecks. The prefill queue can back up, and the decode side can exhaust its KV memory — which loops back to KV-cache quantization and offloading as the fixes. Symbiotic techniques, exactly as promised.</p>
+
+        <div class="drills">
+          <h4>Drills — Chapter 5</h4>
+          <details><summary>Why does quantization help compute-bound prefill and memory-bound decode through two different mechanisms?</summary>
+            <div class="ans">Prefill is compute-bound, and lower precision roughly doubles Tensor-core FLOPs — more of the resource it's short on. Decode is memory-bound, and halving the bytes per weight effectively doubles usable bandwidth — again the resource it's short on. Same change, two different wins.</div>
+          </details>
+          <details><summary>Why must speculative decoding be disabled at high batch sizes?</summary>
+            <div class="ans">It works by spending decode's <em>idle</em> compute on draft validation. At high batch size there is no idle compute — batching has already filled the tensor cores — so speculation adds overhead (drafting, validation) with no spare capacity to absorb it, and net throughput drops.</div>
+          </details>
+          <details><summary>You move user-specific text to the <em>front</em> of every prompt. What did you just break?</summary>
+            <div class="ans">Prefix caching. The shared prefix ends at the first differing token, so putting variable content first means almost nothing is shared and every request recomputes the whole prefill. Keep the stable system prompt/tools first and variable content last to maximize cache hits.</div>
+          </details>
+          <details><summary>Dense 70B over two nodes: why TP8PP2 rather than TP16?</summary>
+            <div class="ans">TP needs an all-reduce every layer and that's brutal over InfiniBand between nodes. TP16 would force that chatty sync across the slow link. TP8PP2 keeps tensor parallelism inside each node (fast NVLink) and uses pipeline parallelism — far less communication — to bridge the two nodes.</div>
+          </details>
+          <details><summary>When is disaggregation the wrong call, and what new failure modes does it add when it's right?</summary>
+            <div class="ans">Wrong for low volume or small models — the complexity isn't paid back. When right (high volume, ~100B+, prefill-heavy), it introduces a prefill queue that can back up and decode-side KV exhaustion; you manage those with conditional routing, KV-cache quantization, and KV offload.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch6">
+        <span class="chap-num">Chapter 6</span>
+        <h2>Modalities: LLM tricks, generalized</h2>
+        <p class="lede">Good news: you already learned most of this. Nearly every modality is one of two shapes, and one of those shapes is just "an LLM wearing a hat."</p>
+
+        <h3 id="ch6-arch">Two archetypes</h3>
+        <p>Almost everything is either <strong>autoregressive token generation</strong> (LLMs, VLMs, speech-to-text, text-to-speech, embeddings) or <strong>iterative denoising</strong> (image and video). If it's autoregressive, basically every engine and technique from Chapters 2 and 5 carries over — KV cache, batching, quantization, speculation, the works. What changes per modality is mostly the <em>metric</em>: for TTS you care about time-to-first-<em>word</em> or first-<em>sentence</em>, not first token.</p>
+
+        <table class="tbl">
+          <thead><tr><th>Modality</th><th>Input → output</th><th>Archetype</th></tr></thead>
+          <tbody>
+            <tr><td>LLM</td><td>text → text</td><td>autoregressive</td></tr>
+            <tr><td>VLM</td><td>image+text → text</td><td>autoregressive</td></tr>
+            <tr><td>Embeddings</td><td>text → vector</td><td>single forward pass</td></tr>
+            <tr><td>ASR</td><td>audio → text</td><td>autoregressive (enc-dec)</td></tr>
+            <tr><td>TTS</td><td>text → audio</td><td>autoregressive</td></tr>
+            <tr><td>Image / video</td><td>text → pixels</td><td>iterative denoising</td></tr>
+          </tbody>
+        </table>
+
+        <h3 id="ch6-vlm">VLMs</h3>
+        <p>A vision-language model is an LLM with a small vision encoder bolted on the front. The size asymmetry is wild: Mistral Large 3 pairs a ~2B vision encoder with a ~673B LLM. The encoder is tiny but <em>fragmented</em> — every VLM family does it slightly differently — which is exactly why flexible engines like vLLM and SGLang matter; they absorb that fragmentation so you don't hand-roll it.</p>
+        <p>The real cost is tokens. A high-res image becomes ~1000 visual tokens fed into the LLM's context. So the VLM challenge isn't new math, it's <strong>longer inputs and bigger KV caches</strong> — and every Chapter 5 technique applies directly. The new dial is <strong>downsampling</strong>: trading image resolution for token count (hi-res can be ~4× the tokens), which becomes a serious quality/speed knob the moment you do multi-image or video. Omni-modal models that take everything in and emit multiple modalities are the natural extension.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 170" role="img" aria-label="VLM two-tower with token blowup">
+            <rect x="40" y="60" width="90" height="50" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="85" y="82" text-anchor="middle" font-size="10">vision enc</text><text x="85" y="98" text-anchor="middle" font-size="8" fill="var(--ink-soft)">~2B</text>
+            <text x="200" y="72" text-anchor="middle" font-size="9" fill="var(--accent-2)">~1000 visual</text>
+            <text x="200" y="84" text-anchor="middle" font-size="9" fill="var(--accent-2)">tokens / image</text>
+            <line x1="130" y1="85" x2="270" y2="85" stroke="var(--ink-soft)" stroke-width="1.3" marker-end="url(#ar2)"/>
+            <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--ink-soft)"/></marker></defs>
+            <rect x="280" y="45" width="200" height="80" rx="10" fill="var(--paper-2)" stroke="var(--accent)" stroke-width="1.4"/><text x="380" y="80" text-anchor="middle" font-size="12">LLM</text><text x="380" y="100" text-anchor="middle" font-size="8.5" fill="var(--ink-soft)">~673B · the big tower</text>
+            <line x1="480" y1="85" x2="530" y2="85" stroke="var(--ink-soft)" marker-end="url(#ar2)"/><text x="540" y="88" font-size="10">text</text>
+            <text x="300" y="150" text-anchor="middle" font-size="8.5" fill="var(--ink-soft)">tiny encoder, huge context cost — the bottleneck is KV, not the encoder</text>
+          </svg>
+          </div>
+          <figcaption>Fig 6.1 — the encoder is small; the pain is the ~1000 tokens per image it pours into the LLM's context. VLM serving is an LLM-context problem.</figcaption>
+        </figure>
+
+        <h3 id="ch6-embed">Embedding models</h3>
+        <p>The odd one out, and refreshingly simple. Encoder-only, <strong>bidirectional</strong> attention (no causal mask — it can see the whole input at once), one forward pass, <strong>no decode loop</strong>. Output is a single vector. Because there's no autoregression, serving is purely throughput-oriented: batch hard. <strong>Matryoshka</strong> embeddings let you truncate the vector to a shorter dimension with graceful quality loss, so one model serves multiple size/quality points.</p>
+
+        <h3 id="ch6-audio">ASR and TTS</h3>
+        <p><strong>ASR</strong> (Whisper-style encoder-decoder) splits by use case: real-time/short clips care about latency, while long-file transcription is a pipeline problem — chunk the audio, use voice-activity detection (VAD) to find speech, overlap chunks so you don't cut words. <strong>Diarization</strong> ("who spoke when") is a separate layer on top.</p>
+        <p><strong>TTS</strong> flips it: tokens → audio, with the vocabulary expanded to include waveform/acoustic tokens. Streaming matters (time-to-first-audio is the metric), and speech-to-speech models close the loop for real-time conversation.</p>
+
+        <h3 id="ch6-imgvid">Image and video generation</h3>
+        <p>Image gen leans on kernel optimization plus the "one weird trick" family — caching or skipping denoising steps when consecutive steps barely change. Video is where it gets brutal: <strong>attention is the dominant cost</strong> because the latent spans X, Y, and T, so you throw quantization and attention optimization at it, and you add <strong>context parallelism</strong> to split that enormous latent across GPUs. It's the one place the LLM toolkit needs genuinely new moves.</p>
+
+        <div class="drills">
+          <h4>Drills — Chapter 6</h4>
+          <details><summary>Why does serving a VLM feel like serving a long-context LLM?</summary>
+            <div class="ans">Because the vision encoder turns each image into ~1000 tokens that flow into the LLM's context. The encoder is tiny; the cost is the inflated input length and the larger KV cache — so the bottlenecks and fixes are the same long-context LLM ones.</div>
+          </details>
+          <details><summary>Why can embedding models be batched far more aggressively than LLMs?</summary>
+            <div class="ans">No autoregressive decode — it's a single bidirectional forward pass per input with no token-by-token loop and no growing per-sequence KV cache. That removes the latency/throughput tension that batching creates for generative models, so you optimize purely for throughput.</div>
+          </details>
+          <details><summary>What new parallelism does video generation need that LLM serving doesn't, and why?</summary>
+            <div class="ans">Context parallelism, to split the huge spatiotemporal latent (X×Y×T) across GPUs. A single video latent is too large to denoise on one device, and attention over it dominates cost — so you partition the latent itself rather than the model weights.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="ch7">
+        <span class="chap-num">Chapter 7</span>
+        <h2>Production: runtime is necessary, not sufficient</h2>
+        <p class="lede">A perfect runtime that takes four minutes to cold-start, can't survive a node death, and can't scale with traffic is a science project. This chapter is everything between "the model is fast" and "the service is real."</p>
+
+        <h3 id="ch7-container">Containers and dependencies</h3>
+        <p>You ship in <strong>Docker</strong>, and you start from the official vLLM or SGLang base image rather than building the CUDA stack yourself. The thing that will actually hurt you is <strong>dependency management</strong>. The chain is long and brittle: GPU driver + CUDA + cuDNN, then torch + transformers + diffusers, then the engine, then system packages like ffmpeg — and any version slipping out of alignment breaks the whole thing in a way that's miserable to debug. <strong>Pin everything</strong> (uv or poetry). For day-zero support of a just-released model you'll run nightly or pre-release builds, then rebuild on the stable release once it lands.</p>
+        <p><strong>NIMs</strong> (NVIDIA Inference Microservices) are prepackaged, model-specific containers — great as a base, a reference, or an out-of-the-box option, but you build your own when you want maximum control over the config.</p>
+
+        <h3 id="ch7-autoscale">Autoscaling</h3>
+        <p>Production runs on <strong>Kubernetes</strong>: a control plane that decides and a worker plane of instances running your replicas. The subtle part is <em>what signal</em> you scale on. <strong>Utilization</strong> is lagging (by the time GPUs are pegged you're already late); <strong>traffic</strong> is proactive (scale on incoming requests before they hurt). They diverge — a handful of huge-prefill requests can pin utilization without much request volume, and a flood of tiny requests can spike traffic without much utilization. You watch both. Five knobs do the tuning: <strong>min replicas, max replicas, autoscaling window, scale-down delay, and concurrency target</strong>. Concurrency and batch sizing sit underneath all of it.</p>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 200" role="img" aria-label="Autoscaling traffic vs replicas">
+            <line x1="50" y1="170" x2="560" y2="170" stroke="var(--ink-soft)"/><line x1="50" y1="30" x2="50" y2="170" stroke="var(--ink-soft)"/>
+            <path d="M50 150 C 150 150, 180 60, 260 55 C 340 50, 380 130, 470 135 C 520 138, 540 120, 560 110" fill="none" stroke="var(--accent)" stroke-width="2"/>
+            <path d="M50 158 L 130 158 L 130 90 L 230 90 L 230 60 L 330 60 L 330 120 L 470 120 L 470 132 L 560 132" fill="none" stroke="var(--accent-2)" stroke-width="1.6" stroke-dasharray="5 3"/>
+            <rect x="130" y="55" width="100" height="50" fill="var(--amber-soft)" opacity="0.5"/>
+            <text x="180" y="48" text-anchor="middle" font-size="8" fill="var(--accent-2)">under-provisioned</text>
+            <text x="430" y="100" text-anchor="middle" font-size="8" fill="var(--ink-soft)">over-provisioned</text>
+            <text x="300" y="192" text-anchor="middle" font-size="9" fill="var(--ink-soft)">time →</text>
+            <text x="500" y="44" font-size="9" fill="var(--accent)">traffic</text>
+            <text x="500" y="58" font-size="9" fill="var(--accent-2)">replicas (lagging)</text>
+          </svg>
+          </div>
+          <figcaption>Fig 7.1 — replica count chases traffic with delay. The gap above the curve is dropped/slow requests; the gap below is money burned on idle GPUs. Tuning the knobs is choosing which gap you can tolerate.</figcaption>
+        </figure>
+
+        <h3 id="ch7-cold">Cold starts — the one that gets everyone</h3>
+        <p>This is the hardest production problem, because a "scale up" isn't instant. Three segments, each slow for its own reason:</p>
+        <ol>
+          <li><strong>Node provisioning</strong> — getting a GPU instance from the cloud. Cloud-dependent and genuinely negotiable in your contract.</li>
+          <li><strong>Loading weights</strong> — pulling hundreds of GB into VRAM. Make it smaller (quantization) or make the pipe fatter: load from a <em>same-datacenter cache</em>, not Hugging Face or S3 across the internet, where egress and distance kill you.</li>
+          <li><strong>Engine start</strong> — vLLM/SGLang start fast; TensorRT-LLM and anything with <code>torch.compile</code> take minutes, so cache the built engines and make sure the cache matches the exact GPU/CUDA/deps or it's silently invalid.</li>
+        </ol>
+
+        <figure>
+          <div class="svg-wrap">
+          <svg viewBox="0 0 600 130" role="img" aria-label="Cold start timeline">
+            <rect x="40" y="50" width="120" height="34" rx="5" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="100" y="71" text-anchor="middle" font-size="9">provision node</text>
+            <rect x="166" y="50" width="180" height="34" rx="5" fill="var(--amber-soft)" stroke="var(--accent-2)"/><text x="256" y="71" text-anchor="middle" font-size="9">load weights (100s of GB)</text>
+            <rect x="352" y="50" width="120" height="34" rx="5" fill="var(--paper-2)" stroke="var(--rule)"/><text x="412" y="71" text-anchor="middle" font-size="9">start engine</text>
+            <rect x="478" y="50" width="82" height="34" rx="5" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="519" y="71" text-anchor="middle" font-size="9">1st request</text>
+            <text x="256" y="40" text-anchor="middle" font-size="8" fill="var(--accent-2)">the slow segments — attack these</text>
+            <text x="300" y="108" text-anchor="middle" font-size="9" fill="var(--ink-soft)">time from "scale up" to "serving" →</text>
+          </svg>
+          </div>
+          <figcaption>Fig 7.2 — the cold-start timeline. Provisioning and weight-loading are the long poles; quantization, in-datacenter weight caches, and pre-built cached engines shrink them.</figcaption>
+        </figure>
+
+        <p><strong>Routing, load balancing, queueing.</strong> A <em>router</em> answers "where <em>should</em> this go" (it has opinions — send to the replica holding this request's KV prefix, or the one with the right LoRA loaded); a <em>load balancer</em> answers "where <em>could</em> this go" (spread the load). Queues are FIFO or priority, and you hand a freshly-started replica queued work carefully so it doesn't get stampeded before it's warm.</p>
+        <p><strong>Scale-to-zero</strong> drops to no replicas when idle. It needs fast cold starts and a robust queue, and it's great for dev, bursty, or business-hours workloads. But needing it for <em>latency-sensitive light traffic</em> is a smell — if a trickle of requests must each be fast, a hosted API is the better answer than eating a cold start on every one.</p>
+
+        <div class="callout warning">
+          <span class="label">Foot-gun — compound pipelines</span>
+          <p>For multi-model pipelines (VAD → ASR → LLM), scale each component <em>independently</em> — they have different load profiles. But keep them in <strong>one cluster</strong>: intra-cluster hops are ~10 ms, cross-cluster ~50 ms, and for a real-time voice pipeline that 40 ms difference, multiplied across stages, quietly eats your entire latency SLA.</p>
+        </div>
+
+        <h3 id="ch7-multicloud">Multi-cloud capacity management</h3>
+        <p>Siloed multi-cloud — "we run separate stacks on AWS and CoreWeave" — is easy to set up and bad. <strong>True multi-cloud</strong> treats every GPU pool across regions and providers as fungible capacity behind one bin-packer with a global view that self-heals around failures. The supporting pieces: GPU procurement strategy (reserved vs on-demand vs spot, and the contracts behind them), geo-aware load balancing (run near users for latency), redundancy across regions/clouds for reliability, and security/compliance (air-gapped deployments, data residency rules).</p>
+
+        <h3 id="ch7-deploy">Deployment, observability, clients</h3>
+        <p>Ship with <strong>zero-downtime rolling deploys</strong>. Do real <strong>cost estimation</strong> — per-request, per-user, per-month unit economics, the numbers that decide whether the product survives. And invest in <strong>observability</strong>: GPU metrics, token metrics, distributed traces, and crucially the inference-only-vs-end-to-end split from Chapter 1, so when something's slow you instantly know whether it's the model or the plumbing. On the <strong>client</strong> side, mind client-side overhead, use async inference where you can, and support streaming protocols (SSE, WebSockets, gRPC) so the fast TTFT you worked for actually reaches the user.</p>
+
+        <div class="drills">
+          <h4>Drills — Chapter 7</h4>
+          <details><summary>You autoscale purely on GPU utilization and still drop requests during spikes. Why, and what do you add?</summary>
+            <div class="ans">Utilization is a lagging signal — by the time GPUs are saturated, the spike already arrived and new replicas are still cold-starting. Add a proactive <em>traffic</em> signal (and tune the autoscaling window / min replicas) so you scale ahead of demand. The two signals also diverge: huge-prefill requests spike util without much traffic, and vice versa.</div>
+          </details>
+          <details><summary>Cold starts are dominated by weight loading. Two independent levers?</summary>
+            <div class="ans">Shrink the payload (quantize the weights) and fatten/shorten the pipe (load from an in-datacenter cache instead of pulling from Hugging Face/S3 over the internet, where egress and distance dominate). Bonus third: cache pre-built engines so engine-start doesn't add minutes.</div>
+          </details>
+          <details><summary>A team wants scale-to-zero for a low-traffic, latency-critical endpoint. Push back?</summary>
+            <div class="ans">Yes. Scale-to-zero means every request after idle eats a cold start — fatal for latency-critical traffic. It suits bursty/dev/business-hours work. For light but latency-sensitive load, a hosted API (always warm, no cold start) is usually the right call.</div>
+          </details>
+          <details><summary>Why keep a VAD → ASR → LLM pipeline in a single cluster even though you scale each part separately?</summary>
+            <div class="ans">Network hops. Intra-cluster is ~10 ms, cross-cluster ~50 ms; chaining stages across clusters stacks that ~40 ms penalty per hop and blows a real-time voice SLA. Independent scaling handles the differing load profiles; co-location protects latency.</div>
+          </details>
+        </div>
+      </section>
+
+      <section class="chapter" id="playbook">
+        <span class="chap-num">Closing</span>
+        <h2>How I'd actually approach a new model</h2>
+        <p class="lede">If I had to compress the whole book into a decision tree I'd run top to bottom, gating each step on the traffic and model-size thresholds from Chapter 5, it's this.</p>
+        <ol>
+          <li><strong>Do you even need dedicated inference?</strong> Low or bursty traffic, no special latency/cost/availability constraint → use a hosted API and stop here. Don't pay GPU-hours to serve a trickle.</li>
+          <li><strong>Pin the spec.</strong> Interface, latency budget, unit economics, traffic shape. The more constraints, the better the result. Pick the smallest model that passes <em>your</em> evals; fine-tune before you reach for a bigger one.</li>
+          <li><strong>Pick an engine.</strong> vLLM/SGLang to stand up fast and for new or fragmented architectures; TensorRT-LLM later when the model's stable and throughput is king; Dynamo once you're at distributed scale.</li>
+          <li><strong>Quantize and measure.</strong> Drop precision a level, run real evals, confirm the quality delta is noise. Free-ish speed on both prefill and decode.</li>
+          <li><strong>Add caching and speculation.</strong> Prefix caching if requests share long prefixes (system prompts, agents, RAG). Speculative decoding (EAGLE) if you're TPS-bound at low-to-moderate batch — and remember to disable it once batches get big.</li>
+          <li><strong>Parallelize only when you must.</strong> Won't fit one GPU, or need lower latency / bigger KV? TP within a node by default; EP for MoE; PP only to bridge nodes.</li>
+          <li><strong>Disaggregate at scale.</strong> ~100M–1B tokens/day, ~100B+ params, prefill-heavy inputs → split prefill and decode (xPyD), then manage the new prefill-queue and decode-KV bottlenecks.</li>
+        </ol>
+        <p>Every arrow is gated. You don't disaggregate a 7B model serving 1k requests/day any more than you call a hosted API to serve a billion tokens. Match the technique to the traffic, measure everything, change one variable at a time.</p>
+
+        <h3 id="glossary">Glossary</h3>
+        <dl class="dl-gloss">
+          <dt>TTFT</dt><dd>Time to first token. Gated by compute-bound prefill; the metric a streaming UI lives on.</dd>
+          <dt>ITL</dt><dd>Inter-token latency. 10 ms ITL = 100 tokens/sec for one user.</dd>
+          <dt>TPS</dt><dd>Tokens per second — say whether you mean perceived (per-user) or total (system).</dd>
+          <dt>Prefill</dt><dd>Processing the whole input in parallel and building the KV cache. Compute-bound.</dd>
+          <dt>Decode</dt><dd>The autoregressive loop, one token per forward pass. Memory-bound.</dd>
+          <dt>KV cache</dt><dd>Stored keys/values of past tokens, so attention is linear per step instead of \(O(N^2)\).</dd>
+          <dt>ops:byte</dt><dd>A chip's compute-to-bandwidth ratio; the break-even arithmetic intensity (~295 on an H100 FP16).</dd>
+          <dt>Arithmetic intensity</dt><dd>An algorithm's compute ÷ memory traffic. Below the chip's ops:byte → memory-bound; above → compute-bound.</dd>
+          <dt>Roofline</dt><dd>The chart of bandwidth ceiling + compute ceiling meeting at the ridge point.</dd>
+          <dt>FlashAttention</dt><dd>Fused, tiled attention that never spills the \(N\times N\) matrix to HBM. Lossless, hardware-specific.</dd>
+          <dt>PagedAttention</dt><dd>KV cache stored in non-contiguous pages via a lookup table; kills fragmentation. (vLLM.)</dd>
+          <dt>MoE</dt><dd>Mixture of experts; a router activates a few experts per token, so total params ≫ active params.</dd>
+          <dt>MLA</dt><dd>Multi-latent attention; compresses the KV cache.</dd>
+          <dt>Mamba / SSM</dt><dd>Recurrent state-space alternative to attention; hybrids interleave it with transformer layers.</dd>
+          <dt>Quantization</dt><dd>Lowering numeric precision (FP16 → FP8/FP4) for speed; risk is compounding precision error.</dd>
+          <dt>MX / microscaling</dt><dd>Number formats attaching shared scales to small blocks for better low-precision dynamic range.</dd>
+          <dt>Speculative decoding</dt><dd>Draft ahead cheaply, validate in parallel, accept the valid prefix + 1. Helps TPS, not TTFT.</dd>
+          <dt>EAGLE</dt><dd>Draft module that ingests the target's hidden states; sub-1B, high acceptance, fused (no CPU round-trip).</dd>
+          <dt>Acceptance rate</dt><dd>Fraction of drafted tokens the target keeps; decays with draft depth.</dd>
+          <dt>Prefix caching</dt><dd>Reusing KV across requests that share a leading prefix. Put variable content last.</dd>
+          <dt>TP / EP / PP</dt><dd>Tensor (split tensors, intra-node default), expert (shard MoE experts, multi-node), pipeline (split layers, bubbles) parallelism.</dd>
+          <dt>all-reduce</dt><dd>The per-layer sync tensor parallelism needs; why TP wants fast NVLink inside one node.</dd>
+          <dt>Disaggregation</dt><dd>Running prefill and decode on separate pools because their bottlenecks conflict.</dd>
+          <dt>xPyD</dt><dd>Disaggregation ratio notation — 5P3D = 5 prefill workers, 3 decode workers, retunable at runtime.</dd>
+          <dt>NIXL</dt><dd>The KV-transfer mechanism (in Dynamo) that ships and re-lays-out KV between prefill and decode.</dd>
+          <dt>MIG</dt><dd>Multi-instance GPU; slice one GPU into isolated hardware partitions for small models.</dd>
+          <dt>SM</dt><dd>Streaming multiprocessor; the GPU's compute block, holding CUDA/Tensor/SFU cores.</dd>
+          <dt>Tensor core</dt><dd>The matrix-multiply-accumulate unit; where inference FLOPs are measured.</dd>
+          <dt>HBM</dt><dd>High-bandwidth memory (VRAM); the off-chip pool whose bandwidth caps decode.</dd>
+          <dt>NVLink / InfiniBand</dt><dd>Fast intra-node and slower inter-node GPU interconnects; both well below VRAM bandwidth.</dd>
+          <dt>NIM</dt><dd>NVIDIA Inference Microservice; a prepackaged model-specific serving container.</dd>
+          <dt>Engine</dt><dd>vLLM / SGLang / TensorRT-LLM — the layer that turns weights into a fast served model.</dd>
+          <dt>Cold start</dt><dd>Time from "scale up" to "serving": provision + load weights + start engine.</dd>
+          <dt>Scale-to-zero</dt><dd>Dropping to no replicas when idle; needs fast cold starts; bad for latency-critical light traffic.</dd>
+          <dt>Percentiles (P50/P90/P99)</dt><dd>Tail latency measures; the mean lies because latency is right-skewed.</dd>
+          <dt>Distillation</dt><dd>Training a small student on a teacher's full probability distribution, not just its outputs.</dd>
+          <dt>Diffusion</dt><dd>Image/video generation by iterative denoising from noise in latent space. Compute-bound.</dd>
+          <dt>Context parallelism</dt><dd>Splitting a huge (often video) latent across GPUs.</dd>
+        </dl>
+
+        <hr class="soft" />
+        <p style="font-size:16.5px; color:var(--ink-soft);">These notes are built from Philip Kiely's <em>Inference Engineering</em> (Baseten Books, 2026) — the book I worked through to learn this. The explanations here are my own; any errors are too.</p>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script>
+// code highlighting
+document.querySelectorAll('pre code').forEach((b)=>{ try{ hljs.highlightElement(b); }catch(e){} });
+
+// progress bar
+const prog = document.getElementById('progress');
+function onScroll(){
+  const h = document.documentElement;
+  const max = h.scrollHeight - h.clientHeight;
+  prog.style.width = (max>0 ? (h.scrollTop/max)*100 : 0) + '%';
+}
+document.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+
+// scroll-spy: chapters + sub-sections
+const chapEls = [...document.querySelectorAll('section.chapter, header.doc-head')];
+const tocChaps = [...document.querySelectorAll('.toc .chap')];
+const byId = id => document.querySelector('.toc .chap[data-chap="'+id+'"]');
+const subLinks = [...document.querySelectorAll('.toc .subs a')];
+
+const spy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      const id = e.target.id;
+      tocChaps.forEach(c=>c.classList.remove('active'));
+      const chap = byId(id) || byId(id.split('-')[0]);
+      if(chap) chap.classList.add('active');
+    }
+  });
+}, {rootMargin:'-15% 0px -75% 0px', threshold:0});
+chapEls.forEach(el=>spy.observe(el));
+
+// sub-section spy
+const subTargets = subLinks.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const subSpy = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      subLinks.forEach(a=>a.classList.toggle('active', a.getAttribute('href')==='#'+e.target.id));
+    }
+  });
+}, {rootMargin:'-12% 0px -80% 0px', threshold:0});
+subTargets.forEach(el=>subSpy.observe(el));
+
+// mobile menu
+const sb = document.getElementById('sidebar'), scrim = document.getElementById('scrim');
+document.getElementById('menuToggle').addEventListener('click', ()=>{ sb.classList.toggle('open'); scrim.classList.toggle('show'); });
+scrim.addEventListener('click', ()=>{ sb.classList.remove('open'); scrim.classList.remove('show'); });
+document.querySelectorAll('.toc a').forEach(a=>a.addEventListener('click', ()=>{ if(window.innerWidth<=900){ sb.classList.remove('open'); scrim.classList.remove('show'); }}));
+</script>
+</body>
+</html>
