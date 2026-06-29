@@ -120,6 +120,16 @@ export const workSection = {
       image: "/projects/lora.png",
     },
     {
+      title: "Inference Engineering: A Deep Dive",
+      category: "Writing",
+      date: "Jun 2026",
+      description:
+        "A deep dive into LLM inference and GPU architecture.",
+      href: "/inference-engineering.html",
+      image: "/projects/inference-engineering.png",
+      imageContain: true,
+    },
+    {
       title: "Failure-Aware ACT (FAACT)",
       category: "Research",
       date: "Mar 2026",
