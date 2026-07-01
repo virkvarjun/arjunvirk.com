@@ -72,13 +72,13 @@ export const workSection = {
   subtitle: "Writing, research, and projects.",
   projects: [
     {
-      title: "OpenPI for Distributed Training with JAX",
+      title: "OpenPI-GPU",
       category: "Research",
       date: "Jun 2026",
       description:
-        "An implementation of OpenPI for multi-node distributed training in JAX.",
-      href: "#",
-      image: "/projects/jax.png",
+        "An implementation of a multi-node FSDP for the OpenPI repo.",
+      href: "https://virkvarjun.github.io/OpenPI-GPU/",
+      image: "/projects/openpi-gpu.svg",
       imageContain: true,
     },
     {
@@ -100,15 +100,6 @@ export const workSection = {
       href: "/writing/ml-guide",
       image: "/projects/ml-bible.png",
       imagePosition: "30% center",
-    },
-    {
-      title: "OpenPI-GPU",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "An implementation of a multi-node FSDP for the OpenPI repo.",
-      href: "https://virkvarjun.github.io/OpenPI-GPU/",
-      image: "/projects/openpi-gpu.svg",
     },
     {
       title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
