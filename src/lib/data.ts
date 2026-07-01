@@ -102,6 +102,15 @@ export const workSection = {
       imagePosition: "30% center",
     },
     {
+      title: "OpenPI-GPU",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "An implementation of a multi-node FSDP for the OpenPI repo.",
+      href: "https://virkvarjun.github.io/OpenPI-GPU/",
+      image: "/projects/openpi-gpu.svg",
+    },
+    {
       title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
       category: "Research",
       date: "Apr 2026",
