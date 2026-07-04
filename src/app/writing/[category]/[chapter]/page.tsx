@@ -97,6 +97,14 @@ export default async function ChapterPage({
             {chapter.summary}
           </p>
         )}
+        {chapter.published && (
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-[var(--muted)]">
+            Published {chapter.published}
+            {chapter.updated && chapter.updated !== chapter.published
+              ? ` · Updated ${chapter.updated}`
+              : ""}
+          </p>
+        )}
 
         <div className="mt-10 space-y-7">
           {chapter.sections.map((section, i) => (
@@ -222,6 +230,18 @@ export default async function ChapterPage({
             </section>
           ))}
         </div>
+
+        {chapter.futureRef && (
+          <aside className="mt-12 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+            <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)]">
+              Future reference
+              {chapter.updated ? ` · as of ${chapter.updated}` : ""}
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">
+              {chapter.futureRef}
+            </p>
+          </aside>
+        )}
 
         <nav className="mt-16 pt-6 border-t border-[var(--border)] flex items-center justify-between gap-4 text-sm">
           {prev ? (

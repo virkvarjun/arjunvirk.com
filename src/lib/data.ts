@@ -6,6 +6,7 @@ import {
   thinkingReflections,
   manifestoTwoReflections,
 } from "./chapters";
+import { roboticsGuideChapters } from "./robotics-chapters";
 
 export const profile = {
   name: "Arjun Virk",
@@ -100,6 +101,16 @@ export const workSection = {
       href: "/writing/ml-guide",
       image: "/projects/ml-bible.png",
       imagePosition: "30% center",
+    },
+    {
+      title: "Robotics Bible",
+      category: "Writing",
+      date: "Jul 2026",
+      description:
+        "A from-scratch guide to robot learning: from what a robot even is — joints, frames, sensors — up through kinematics, control, SLAM, planning, reinforcement learning, and the modern vision-language-action stack that runs today's humanoids.",
+      href: "/writing/robotics-guide",
+      image: "/projects/robotics-bible.svg",
+      imageContain: true,
     },
     {
       title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
@@ -296,6 +307,13 @@ export const writing: WritingCategory[] = [
     description:
       "A from-scratch guide to machine learning, classical algorithms, neural networks, transformers, vision, and agents.",
     chapters: mlGuideChapters,
+  },
+  {
+    key: "robotics-guide",
+    title: "Robotics Bible",
+    description:
+      "A from-scratch guide to robots: the body, the math, classical autonomy, reinforcement learning, and the vision-language-action models driving the current wave of general-purpose machines.",
+    chapters: roboticsGuideChapters,
   },
   {
     key: "becoming",

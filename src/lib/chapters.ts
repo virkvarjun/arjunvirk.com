@@ -34,6 +34,12 @@ export type Chapter = {
   title: string;
   summary: string;
   sections: ChapterSection[];
+  // Optional publication metadata (used by the Robotics Bible). "published"
+  // and "updated" render as dated header/TOC labels; "futureRef" renders as a
+  // small dated "come back to this when..." aside at the end of the chapter.
+  published?: string;
+  updated?: string;
+  futureRef?: string;
 };
 
 export const mlGuideChapters: Chapter[] = [

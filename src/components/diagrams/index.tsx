@@ -231,6 +231,8 @@ import { AgtKeepingTheContextWindowLean } from "./interactive/agt-keeping-the-co
 import { AgtTheLethalTrifecta } from "./interactive/agt-the-lethal-trifecta";
 import { AgtDefusingTheTrifectaArchitecturalDefenses } from "./interactive/agt-defusing-the-trifecta-architectural-defenses";
 import { AgtTheWholeAgentPicture } from "./interactive/agt-the-whole-agent-picture";
+// Robotics Bible figures
+import { RbPlaceholder } from "./interactive/robotics/placeholder";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -465,6 +467,14 @@ const registry: Record<string, Entry> = {
   "agt-the-lethal-trifecta": { Comp: AgtTheLethalTrifecta, interactive: true },
   "agt-defusing-the-trifecta-architectural-defenses": { Comp: AgtDefusingTheTrifectaArchitecturalDefenses, interactive: true },
   "agt-the-whole-agent-picture": { Comp: AgtTheWholeAgentPicture, interactive: true },
+  // Robotics Bible — chapter 1 (placeholders until built)
+  "rb-1-1": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-2": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-3": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-4": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-5": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-6": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-7": { Comp: RbPlaceholder, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {

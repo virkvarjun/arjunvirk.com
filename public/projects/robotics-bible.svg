@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Robotics Bible">
+  <g fill="none" stroke="#111111" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <!-- base plinth -->
+    <path d="M44 168 h56" stroke-width="12"/>
+    <path d="M72 168 v-14"/>
+    <!-- link 1 -->
+    <path d="M72 154 L128 96"/>
+    <!-- link 2 -->
+    <path d="M128 96 L214 116"/>
+    <!-- wrist to gripper -->
+    <path d="M214 116 L252 92"/>
+    <!-- gripper claw -->
+    <path d="M252 92 l16 -12 M252 92 l6 19"/>
+  </g>
+  <!-- joints -->
+  <circle cx="72" cy="154" r="8" fill="#111111"/>
+  <circle cx="128" cy="96" r="8" fill="#111111"/>
+  <circle cx="214" cy="116" r="8" fill="#111111"/>
+  <!-- target the arm reaches toward -->
+  <circle cx="284" cy="70" r="9" fill="#3f5fd6"/>
+</svg>

@@ -62,8 +62,20 @@ export default async function CategoryContentsPage({
               >
                 {isReflections ? chapter.number : `Chapter ${chapter.number}`}
               </span>
-              <span className="flex-1 text-sm font-medium group-hover:underline underline-offset-2">
-                {chapter.title}
+              <span className="flex-1">
+                <span className="block text-sm font-medium group-hover:underline underline-offset-2">
+                  {chapter.title}
+                </span>
+                {chapter.summary && chapter.published && (
+                  <span className="mt-0.5 block text-xs leading-relaxed text-[var(--muted)]">
+                    {chapter.summary}
+                  </span>
+                )}
+                {chapter.published && (
+                  <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                    {chapter.published}
+                  </span>
+                )}
               </span>
               <ArrowRight
                 size={14}
