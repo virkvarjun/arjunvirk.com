@@ -280,6 +280,16 @@ import {
   RbRrtVsRrtStar,
   RbGlobalLocal,
 } from "./interactive/robotics/ch6";
+import {
+  RbWhenRL,
+  RbAgentEnvLoop,
+  RbValueIteration,
+  RbPolicyGradient,
+  RbAdvantage,
+  RbPPOClip,
+  RbDomainRandomization,
+  RbTeacherStudent,
+} from "./interactive/robotics/ch7";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -556,6 +566,15 @@ const registry: Record<string, Entry> = {
   "rb-6-3": { Comp: RbRrtGrowth, interactive: true },
   "rb-6-4": { Comp: RbRrtVsRrtStar, interactive: true },
   "rb-6-5": { Comp: RbGlobalLocal, interactive: true },
+  // Robotics Bible — chapter 7
+  "rb-7-1": { Comp: RbWhenRL, interactive: true },
+  "rb-7-2": { Comp: RbAgentEnvLoop, interactive: true },
+  "rb-7-3": { Comp: RbValueIteration, interactive: true },
+  "rb-7-4": { Comp: RbPolicyGradient, interactive: true },
+  "rb-7-5": { Comp: RbAdvantage, interactive: true },
+  "rb-7-6": { Comp: RbPPOClip, interactive: true },
+  "rb-7-7": { Comp: RbDomainRandomization, interactive: true },
+  "rb-7-8": { Comp: RbTeacherStudent, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
