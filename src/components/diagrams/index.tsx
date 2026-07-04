@@ -258,6 +258,13 @@ import {
   RbSingularity,
   RbNullSpace,
 } from "./interactive/robotics/ch3";
+import {
+  RbOpenClosedLoop,
+  RbPvsPI,
+  RbPidTuner,
+  RbGravityComp,
+  RbImpedance,
+} from "./interactive/robotics/ch4";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -515,6 +522,12 @@ const registry: Record<string, Entry> = {
   "rb-3-5": { Comp: RbJacobianEllipse, interactive: true },
   "rb-3-6": { Comp: RbSingularity, interactive: true },
   "rb-3-7": { Comp: RbNullSpace, interactive: true },
+  // Robotics Bible — chapter 4
+  "rb-4-1": { Comp: RbOpenClosedLoop, interactive: true },
+  "rb-4-2": { Comp: RbPvsPI, interactive: true },
+  "rb-4-3": { Comp: RbPidTuner, interactive: true },
+  "rb-4-4": { Comp: RbGravityComp, interactive: true },
+  "rb-4-5": { Comp: RbImpedance, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
