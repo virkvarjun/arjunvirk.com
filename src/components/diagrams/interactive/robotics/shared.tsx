@@ -234,6 +234,7 @@ export function Stage({
   controls,
   viewBox = `0 0 ${STAGE_W} ${STAGE_H}`,
   innerRef,
+  svgProps,
 }: {
   title: ReactNode;
   ariaLabel: string;
@@ -241,6 +242,8 @@ export function Stage({
   controls?: ReactNode;
   viewBox?: string;
   innerRef?: React.Ref<HTMLDivElement>;
+  // Extra props spread onto the <svg> (e.g. pointer handlers for draggables).
+  svgProps?: React.SVGProps<SVGSVGElement>;
 }) {
   return (
     <div ref={innerRef}>
@@ -250,7 +253,8 @@ export function Stage({
         className="h-auto w-full rounded-md"
         role="img"
         aria-label={ariaLabel}
-        style={{ background: "var(--background)" }}
+        style={{ background: "var(--background)", touchAction: "none" }}
+        {...svgProps}
       >
         {children}
       </svg>
@@ -289,4 +293,15 @@ export function useStageVisibility() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref);
   return { ref, inView } as const;
+}
+
+// Map a pointer event on an SVG (viewBox 0..w x 0..h, h:auto so aspect is
+// preserved) to logical stage coordinates. Uniform scale => a plain rect map.
+export function svgPoint(
+  e: React.PointerEvent<SVGElement>,
+  w = STAGE_W,
+  h = STAGE_H,
+): [number, number] {
+  const r = e.currentTarget.getBoundingClientRect();
+  return [((e.clientX - r.left) / r.width) * w, ((e.clientY - r.top) / r.height) * h];
 }

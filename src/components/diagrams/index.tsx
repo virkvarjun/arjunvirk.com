@@ -232,8 +232,15 @@ import { AgtTheLethalTrifecta } from "./interactive/agt-the-lethal-trifecta";
 import { AgtDefusingTheTrifectaArchitecturalDefenses } from "./interactive/agt-defusing-the-trifecta-architectural-defenses";
 import { AgtTheWholeAgentPicture } from "./interactive/agt-the-whole-agent-picture";
 // Robotics Bible figures
-import { RbPlaceholder } from "./interactive/robotics/placeholder";
-import { RbSensePlanAct, RbJointTypes, RbGearbox } from "./interactive/robotics/ch1";
+import {
+  RbSensePlanAct,
+  RbJointTypes,
+  RbConfigSpace,
+  RbGearbox,
+  RbSensors,
+  RbEmbodiments,
+  RbHolonomic,
+} from "./interactive/robotics/ch1";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -471,11 +478,11 @@ const registry: Record<string, Entry> = {
   // Robotics Bible — chapter 1
   "rb-1-1": { Comp: RbSensePlanAct, interactive: true },
   "rb-1-2": { Comp: RbJointTypes, interactive: true },
-  "rb-1-3": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-3": { Comp: RbConfigSpace, interactive: true },
   "rb-1-4": { Comp: RbGearbox, interactive: true },
-  "rb-1-5": { Comp: RbPlaceholder, interactive: true },
-  "rb-1-6": { Comp: RbPlaceholder, interactive: true },
-  "rb-1-7": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-5": { Comp: RbSensors, interactive: true },
+  "rb-1-6": { Comp: RbEmbodiments, interactive: true },
+  "rb-1-7": { Comp: RbHolonomic, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
