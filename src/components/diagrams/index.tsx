@@ -249,6 +249,15 @@ import {
   RbTransformChain,
   RbTransformTree,
 } from "./interactive/robotics/ch2";
+import {
+  RbForwardKinematics,
+  RbDhParameters,
+  RbWorkspace,
+  RbInverseKinematics,
+  RbJacobianEllipse,
+  RbSingularity,
+  RbNullSpace,
+} from "./interactive/robotics/ch3";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -498,6 +507,14 @@ const registry: Record<string, Entry> = {
   "rb-2-4": { Comp: RbQuaternionSlerp, interactive: true },
   "rb-2-5": { Comp: RbTransformChain, interactive: true },
   "rb-2-6": { Comp: RbTransformTree, interactive: true },
+  // Robotics Bible — chapter 3
+  "rb-3-1": { Comp: RbForwardKinematics, interactive: true },
+  "rb-3-2": { Comp: RbDhParameters, interactive: true },
+  "rb-3-3": { Comp: RbWorkspace, interactive: true },
+  "rb-3-4": { Comp: RbInverseKinematics, interactive: true },
+  "rb-3-5": { Comp: RbJacobianEllipse, interactive: true },
+  "rb-3-6": { Comp: RbSingularity, interactive: true },
+  "rb-3-7": { Comp: RbNullSpace, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
