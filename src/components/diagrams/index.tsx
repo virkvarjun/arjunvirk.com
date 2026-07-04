@@ -290,6 +290,14 @@ import {
   RbDomainRandomization,
   RbTeacherStudent,
 } from "./interactive/robotics/ch7";
+import {
+  RbAttentionQkv,
+  RbPatchify,
+  RbSharedSpace,
+  RbClipVsSiglip,
+  RbVlmAnatomy,
+  RbDiffusionVsFlow,
+} from "./interactive/robotics/ch8";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -575,6 +583,13 @@ const registry: Record<string, Entry> = {
   "rb-7-6": { Comp: RbPPOClip, interactive: true },
   "rb-7-7": { Comp: RbDomainRandomization, interactive: true },
   "rb-7-8": { Comp: RbTeacherStudent, interactive: true },
+  // Robotics Bible — chapter 8
+  "rb-8-1": { Comp: RbAttentionQkv, interactive: true },
+  "rb-8-2": { Comp: RbPatchify, interactive: true },
+  "rb-8-3": { Comp: RbSharedSpace, interactive: true },
+  "rb-8-4": { Comp: RbClipVsSiglip, interactive: true },
+  "rb-8-5": { Comp: RbVlmAnatomy, interactive: true },
+  "rb-8-6": { Comp: RbDiffusionVsFlow, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {

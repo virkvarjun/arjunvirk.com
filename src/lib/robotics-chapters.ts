@@ -5,6 +5,7 @@ import { chapter4 } from "./robotics/chapter-4";
 import { chapter5 } from "./robotics/chapter-5";
 import { chapter6 } from "./robotics/chapter-6";
 import { chapter7 } from "./robotics/chapter-7";
+import { chapter8 } from "./robotics/chapter-8";
 
 // The Robotics Bible. Prose is authored in content/robotics-bible/*.md and
 // transcribed here into the same Chapter/section schema the ML Bible uses;
@@ -379,6 +380,7 @@ const realChapters: Chapter[] = [
   chapter5,
   chapter6,
   chapter7,
+  chapter8,
 ];
 const built = new Set(realChapters.map((c) => c.number));
 
