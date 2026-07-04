@@ -273,6 +273,13 @@ import {
   RbOccupancyGrid,
   RbLoopClosure,
 } from "./interactive/robotics/ch5";
+import {
+  RbCSpaceInflation,
+  RbDijkstraVsAstar,
+  RbRrtGrowth,
+  RbRrtVsRrtStar,
+  RbGlobalLocal,
+} from "./interactive/robotics/ch6";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -543,6 +550,12 @@ const registry: Record<string, Entry> = {
   "rb-5-4": { Comp: RbParticleFilter, interactive: true },
   "rb-5-5": { Comp: RbOccupancyGrid, interactive: true },
   "rb-5-6": { Comp: RbLoopClosure, interactive: true },
+  // Robotics Bible — chapter 6
+  "rb-6-1": { Comp: RbCSpaceInflation, interactive: true },
+  "rb-6-2": { Comp: RbDijkstraVsAstar, interactive: true },
+  "rb-6-3": { Comp: RbRrtGrowth, interactive: true },
+  "rb-6-4": { Comp: RbRrtVsRrtStar, interactive: true },
+  "rb-6-5": { Comp: RbGlobalLocal, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
