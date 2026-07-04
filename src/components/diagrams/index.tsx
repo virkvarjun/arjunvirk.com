@@ -241,6 +241,14 @@ import {
   RbEmbodiments,
   RbHolonomic,
 } from "./interactive/robotics/ch1";
+import {
+  RbThreeFrames,
+  RbRotationMatrix,
+  RbGimbalLock,
+  RbQuaternionSlerp,
+  RbTransformChain,
+  RbTransformTree,
+} from "./interactive/robotics/ch2";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -483,6 +491,13 @@ const registry: Record<string, Entry> = {
   "rb-1-5": { Comp: RbSensors, interactive: true },
   "rb-1-6": { Comp: RbEmbodiments, interactive: true },
   "rb-1-7": { Comp: RbHolonomic, interactive: true },
+  // Robotics Bible — chapter 2
+  "rb-2-1": { Comp: RbThreeFrames, interactive: true },
+  "rb-2-2": { Comp: RbRotationMatrix, interactive: true },
+  "rb-2-3": { Comp: RbGimbalLock, interactive: true },
+  "rb-2-4": { Comp: RbQuaternionSlerp, interactive: true },
+  "rb-2-5": { Comp: RbTransformChain, interactive: true },
+  "rb-2-6": { Comp: RbTransformTree, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {

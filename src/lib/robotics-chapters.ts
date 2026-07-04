@@ -1,4 +1,5 @@
 import type { Chapter } from "./chapters";
+import { chapter2 } from "./robotics/chapter-2";
 
 // The Robotics Bible. Prose is authored in content/robotics-bible/*.md and
 // transcribed here into the same Chapter/section schema the ML Bible uses;
@@ -364,22 +365,31 @@ const STUBS: Array<{
   },
 ];
 
-const stubChapters: Chapter[] = STUBS.map((s) => ({
-  slug: s.slug,
-  number: s.number,
-  title: s.title,
-  summary: s.summary,
-  published: s.published,
-  updated: s.updated,
-  futureRef: s.futureRef,
-  sections: [
-    {
-      paragraphs: [
-        `*${s.summary}*`,
-        "**This chapter is being written.** The full prose and its interactive figures are in progress and will appear here shortly. Chapter 1 shows the finished format.",
-      ],
-    },
-  ],
-}));
+// Real, fully-built chapters. Add each here as it lands; stubs fill the gaps.
+const realChapters: Chapter[] = [chapter1, chapter2];
+const built = new Set(realChapters.map((c) => c.number));
 
-export const roboticsGuideChapters: Chapter[] = [chapter1, ...stubChapters];
+const stubChapters: Chapter[] = STUBS.filter((s) => !built.has(s.number)).map(
+  (s) => ({
+    slug: s.slug,
+    number: s.number,
+    title: s.title,
+    summary: s.summary,
+    published: s.published,
+    updated: s.updated,
+    futureRef: s.futureRef,
+    sections: [
+      {
+        paragraphs: [
+          `*${s.summary}*`,
+          "**This chapter is being written.** The full prose and its interactive figures are in progress and will appear here shortly. Chapter 1 shows the finished format.",
+        ],
+      },
+    ],
+  }),
+);
+
+export const roboticsGuideChapters: Chapter[] = [
+  ...realChapters,
+  ...stubChapters,
+].sort((a, b) => Number(a.number) - Number(b.number));
