@@ -2,6 +2,7 @@ import type { Chapter } from "./chapters";
 import { chapter2 } from "./robotics/chapter-2";
 import { chapter3 } from "./robotics/chapter-3";
 import { chapter4 } from "./robotics/chapter-4";
+import { chapter5 } from "./robotics/chapter-5";
 
 // The Robotics Bible. Prose is authored in content/robotics-bible/*.md and
 // transcribed here into the same Chapter/section schema the ML Bible uses;
@@ -368,7 +369,7 @@ const STUBS: Array<{
 ];
 
 // Real, fully-built chapters. Add each here as it lands; stubs fill the gaps.
-const realChapters: Chapter[] = [chapter1, chapter2, chapter3, chapter4];
+const realChapters: Chapter[] = [chapter1, chapter2, chapter3, chapter4, chapter5];
 const built = new Set(realChapters.map((c) => c.number));
 
 const stubChapters: Chapter[] = STUBS.filter((s) => !built.has(s.number)).map(

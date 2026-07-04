@@ -265,6 +265,14 @@ import {
   RbGravityComp,
   RbImpedance,
 } from "./interactive/robotics/ch4";
+import {
+  RbBeliefGaussian,
+  RbBayesLoop,
+  RbKalmanFusion,
+  RbParticleFilter,
+  RbOccupancyGrid,
+  RbLoopClosure,
+} from "./interactive/robotics/ch5";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -528,6 +536,13 @@ const registry: Record<string, Entry> = {
   "rb-4-3": { Comp: RbPidTuner, interactive: true },
   "rb-4-4": { Comp: RbGravityComp, interactive: true },
   "rb-4-5": { Comp: RbImpedance, interactive: true },
+  // Robotics Bible — chapter 5
+  "rb-5-1": { Comp: RbBeliefGaussian, interactive: true },
+  "rb-5-2": { Comp: RbBayesLoop, interactive: true },
+  "rb-5-3": { Comp: RbKalmanFusion, interactive: true },
+  "rb-5-4": { Comp: RbParticleFilter, interactive: true },
+  "rb-5-5": { Comp: RbOccupancyGrid, interactive: true },
+  "rb-5-6": { Comp: RbLoopClosure, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
