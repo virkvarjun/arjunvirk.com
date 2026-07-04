@@ -233,6 +233,7 @@ import { AgtDefusingTheTrifectaArchitecturalDefenses } from "./interactive/agt-d
 import { AgtTheWholeAgentPicture } from "./interactive/agt-the-whole-agent-picture";
 // Robotics Bible figures
 import { RbPlaceholder } from "./interactive/robotics/placeholder";
+import { RbSensePlanAct, RbJointTypes, RbGearbox } from "./interactive/robotics/ch1";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -467,11 +468,11 @@ const registry: Record<string, Entry> = {
   "agt-the-lethal-trifecta": { Comp: AgtTheLethalTrifecta, interactive: true },
   "agt-defusing-the-trifecta-architectural-defenses": { Comp: AgtDefusingTheTrifectaArchitecturalDefenses, interactive: true },
   "agt-the-whole-agent-picture": { Comp: AgtTheWholeAgentPicture, interactive: true },
-  // Robotics Bible — chapter 1 (placeholders until built)
-  "rb-1-1": { Comp: RbPlaceholder, interactive: true },
-  "rb-1-2": { Comp: RbPlaceholder, interactive: true },
+  // Robotics Bible — chapter 1
+  "rb-1-1": { Comp: RbSensePlanAct, interactive: true },
+  "rb-1-2": { Comp: RbJointTypes, interactive: true },
   "rb-1-3": { Comp: RbPlaceholder, interactive: true },
-  "rb-1-4": { Comp: RbPlaceholder, interactive: true },
+  "rb-1-4": { Comp: RbGearbox, interactive: true },
   "rb-1-5": { Comp: RbPlaceholder, interactive: true },
   "rb-1-6": { Comp: RbPlaceholder, interactive: true },
   "rb-1-7": { Comp: RbPlaceholder, interactive: true },
