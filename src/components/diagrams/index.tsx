@@ -298,6 +298,21 @@ import {
   RbVlmAnatomy,
   RbDiffusionVsFlow,
 } from "./interactive/robotics/ch8";
+import {
+  RbVlaForwardPass,
+  RbActionTokens,
+  RbSpeakActions,
+  RbPositiveTransfer,
+  RbDualEncoder,
+  RbDiffusionAmbiguity,
+  RbThreeReps,
+  RbFastTokenize,
+  RbFlowChunk,
+  RbHierarchical,
+  RbEmbodiedCoT,
+  RbMolmoAct3D,
+  RbDualSystem,
+} from "./interactive/robotics/ch9";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -590,6 +605,20 @@ const registry: Record<string, Entry> = {
   "rb-8-4": { Comp: RbClipVsSiglip, interactive: true },
   "rb-8-5": { Comp: RbVlmAnatomy, interactive: true },
   "rb-8-6": { Comp: RbDiffusionVsFlow, interactive: true },
+  // Robotics Bible — chapter 9
+  "rb-9-1": { Comp: RbVlaForwardPass, interactive: true },
+  "rb-9-2": { Comp: RbActionTokens, interactive: true },
+  "rb-9-3": { Comp: RbSpeakActions, interactive: true },
+  "rb-9-4": { Comp: RbPositiveTransfer, interactive: true },
+  "rb-9-5": { Comp: RbDualEncoder, interactive: true },
+  "rb-9-6": { Comp: RbDiffusionAmbiguity, interactive: true },
+  "rb-9-7": { Comp: RbThreeReps, interactive: true },
+  "rb-9-8": { Comp: RbFastTokenize, interactive: true },
+  "rb-9-9": { Comp: RbFlowChunk, interactive: true },
+  "rb-9-10": { Comp: RbHierarchical, interactive: true },
+  "rb-9-11": { Comp: RbEmbodiedCoT, interactive: true },
+  "rb-9-12": { Comp: RbMolmoAct3D, interactive: true },
+  "rb-9-13": { Comp: RbDualSystem, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
