@@ -333,6 +333,14 @@ import {
   RbReal2Sim2Real,
   RbDriftDemo,
 } from "./interactive/robotics/ch11";
+import {
+  RbAntipodalGrasp,
+  RbInHandReorient,
+  RbBodyPartChapters,
+  RbPubSubGraph,
+  RbGeneralizationGap,
+  RbStiffVsCompliant,
+} from "./interactive/robotics/ch12";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -657,6 +665,13 @@ const registry: Record<string, Entry> = {
   "rb-11-6": { Comp: RbNerfVsSplat, interactive: true },
   "rb-11-7": { Comp: RbReal2Sim2Real, interactive: true },
   "rb-11-8": { Comp: RbDriftDemo, interactive: true },
+  // Robotics Bible — chapter 12
+  "rb-12-1": { Comp: RbAntipodalGrasp, interactive: true },
+  "rb-12-2": { Comp: RbInHandReorient, interactive: true },
+  "rb-12-3": { Comp: RbBodyPartChapters, interactive: true },
+  "rb-12-4": { Comp: RbPubSubGraph, interactive: true },
+  "rb-12-5": { Comp: RbGeneralizationGap, interactive: true },
+  "rb-12-6": { Comp: RbStiffVsCompliant, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
