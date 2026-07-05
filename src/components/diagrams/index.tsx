@@ -313,6 +313,16 @@ import {
   RbMolmoAct3D,
   RbDualSystem,
 } from "./interactive/robotics/ch9";
+import {
+  RbBehaviorCloning,
+  RbCompoundingError,
+  RbActionChunking,
+  RbDiffusionPolicy,
+  RbAloha,
+  RbUmi,
+  RbEmbodimentGap,
+  RbSyncTimeline,
+} from "./interactive/robotics/ch10";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -619,6 +629,15 @@ const registry: Record<string, Entry> = {
   "rb-9-11": { Comp: RbEmbodiedCoT, interactive: true },
   "rb-9-12": { Comp: RbMolmoAct3D, interactive: true },
   "rb-9-13": { Comp: RbDualSystem, interactive: true },
+  // Robotics Bible — chapter 10
+  "rb-10-1": { Comp: RbBehaviorCloning, interactive: true },
+  "rb-10-2": { Comp: RbCompoundingError, interactive: true },
+  "rb-10-3": { Comp: RbActionChunking, interactive: true },
+  "rb-10-4": { Comp: RbDiffusionPolicy, interactive: true },
+  "rb-10-5": { Comp: RbAloha, interactive: true },
+  "rb-10-6": { Comp: RbUmi, interactive: true },
+  "rb-10-7": { Comp: RbEmbodimentGap, interactive: true },
+  "rb-10-8": { Comp: RbSyncTimeline, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
