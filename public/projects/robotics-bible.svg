@@ -1,21 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Robotics Bible">
-  <g fill="none" stroke="#111111" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
-    <!-- base plinth -->
-    <path d="M44 168 h56" stroke-width="12"/>
-    <path d="M72 168 v-14"/>
-    <!-- link 1 -->
-    <path d="M72 154 L128 96"/>
-    <!-- link 2 -->
-    <path d="M128 96 L214 116"/>
-    <!-- wrist to gripper -->
-    <path d="M214 116 L252 92"/>
-    <!-- gripper claw -->
-    <path d="M252 92 l16 -12 M252 92 l6 19"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 240" role="img" aria-label="Robot reinforcement-learning loop: agent, action, environment, state and reward">
+  <!-- AGENT box -->
+  <rect x="40" y="70" width="150" height="120" rx="14" fill="#dde3f8" stroke="#3f5fd6" stroke-width="3"/>
+  <text x="115" y="92" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="14" font-weight="700" fill="#111111">AGENT</text>
+  <!-- little robot -->
+  <g stroke="#3f5fd6" stroke-width="2.4" fill="#ffffff">
+    <circle cx="115" cy="104" r="3" fill="#3f5fd6" stroke="none"/>
+    <line x1="115" y1="107" x2="115" y2="113"/>
+    <rect x="100" y="113" width="30" height="22" rx="4"/>
+    <rect x="103" y="137" width="24" height="18" rx="3"/>
   </g>
-  <!-- joints -->
-  <circle cx="72" cy="154" r="8" fill="#111111"/>
-  <circle cx="128" cy="96" r="8" fill="#111111"/>
-  <circle cx="214" cy="116" r="8" fill="#111111"/>
-  <!-- target the arm reaches toward -->
-  <circle cx="284" cy="70" r="9" fill="#3f5fd6"/>
+  <circle cx="108" cy="124" r="2.6" fill="#3f5fd6"/>
+  <circle cx="122" cy="124" r="2.6" fill="#3f5fd6"/>
+  <text x="115" y="176" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#3f5fd6">policy &#960;</text>
+
+  <!-- ENVIRONMENT box -->
+  <rect x="290" y="70" width="150" height="120" rx="14" fill="#efefec" stroke="#7a7a72" stroke-width="3"/>
+  <text x="365" y="92" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="13" font-weight="700" fill="#111111">ENVIRONMENT</text>
+  <line x1="305" y1="165" x2="425" y2="165" stroke="#7a7a72" stroke-width="2.4"/>
+  <rect x="328" y="146" width="22" height="19" rx="2" fill="#e6e6e2" stroke="#7a7a72" stroke-width="2"/>
+  <circle cx="402" cy="150" r="7" fill="#d8efe4" stroke="#3d9970" stroke-width="2.4"/>
+
+  <!-- action channel: agent -> env (amber) -->
+  <line x1="192" y1="102" x2="283" y2="102" stroke="#c07d16" stroke-width="3"/>
+  <polygon points="290,102 279,96 279,108" fill="#c07d16"/>
+  <text x="237" y="90" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#c07d16">action a&#8348;</text>
+
+  <!-- feedback channel: env -> agent (blue state, green reward) -->
+  <line x1="288" y1="158" x2="197" y2="158" stroke="#3f5fd6" stroke-width="3"/>
+  <polygon points="190,158 201,152 201,164" fill="#3f5fd6"/>
+  <text x="237" y="150" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#3f5fd6">state s&#8348;</text>
+  <text x="237" y="182" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#3d9970">reward r&#8348;</text>
 </svg>

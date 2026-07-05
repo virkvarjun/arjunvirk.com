@@ -106,8 +106,7 @@ export const workSection = {
       title: "Robotics Bible",
       category: "Writing",
       date: "Jul 2026",
-      description:
-        "A from-scratch guide to robot learning: from what a robot even is — joints, frames, sensors — up through kinematics, control, SLAM, planning, reinforcement learning, and the modern vision-language-action stack that runs today's humanoids.",
+      description: "A full guide of ML in Robotics.",
       href: "/writing/robotics-guide",
       image: "/projects/robotics-bible.svg",
       imageContain: true,
