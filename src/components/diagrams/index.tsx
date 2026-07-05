@@ -323,6 +323,16 @@ import {
   RbEmbodimentGap,
   RbSyncTimeline,
 } from "./interactive/robotics/ch10";
+import {
+  RbDreamingLoop,
+  RbLatentVsPixel,
+  RbActionVideo,
+  RbReconstructVsAlign,
+  RbDomainRandomization as RbDomainRandomization11,
+  RbNerfVsSplat,
+  RbReal2Sim2Real,
+  RbDriftDemo,
+} from "./interactive/robotics/ch11";
 
 type Entry = { Comp: ComponentType; viewBox?: string; interactive?: boolean };
 
@@ -638,6 +648,15 @@ const registry: Record<string, Entry> = {
   "rb-10-6": { Comp: RbUmi, interactive: true },
   "rb-10-7": { Comp: RbEmbodimentGap, interactive: true },
   "rb-10-8": { Comp: RbSyncTimeline, interactive: true },
+  // Robotics Bible — chapter 11
+  "rb-11-1": { Comp: RbDreamingLoop, interactive: true },
+  "rb-11-2": { Comp: RbLatentVsPixel, interactive: true },
+  "rb-11-3": { Comp: RbActionVideo, interactive: true },
+  "rb-11-4": { Comp: RbReconstructVsAlign, interactive: true },
+  "rb-11-5": { Comp: RbDomainRandomization11, interactive: true },
+  "rb-11-6": { Comp: RbNerfVsSplat, interactive: true },
+  "rb-11-7": { Comp: RbReal2Sim2Real, interactive: true },
+  "rb-11-8": { Comp: RbDriftDemo, interactive: true },
 };
 
 export function Diagram({ id, caption }: { id: string; caption?: string }) {
