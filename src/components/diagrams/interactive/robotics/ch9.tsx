@@ -21,7 +21,7 @@ import {
 } from "./shared";
 
 // ===========================================================================
-// Robotics Bible — Chapter 9 · Vision-Language-Action Models (13 figures).
+// Robotics Bible, Chapter 9 · Vision-Language-Action Models (13 figures).
 // Every figure is a skin over ./shared: a fixed 720×440 stage, one Controls
 // strip, calm delta-timed motion gated on inView && !reduced, seeded
 // randomness, fixed readout lanes so nothing overlaps, and a static fully
@@ -31,183 +31,243 @@ import {
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 // ===========================================================================
-// Fig 9.1 · A VLA forward pass  (animated pipeline)
-// A glowing token flows through four boxes: input → VLM backbone → action head
-// → robot arm, lighting each in turn. A "swap action head" toggle cycles the
-// third box between discrete / FAST / flow, driving home that the backbone is
-// shared. Step advances one stage at a time with a caption.
+// Fig 9.1 · Inside the VLA forward pass  (stepper)
+// Walk the transformer that runs a VLA: image patches and words become tokens,
+// each token projects to a query, key, and value, multi-head attention lets a
+// word attend to the pixels it names, the values are blended, and the
+// contextualized tokens drive the action expert. Step through, or pick a head.
 // ===========================================================================
 
-type HeadKind = "discrete" | "fast" | "flow";
-const HEAD_LABEL: Record<HeadKind, string> = {
-  discrete: "discrete tokens",
-  fast: "FAST tokens",
-  flow: "flow",
-};
-const HEAD_OUT: Record<HeadKind, string> = {
-  discrete: "131 88 12 …",
-  fast: "6 tokens",
-  flow: "∫ velocity",
-};
-const P1_STAGES = [
-  { x: 120, label: "input", sub: "image + text", col: R.signal },
-  { x: 300, label: "VLM backbone", sub: "fuse features", col: R.world },
-  { x: 480, label: "action head", sub: "emit action", col: R.plan },
-  { x: 640, label: "robot", sub: "execute", col: R.goal },
-] as const;
-const P1_CAP = [
-  "encode image + text",
-  "fuse into features",
-  "head emits action",
-  "robot executes",
+type Tok = { label: string; img: boolean };
+// 4 image-patch tokens then 3 text tokens; "cup" (index 5) is the query token.
+const FP_TOKENS: Tok[] = [
+  { label: "img A", img: true },
+  { label: "img B", img: true },
+  { label: "img C", img: true },
+  { label: "img D", img: true },
+  { label: "put", img: false },
+  { label: "cup", img: false },
+  { label: "sink", img: false },
 ];
-const BW1 = 74;
-const BH1 = 46;
+const FP_Q = 5; // the query token we trace: the word "cup"
+// Per-head attention weights from "cup" to every token (each row sums to 1).
+// img B holds the cup, so the semantic head grounds the word on that patch.
+const FP_HEADS: { name: string; role: string; w: number[] }[] = [
+  { name: "head 1", role: "semantic: the word grounds on the cup pixels", w: [0.05, 0.55, 0.05, 0.05, 0.05, 0.2, 0.05] },
+  { name: "head 2", role: "local: attend to neighboring words", w: [0.04, 0.06, 0.04, 0.04, 0.34, 0.16, 0.32] },
+  { name: "head 3", role: "syntax: bind to the verb it is an object of", w: [0.03, 0.05, 0.03, 0.03, 0.68, 0.12, 0.06] },
+];
+const FP_N = 6; // number of steps
+const FP_STEPNAME = [
+  "inputs: an image and an instruction",
+  "tokenize: patches and words become one sequence",
+  "project: every token becomes a query, key, and value",
+  "attention: scores = softmax(Q Kᵀ / √d)",
+  "blend: new token = Σ (weight × value)",
+  "act: contextualized tokens drive the action expert",
+];
 
 export function RbVlaForwardPass() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [playing, toggle] = useReducer((p) => !p, true);
-  const [head, setHead] = useState<HeadKind>("discrete");
-  // phase 0..4 continuous position of the token across four stages.
-  const [phase, setPhase] = useState(0);
-  const [stepMode, setStepMode] = useState(false);
+  const [step, setStep] = useState(reduced ? 5 : 0);
+  const [head, setHead] = useState(0);
+  const [playing, toggle] = useReducer((p) => !p, false);
+  const [, setClk] = useState(0);
 
   useRafLoop(
-    (dt) => {
-      setPhase((p) => {
-        const np = p + dt * 0.6;
-        return np >= 3.6 ? 0 : np;
-      });
-    },
-    { playing: playing && !stepMode && inView && !reduced },
+    (dt) =>
+      setClk((c) => {
+        const n = c + dt;
+        if (n > 1.1) {
+          setStep((s) => (s + 1) % FP_N);
+          return 0;
+        }
+        return n;
+      }),
+    { playing: playing && inView && !reduced },
   );
 
-  const stage = Math.min(3, Math.floor(phase));
-  const frac = smooth(clamp(phase - stage, 0, 1));
-  const from = P1_STAGES[stage];
-  const to = P1_STAGES[Math.min(3, stage + 1)];
-  const tokenX = reduced ? P1_STAGES[3].x : lerp(from.x, to.x, frac);
+  // token x positions
+  const N = FP_TOKENS.length;
+  const x0 = 70;
+  const x1 = 650;
+  const tx = (i: number) => x0 + (i / (N - 1)) * (x1 - x0);
+  const rowY = 118;
+  const bw = 62;
+  const bh = 30;
 
-  const active = reduced ? 3 : Math.round(phase);
-  const step = () => {
-    setStepMode(true);
-    setPhase((p) => {
-      const next = Math.floor(p) + 1;
-      return next > 3 ? 0 : next;
-    });
-  };
-  const play = () => {
-    setStepMode(false);
-    if (!playing) toggle();
+  const w = FP_HEADS[head].w;
+  const maxW = Math.max(...w);
+
+  const tokBox = (i: number, y: number, highlight: boolean) => {
+    const t = FP_TOKENS[i];
+    const col = t.img ? R.signal : R.plan;
+    const fill = t.img ? R.fillBlue : R.fillAmber;
+    return (
+      <g key={i}>
+        <rect
+          x={tx(i) - bw / 2}
+          y={y}
+          width={bw}
+          height={bh}
+          rx={6}
+          fill={highlight ? fill : "var(--background)"}
+          stroke={col}
+          strokeWidth={highlight ? 3 : 2}
+        />
+        <text x={tx(i)} y={y + bh / 2 + 4} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.ink}>
+          {t.label}
+        </text>
+      </g>
+    );
   };
 
   return (
     <Stage
       innerRef={ref}
-      title="Fig 9.1 · A VLA forward pass"
-      ariaLabel={`A VLA pipeline: image and text into a shared VLM backbone, a ${HEAD_LABEL[head]} action head, then a robot arm`}
+      title={"Fig 9.1 · Inside the VLA forward pass"}
+      ariaLabel={"Stepping through a vision-language-action transformer forward pass, step " + (step + 1) + " of " + FP_N}
       controls={
         <>
-          <Btn onClick={play} active={playing && !stepMode}>
-            {playing && !stepMode ? "⏸ pause" : "▶ play"}
+          <Btn onClick={() => setStep((s) => (s + FP_N - 1) % FP_N)}>◀ back</Btn>
+          <Btn onClick={toggle} active={playing}>
+            {playing ? "⏸ pause" : "▶ play"}
           </Btn>
-          <Btn onClick={step} title="advance one stage">
-            ▸ step
-          </Btn>
-          <span className="font-mono text-[13px] text-[var(--muted)]">swap action head</span>
-          <Tabs
-            options={[
-              { id: "discrete", label: "discrete" },
-              { id: "fast", label: "FAST" },
-              { id: "flow", label: "flow" },
-            ]}
-            value={head}
-            onChange={setHead}
-          />
+          <Btn onClick={() => setStep((s) => (s + 1) % FP_N)}>step ▶</Btn>
+          <Btn onClick={() => { setStep(0); setHead(0); }}>↺ reset</Btn>
+          {step === 3 && (
+            <Tabs
+              options={FP_HEADS.map((h, i) => ({ id: String(i), label: h.name }))}
+              value={String(head)}
+              onChange={(v) => setHead(Number(v))}
+            />
+          )}
         </>
       }
     >
-      {/* fixed caption lane, top */}
-      <text x={40} y={40} fontFamily={MONO} fontSize={14} fill={R.ink}>
-        stage {active + 1}/4:
+      {/* step indicator, fixed top lane */}
+      <text x={40} y={34} fontFamily={MONO} fontSize={13} fill={R.world}>
+        {"step " + (step + 1) + " / " + FP_N}
       </text>
-      <text x={140} y={40} fontFamily={MONO} fontSize={14} fill={R.plan} fontWeight={600}>
-        {P1_CAP[active]}
-      </text>
-
-      {/* the shared-backbone reminder */}
-      <text x={300} y={330} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
-        backbone is shared — only the head changes
+      <text x={40} y={56} fontFamily={MONO} fontSize={15} fill={R.ink} fontWeight={600}>
+        {FP_STEPNAME[step]}
       </text>
 
-      {/* connectors */}
-      {P1_STAGES.slice(0, 3).map((s, i) => (
-        <g key={i}>{svgArrow(s.x + BW1 / 2, 200, P1_STAGES[i + 1].x - BW1 / 2, 200, R.line, 3, 10)}</g>
-      ))}
-
-      {/* boxes */}
-      {P1_STAGES.map((s, i) => {
-        const on = active === i;
-        const fill =
-          s.col === R.signal
-            ? R.fillBlue
-            : s.col === R.plan
-              ? R.fillAmber
-              : s.col === R.goal
-                ? R.fillGreen
-                : "#eeeeec";
-        return (
-          <g key={s.label}>
-            <rect
-              x={s.x - BW1 / 2}
-              y={200 - BH1 / 2}
-              width={BW1}
-              height={BH1}
-              rx={10}
-              fill={on ? fill : "var(--background)"}
-              stroke={s.col}
-              strokeWidth={on ? 4 : 2}
-            />
-            <text x={s.x} y={196} textAnchor="middle" fontFamily={MONO} fontSize={13} fontWeight={600} fill={R.ink}>
-              {i === 2 ? HEAD_LABEL[head] : s.label}
-            </text>
-            <text x={s.x} y={214} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
-              {s.sub}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* the input panel detail under box 1 */}
-      <text x={120} y={276} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
-        &quot;pick up the mug&quot;
-      </text>
-
-      {/* the head output detail under box 3 */}
-      <text x={480} y={276} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.plan}>
-        {HEAD_OUT[head]}
-      </text>
-
-      {/* the traveling token */}
-      {!reduced && (
+      {/* Step 0: raw inputs */}
+      {step === 0 && (
         <g>
-          <circle cx={tokenX} cy={200} r={12} fill={R.plan} opacity={0.25} />
-          <circle cx={tokenX} cy={200} r={6} fill={R.plan} />
+          <text x={150} y={110} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>image</text>
+          {Array.from({ length: 16 }).map((_, idx) => {
+            const r = Math.floor(idx / 4);
+            const c = idx % 4;
+            return (
+              <rect key={idx} x={70 + c * 40} y={130 + r * 40} width={38} height={38}
+                fill={r === 1 && c === 1 ? R.fillBlue : "#efefec"} stroke={R.line} strokeWidth={1.5} />
+            );
+          })}
+          <text x={130} y={175} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>cup</text>
+          <text x={470} y={110} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>instruction</text>
+          <rect x={320} y={150} width={300} height={44} rx={8} fill={R.fillAmber} stroke={R.plan} strokeWidth={2} />
+          <text x={470} y={177} textAnchor="middle" fontFamily={MONO} fontSize={15} fill={R.ink}>&quot;put the cup in the sink&quot;</text>
+          <text x={360} y={260} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>a patch encoder and a tokenizer turn both into vectors</text>
         </g>
       )}
 
-      {/* the grasp outcome, when the token reaches the robot */}
-      {(reduced || active === 3) && (
-        <text x={640} y={276} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal} fontWeight={600}>
-          grasp ✓
-        </text>
+      {/* Steps 1+ : the token sequence lives in a fixed lane */}
+      {step >= 1 && (
+        <g>
+          <text x={40} y={rowY - 12} fontFamily={MONO} fontSize={12} fill={R.world}>{N} tokens (image · text)</text>
+          {FP_TOKENS.map((_, i) => tokBox(i, rowY, step === 1 || i === FP_Q))}
+        </g>
       )}
 
-      {reduced && (
-        <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={R.world}>
-          Reduced motion: the final grasp is shown; swapping the head still changes the third box.
-        </text>
+      {/* Step 2: Q K V projection under each token */}
+      {step === 2 && (
+        <g>
+          {FP_TOKENS.map((_, i) => (
+            <g key={i}>
+              {["Q", "K", "V"].map((lab, k) => {
+                const cols = [R.signal, R.goal, R.plan];
+                return (
+                  <rect key={lab} x={tx(i) - 21 + k * 15} y={rowY + 46} width={12} height={26}
+                    rx={2} fill={cols[k]} opacity={0.85} />
+                );
+              })}
+            </g>
+          ))}
+          <text x={40} y={rowY + 100} fontFamily={MONO} fontSize={13} fill={R.world}>
+            q = x·W_Q (blue), k = x·W_K (green), v = x·W_V (amber)
+          </text>
+          <text x={40} y={rowY + 122} fontFamily={MONO} fontSize={13} fill={R.world}>
+            three learned projections per token, one per head
+          </text>
+        </g>
+      )}
+
+      {/* Step 3: attention from the query token to all keys */}
+      {step === 3 && (
+        <g>
+          {/* query marker */}
+          <text x={tx(FP_Q)} y={rowY + 48} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>query</text>
+          {/* weight bars above each token */}
+          {FP_TOKENS.map((_, i) => {
+            const bh2 = 70 * w[i];
+            const strong = w[i] === maxW;
+            return (
+              <g key={i}>
+                <rect x={tx(i) - 16} y={rowY - 24 - bh2} width={32} height={bh2}
+                  rx={2} fill={strong ? R.signal : R.fillBlue} stroke={strong ? R.signal : R.line} strokeWidth={1.5} />
+                <text x={tx(i)} y={rowY - 30 - bh2} textAnchor="middle" fontFamily={MONO} fontSize={11} fill={R.world}>
+                  {w[i].toFixed(2)}
+                </text>
+              </g>
+            );
+          })}
+          {/* connect query to strongest key */}
+          {svgArrow(tx(FP_Q), rowY + 34, tx(w.indexOf(maxW)), rowY + 12, R.signal, 2, 8)}
+          <text x={40} y={rowY + 110} fontFamily={MONO} fontSize={13} fill={R.ink}>
+            {FP_HEADS[head].name + ": " + FP_HEADS[head].role}
+          </text>
+          <text x={40} y={rowY + 132} fontFamily={MONO} fontSize={12} fill={R.world}>
+            softmax( q·kⱼ / √d ) over all tokens, each head learns a different pattern
+          </text>
+        </g>
+      )}
+
+      {/* Step 4: weighted sum of values */}
+      {step === 4 && (
+        <g>
+          {FP_TOKENS.map((_, i) => (
+            <g key={i} opacity={0.35 + 0.65 * (w[i] / maxW)}>
+              <rect x={tx(i) - 6} y={rowY + 48} width={12} height={26} rx={2} fill={R.plan} />
+            </g>
+          ))}
+          {svgArrow(tx(FP_Q), rowY + 90, 360, rowY + 150, R.plan, 2.5, 9)}
+          <rect x={300} y={rowY + 156} width={120} height={34} rx={6} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
+          <text x={360} y={rowY + 178} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.ink}>new &quot;cup&quot; token</text>
+          <text x={40} y={rowY + 224} fontFamily={MONO} fontSize={13} fill={R.world}>
+            the updated token = Σ (weight × value): it now carries where the cup is
+          </text>
+          <text x={40} y={rowY + 246} fontFamily={MONO} fontSize={12} fill={R.world}>
+            stack this block ~18 times and the sequence is fully contextualized
+          </text>
+        </g>
+      )}
+
+      {/* Step 5: action expert */}
+      {step === 5 && (
+        <g>
+          {svgArrow(360, rowY + 46, 360, rowY + 84, R.world, 2.5, 9)}
+          <rect x={250} y={rowY + 88} width={220} height={40} rx={8} fill={R.fillAmber} stroke={R.plan} strokeWidth={3} />
+          <text x={360} y={rowY + 113} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.ink}>action expert (flow / FAST)</text>
+          {svgArrow(360, rowY + 128, 360, rowY + 166, R.world, 2.5, 9)}
+          <rect x={280} y={rowY + 170} width={160} height={36} rx={6} fill={R.fillGreen} stroke={R.goal} strokeWidth={3} />
+          <text x={360} y={rowY + 193} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.ink}>action chunk → robot</text>
+          <text x={40} y={rowY + 240} fontFamily={MONO} fontSize={13} fill={R.world}>
+            the same backbone that reads the scene now writes the motion
+          </text>
+        </g>
       )}
     </Stage>
   );
@@ -538,7 +598,7 @@ export function RbPositiveTransfer() {
       <line x1={110} y1={baseY} x2={620} y2={baseY} stroke={R.line} strokeWidth={2} />
 
       <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={pooled ? R.goal : R.world}>
-        {pooled ? "positive transfer — and RT-2-X showed ~3× on emergent skills" : "data siloed on each robot"}
+        {pooled ? "positive transfer, and RT-2-X showed ~3× on emergent skills" : "data siloed on each robot"}
       </text>
     </Stage>
   );
@@ -604,20 +664,20 @@ export function RbDualEncoder() {
 
       {/* labels + blind spots (fixed lanes) */}
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.plan}>
-        SigLIP — semantics: what it is
+        SigLIP, semantics: what it is
       </text>
       <text x={40} y={410} fontFamily={MONO} fontSize={14} fill={R.signal}>
-        DINOv2 — geometry: where its parts are
+        DINOv2, geometry: where its parts are
       </text>
 
       {tab === "siglip" && (
         <text x={470} y={110} fontFamily={MONO} fontSize={13} fill={R.error}>
-          knows &quot;mug&quot; — handle vague
+          knows &quot;mug&quot;, handle vague
         </text>
       )}
       {tab === "dino" && (
         <text x={470} y={110} fontFamily={MONO} fontSize={13} fill={R.error}>
-          nails geometry — no meaning
+          nails geometry, no meaning
         </text>
       )}
       {(tab === "both" || reduced) && (
@@ -695,7 +755,7 @@ export function RbDiffusionAmbiguity() {
       <ellipse cx={cup.x} cy={cup.y + 30} rx={40} ry={12} fill="#eeeeec" stroke={R.world} strokeWidth={2} />
       <rect x={cup.x - 36} y={cup.y - 26} width={72} height={56} rx={8} fill="#f2f2ef" stroke={R.world} strokeWidth={2.5} />
       <text x={cup.x} y={cup.y + 62} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
-        cup — two valid grasps
+        cup, two valid grasps
       </text>
 
       {/* the two valid approaches (green, faint) */}
@@ -730,7 +790,7 @@ export function RbDiffusionAmbiguity() {
         <>
           <circle cx={mid.x} cy={mid.y} r={13} fill={R.fillRed} stroke={R.error} strokeWidth={3} />
           <text x={mid.x} y={mid.y - 24} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error} fontWeight={600}>
-            average — misses
+            average, misses
           </text>
         </>
       ) : (
@@ -750,7 +810,7 @@ export function RbDiffusionAmbiguity() {
           ? "one output smears into the dead middle between two modes"
           : reduced
             ? "Reduced motion: a committed grasp is shown; resample re-rolls the side."
-            : "denoises to one valid mode — resample picks a different valid side"}
+            : "denoises to one valid mode, resample picks a different valid side"}
       </text>
     </Stage>
   );
@@ -859,15 +919,15 @@ export function RbThreeReps() {
       <path d={path(pts, false)} fill="none" stroke={R.signal} strokeWidth={2} opacity={0.5} strokeDasharray="4 4" />
       <path d={path(recon, tab === "binning")} fill="none" stroke={fidelity > 0.9 ? R.goal : R.error} strokeWidth={2.5} />
       <text x={60} y={392} fontFamily={MONO} fontSize={12} fill={R.signal} opacity={0.7}>
-        — true trajectory (dashed)
+       , true trajectory (dashed)
       </text>
 
       <text x={60} y={414} fontFamily={MONO} fontSize={13} fill={R.world}>
         {tab === "binning"
           ? "raise frequency → the token strip explodes; staircase rounds off motion"
           : tab === "fast"
-            ? "FAST compresses first — few tokens, smooth curve, frequency barely matters"
-            : "flow generates directly — no tokens, smooth, but pays a sampling step"}
+            ? "FAST compresses first, few tokens, smooth curve, frequency barely matters"
+            : "flow generates directly, no tokens, smooth, but pays a sampling step"}
       </text>
     </Stage>
   );
@@ -980,7 +1040,7 @@ export function RbFastTokenize() {
           <path d={line(trueY)} fill="none" stroke={R.signal} strokeWidth={2} opacity={0.5} strokeDasharray="4 4" />
           <path d={line(reconY)} fill="none" stroke={err > 0.4 ? R.error : R.goal} strokeWidth={2.5} />
           <text x={60} y={392} fontFamily={MONO} fontSize={12} fill={err > 0.4 ? R.error : R.goal}>
-            {err > 0.4 ? "over-dropped — visible error" : "reconstruction ≈ original"}
+            {err > 0.4 ? "over-dropped, visible error" : "reconstruction ≈ original"}
           </text>
         </g>
       )}
@@ -995,49 +1055,95 @@ export function RbFastTokenize() {
 }
 
 // ===========================================================================
-// Fig 9.9 · Flow matching an action chunk  (toggle-compare)
-// Flow: noise cloud transported along near-straight arrows to a clean chunk in
-// a few steps. Diffusion: same endpoint, curvy many-step path. Step readouts.
+// Fig 9.9 · Flow matching an action chunk  (velocity field + integration)
+// A noise sample is transported to a whole action chunk by following a learned
+// velocity field dx/dτ = v_θ(x, τ). Flow learns near-straight paths, so a few
+// Euler steps land on target; diffusion's curved field needs many, and too few
+// steps miss. The right inset shows the chunk resolve from noise to motion.
 // ===========================================================================
+
+const FM_S: [number, number] = [140, 320]; // noise start
+const FM_T: [number, number] = [430, 150]; // target (the demonstrated chunk)
+
+function fmIntegrate(tab: "flow" | "diffusion", steps: number): [number, number][] {
+  const pts: [number, number][] = [[FM_S[0], FM_S[1]]];
+  let x = FM_S[0];
+  let y = FM_S[1];
+  const h = 1 / steps;
+  for (let k = 0; k < steps; k++) {
+    const tau = k * h;
+    let vx: number;
+    let vy: number;
+    if (tab === "flow") {
+      vx = FM_T[0] - FM_S[0];
+      vy = FM_T[1] - FM_S[1];
+    } else {
+      const sw = Math.sin(tau * 6.5) * 0.9;
+      vx = (FM_T[0] - x) * 1.4 - (FM_T[1] - y) * sw;
+      vy = (FM_T[1] - y) * 1.4 + (FM_T[0] - x) * sw;
+    }
+    x += vx * h;
+    y += vy * h;
+    pts.push([x, y]);
+  }
+  return pts;
+}
 
 export function RbFlowChunk() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
   const [tab, setTab] = useState<"flow" | "diffusion">("flow");
-  const [prog, setProg] = useState(reduced ? 1 : 0);
-  const [playing, toggle] = useReducer((p) => !p, true);
+  const [steps, setSteps] = useState(5);
+  const [p, setP] = useState(reduced ? 1 : 0);
+  const [playing, toggle] = useReducer((pl) => !pl, true);
 
   useRafLoop(
-    (dt) => setProg((p) => (p >= 1 ? 0 : Math.min(1, p + dt * 0.35))),
+    (dt) => setP((v) => (v >= 1 ? 0 : Math.min(1, v + dt * 0.3))),
     { playing: playing && inView && !reduced },
   );
 
-  const p = reduced ? 1 : prog;
-  const steps = tab === "flow" ? 4 : 50;
-  const start = { x: 130, y: 220 };
-  const end = { x: 590, y: 220 };
+  const prog = reduced ? 1 : p;
+  const path = fmIntegrate(tab, steps);
+  const drawn = Math.max(1, Math.round(prog * steps));
+  const cur = path[Math.min(drawn, steps)];
+  const landing = path[steps];
+  const miss = Math.hypot(landing[0] - FM_T[0], landing[1] - FM_T[1]);
+  const lands = miss < 26;
 
-  // particle positions along path (straight for flow, wavy for diffusion)
-  const particles = Array.from({ length: 12 }, (_, i) => {
-    const rng = mulberry32(i + 1);
-    const off = (rng() - 0.5) * 90;
-    const sy = start.y + off;
-    const t = smooth(p);
-    const x = lerp(start.x, end.x, t);
-    let y: number;
-    if (tab === "flow") {
-      y = lerp(sy, end.y, t);
-    } else {
-      y = lerp(sy, end.y, t) + Math.sin(t * 22 + i) * (1 - t) * 40;
+  // velocity-field arrows on a grid (direction of v at tau = prog)
+  const field: { x: number; y: number; dx: number; dy: number }[] = [];
+  for (let gx = 110; gx <= 450; gx += 60) {
+    for (let gy = 95; gy <= 365; gy += 54) {
+      let vx: number;
+      let vy: number;
+      if (tab === "flow") {
+        vx = FM_T[0] - FM_S[0];
+        vy = FM_T[1] - FM_S[1];
+      } else {
+        const sw = Math.sin(prog * 6.5) * 0.9;
+        vx = (FM_T[0] - gx) * 1.4 - (FM_T[1] - gy) * sw;
+        vy = (FM_T[1] - gy) * 1.4 + (FM_T[0] - gx) * sw;
+      }
+      const m = Math.hypot(vx, vy) || 1;
+      field.push({ x: gx, y: gy, dx: (vx / m) * 15, dy: (vy / m) * 15 });
     }
-    return { x, y };
+  }
+
+  // right inset: the action chunk (H waypoints) resolving noise -> smooth motion
+  const H = 8;
+  const rng = mulberry32(7);
+  const noiseY = Array.from({ length: H }, () => (rng() - 0.5) * 70);
+  const chunk = Array.from({ length: H }, (_, i) => {
+    const smoothY = Math.sin((i / (H - 1)) * Math.PI) * 46;
+    const y = lerp(noiseY[i], -smoothY, smooth(prog));
+    return { x: 512 + (i / (H - 1)) * 168, y: 240 + y };
   });
 
   return (
     <Stage
       innerRef={ref}
-      title="Fig 9.9 · Flow matching an action chunk"
-      ariaLabel={`Transporting noise to a 50-step action chunk via ${tab}, in ${steps} steps`}
+      title={"Fig 9.9 · Flow matching an action chunk"}
+      ariaLabel={"Transporting a noise sample to an action chunk by integrating a velocity field via " + tab}
       controls={
         <>
           <Tabs
@@ -1046,65 +1152,63 @@ export function RbFlowChunk() {
               { id: "diffusion", label: "diffusion" },
             ]}
             value={tab}
-            onChange={(v) => {
-              setTab(v);
-              setProg(0);
-            }}
+            onChange={(v) => { setTab(v); setP(0); }}
           />
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
+          <Slider label="steps" min={2} max={40} value={steps} onChange={(v) => { setSteps(v); setP(0); }} />
+          <Btn onClick={toggle} active={playing}>{playing ? "⏸ pause" : "▶ play"}</Btn>
+          <Btn onClick={() => setP(0)}>↺ reset</Btn>
         </>
       }
     >
       {/* readout lane */}
-      <text x={40} y={40} fontFamily={MONO} fontSize={14} fill={tab === "flow" ? R.goal : R.world}>
-        {tab === "flow" ? "flow: ~4 near-straight steps" : "diffusion: ~50 curvy steps"}
+      <text x={40} y={34} fontFamily={MONO} fontSize={13} fill={R.world}>
+        {"dx/dτ = v_θ(x, τ)     τ = " + prog.toFixed(2) + "     Euler step " + drawn + " / " + steps}
       </text>
 
-      {/* the velocity-field path guide */}
-      {tab === "flow" ? (
-        <line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke={R.goal} strokeWidth={2} strokeDasharray="6 6" opacity={0.6} />
-      ) : (
-        <path
-          d={`M ${start.x} ${start.y} C ${start.x + 120} ${start.y - 90}, ${end.x - 120} ${end.y + 90}, ${end.x} ${end.y}`}
-          fill="none"
-          stroke={R.world}
-          strokeWidth={2}
-          strokeDasharray="6 6"
-          opacity={0.6}
-        />
-      )}
-
-      {/* start = noise */}
-      <circle cx={start.x} cy={start.y} r={46} fill={R.fillBlue} opacity={0.3} stroke={R.signal} strokeWidth={2} strokeDasharray="4 4" />
-      <text x={start.x} y={start.y + 74} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
-        noise
-      </text>
-
-      {/* particles */}
-      {particles.map((pt, i) => (
-        <circle key={i} cx={pt.x} cy={pt.y} r={4.5} fill={tab === "flow" ? R.signal : R.world} opacity={0.7} />
+      {/* velocity field */}
+      {field.map((f, i) => (
+        <g key={i} opacity={0.5}>
+          {svgArrow(f.x, f.y, f.x + f.dx, f.y + f.dy, R.line, 1.4, 5)}
+        </g>
       ))}
 
-      {/* end = action chunk */}
-      <g opacity={0.4 + 0.6 * p}>
-        <rect x={end.x - 40} y={end.y - 34} width={80} height={68} rx={8} fill={R.fillAmber} stroke={R.plan} strokeWidth={2.5} />
-        <text x={end.x} y={end.y - 4} textAnchor="middle" fontFamily={MONO} fontSize={12} fontWeight={600} fill={R.ink}>
-          50-step
-        </text>
-        <text x={end.x} y={end.y + 14} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.ink}>
-          chunk
-        </text>
-      </g>
-      <text x={end.x} y={end.y + 74} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.plan}>
-        action chunk
+      {/* integrated path so far */}
+      <polyline
+        points={path.slice(0, drawn + 1).map((q) => q[0] + "," + q[1]).join(" ")}
+        fill="none"
+        stroke={tab === "flow" ? R.signal : R.plan}
+        strokeWidth={3}
+      />
+      {path.slice(0, drawn + 1).map((q, i) => (
+        <circle key={i} cx={q[0]} cy={q[1]} r={3.5} fill={tab === "flow" ? R.signal : R.plan} />
+      ))}
+
+      {/* noise start, current sample + its velocity, target */}
+      <circle cx={FM_S[0]} cy={FM_S[1]} r={7} fill="none" stroke={R.world} strokeWidth={2} />
+      <text x={FM_S[0]} y={FM_S[1] + 26} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>noise x₀</text>
+      <circle cx={cur[0]} cy={cur[1]} r={8} fill={tab === "flow" ? R.signal : R.plan} />
+      <circle cx={FM_T[0]} cy={FM_T[1]} r={11} fill={R.fillGreen} stroke={R.goal} strokeWidth={3} />
+      <text x={FM_T[0] + 18} y={FM_T[1] + 4} fontFamily={MONO} fontSize={12} fill={R.goal}>target chunk</text>
+
+      {/* landing verdict */}
+      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={lands ? R.goal : R.error}>
+        {tab === "flow"
+          ? "flow: near-straight field, a handful of steps lands exactly"
+          : lands
+            ? "diffusion: enough steps to track the curve, lands"
+            : "diffusion: too few steps for the curved field, Euler error misses"}
       </text>
 
-      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
-        {reduced
-          ? "Reduced motion: the completed chunk is shown; tabs still compare path shapes."
-          : "same continuous fidelity, far fewer steps — flow's paths are near-straight"}
+      {/* divider + action-chunk inset */}
+      <line x1={488} y1={60} x2={488} y2={360} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
+      <text x={596} y={110} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>the sample IS an action chunk</text>
+      <line x1={512} y1={240} x2={680} y2={240} stroke={R.line} strokeWidth={1} strokeDasharray="3 5" />
+      <polyline points={chunk.map((c) => c.x + "," + c.y).join(" ")} fill="none" stroke={R.goal} strokeWidth={2.5} />
+      {chunk.map((c, i) => (
+        <circle key={i} cx={c.x} cy={c.y} r={3} fill={R.goal} />
+      ))}
+      <text x={596} y={330} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {prog < 0.5 ? "noise" : "→ smooth H-step motion"}
       </text>
     </Stage>
   );
@@ -1185,7 +1289,7 @@ export function RbHierarchical() {
         <g>
           <rect x={200} y={78} width={340} height={34} rx={8} fill="none" stroke={R.error} strokeWidth={2} strokeDasharray="5 5" />
           <text x={370} y={100} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.error}>
-            no plan — direct scene→action
+            no plan, direct scene→action
           </text>
         </g>
       )}
@@ -1207,8 +1311,8 @@ export function RbHierarchical() {
 
       <text x={40} y={414} fontFamily={MONO} fontSize={13} fill={showPlan ? R.goal : R.error}>
         {showPlan
-          ? "think in language, act in flow — 94% out-of-distribution with diverse co-training"
-          : "31% without multi-environment data — diversity is the whole trick"}
+          ? "think in language, act in flow, 94% out-of-distribution with diverse co-training"
+          : "31% without multi-environment data, diversity is the whole trick"}
       </text>
     </Stage>
   );
@@ -1329,7 +1433,7 @@ export function RbEmbodiedCoT() {
         svgArrow(gripper.x + 250, gripper.y, target.x, target.y - 26, R.goal, 3, 10)}
 
       <text x={430} y={400} fontFamily={MONO} fontSize={13} fill={R.error}>
-        {stage >= 5 ? `grounded on the ${targetBlue ? "blue" : "red"} block — editable` : "reasoning escalates to pixels…"}
+        {stage >= 5 ? `grounded on the ${targetBlue ? "blue" : "red"} block, editable` : "reasoning escalates to pixels…"}
       </text>
     </Stage>
   );
@@ -1492,7 +1596,7 @@ export function RbMolmoAct3D() {
       <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
         {reduced
           ? "Reduced motion: the 3D path and final action shown; drag a waypoint to steer."
-          : "3D between seeing and acting — the drawn path is steerable"}
+          : "3D between seeing and acting, the drawn path is steerable"}
       </text>
     </Stage>
   );
@@ -1576,7 +1680,7 @@ export function RbDualSystem() {
         plan (semantic)
       </text>
       <text x={140} y={126} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={stale ? R.error : R.world}>
-        {stale ? "stale — replan too rare" : `fresh, age ${st.planAge.toFixed(1)}s`}
+        {stale ? "stale, replan too rare" : `fresh, age ${st.planAge.toFixed(1)}s`}
       </text>
 
       {/* System 1 lane (fast stream of commands) */}
@@ -1617,7 +1721,7 @@ export function RbDualSystem() {
         <line x1={cx} y1={cy + 50} x2={cx + 22} y2={370} />
       </g>
       <text x={cx} y={396} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={balanced ? R.goal : R.error}>
-        {balanced ? "upright" : "wobbling — reflex too slow"}
+        {balanced ? "upright" : "wobbling, reflex too slow"}
       </text>
 
       {reduced && (
