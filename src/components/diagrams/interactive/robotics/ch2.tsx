@@ -22,7 +22,7 @@ const fmt2 = (v: number) => (v < 0 ? v.toFixed(2) : ` ${v.toFixed(2)}`);
 
 // ===========================================================================
 // Fig 2.1 · The same cup, three frames, three answers  (draggable field)
-// A top-down scene with three axis-cross frames — world (grey), base (blue),
+// A top-down scene with three axis-cross frames: world (grey), base (blue),
 // camera (amber). Drag the cup; a fixed readout lane lists its coordinates in
 // all three frames at once. A "shift origin" toggle proves points move while a
 // pinned displacement vector's numbers stay put.
@@ -138,7 +138,7 @@ export function RbThreeFrames() {
         </>
       }
     >
-      {/* fixed readout lane, top — three frames, three answers */}
+      {/* fixed readout lane, top: three frames, three answers */}
       <text x={30} y={34} fontFamily={MONO} fontSize={13} fill={R.world}>
         cup coordinates (metres)
       </text>
@@ -165,7 +165,7 @@ export function RbThreeFrames() {
       <AxisCross f={BASE_F} color={R.signal} label="base" />
       <AxisCross f={cam} color={R.plan} label="camera" />
 
-      {/* fixed displacement vector off the base origin — numbers never change */}
+      {/* fixed displacement vector off the base origin; numbers never change */}
       <g opacity={0.9}>
         <line x1={BASE_F.x} y1={BASE_F.y} x2={vTipX} y2={vTipY} stroke={R.goal} strokeWidth={2.5} />
         <polygon
@@ -173,7 +173,7 @@ export function RbThreeFrames() {
           fill={R.goal}
         />
         <text x={vTipX + 4} y={vTipY - 4} fontFamily={MONO} fontSize={11} fill={R.goal}>
-          vector (0.78,0.78) — unchanged
+          vector (0.78,0.78), unchanged
         </text>
       </g>
 
@@ -413,7 +413,7 @@ export function RbGimbalLock() {
         {dof}
       </text>
       <text x={62} y={70} fontFamily={MONO} fontSize={14} fill={locked ? R.error : R.goal}>
-        {locked ? "— roll & yaw collapsed" : "— all independent"}
+        {locked ? ": roll & yaw collapsed" : ": all independent"}
       </text>
 
       {/* outer ring (yaw, amber) */}
@@ -427,7 +427,7 @@ export function RbGimbalLock() {
         strokeWidth={locked ? 4 : 3}
         transform={`rotate(${yaw * 0.15} ${C.x} ${C.y})`}
       />
-      {/* mid ring (pitch, world grey) — the one that still works */}
+      {/* mid ring (pitch, world grey): the one that still works */}
       <ellipse
         cx={C.x}
         cy={C.y}
@@ -438,7 +438,7 @@ export function RbGimbalLock() {
         strokeWidth={3}
         transform={`rotate(${p * 0.2} ${C.x} ${C.y})`}
       />
-      {/* inner ring (roll, amber) — collapses onto the outer plane at lock */}
+      {/* inner ring (roll, amber): collapses onto the outer plane at lock */}
       <ellipse
         cx={C.x}
         cy={C.y}
@@ -464,7 +464,7 @@ export function RbGimbalLock() {
       {/* label the two collapsed axes at lock */}
       {locked && (
         <text x={C.x} y={C.y + 175} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.error} fontWeight={600}>
-          roll axis ∥ yaw axis — one motion, two knobs
+          roll axis ∥ yaw axis: one motion, two knobs
         </text>
       )}
 
@@ -522,7 +522,7 @@ export function RbQuaternionSlerp() {
 
   const tv = reduced ? 1 : t;
 
-  // start A and end B headings (degrees) — nearLock preset pushes B through a
+  // start A and end B headings (degrees); nearLock preset pushes B through a
   // pole so the Euler path lurches and doubles back.
   const A = 20;
   const B = nearLock ? 340 : 150;
@@ -671,7 +671,7 @@ function applyT(T: { c: number; s: number; tx: number; ty: number }, x: number, 
 }
 
 export function RbTransformChain() {
-  // No ambient loop — this figure is purely slider/drag driven, so it is
+  // No ambient loop; this figure is purely slider/drag driven, so it is
   // already reduced-motion safe (nothing autoplays). We still take a stage ref
   // for consistent layout.
   const { ref } = useStageVisibility();
@@ -855,7 +855,7 @@ export function RbTransformChain() {
 }
 
 // ===========================================================================
-// Fig 2.6 · The transform tree — click an edge, read the transform
+// Fig 2.6 · The transform tree: click an edge, read the transform
 // (draggable field + toggle). A clean node-link frame tree; joint sliders drive
 // dynamic edges; a "resolve cup in ___ frame" dropdown highlights the walked
 // path and prints the accumulated coordinate, so the reader sees a tf lookup.
@@ -936,7 +936,7 @@ export function RbTransformTree() {
   return (
     <Stage
       innerRef={ref}
-      title="Fig 2.6 · The transform tree — click an edge, read the transform"
+      title="Fig 2.6 · The transform tree: click an edge, read the transform"
       ariaLabel={`A robot frame tree; resolving the cup in the ${target} frame lights the walked path`}
       controls={
         <>
@@ -1018,7 +1018,7 @@ export function RbTransformTree() {
 
       {/* fixed readout lane, top */}
       <text x={30} y={34} fontFamily={MONO} fontSize={13} fill={R.world}>
-        tf lookup — cup in {target} frame
+        tf lookup: cup in {target} frame
       </text>
       <text x={30} y={56} fontFamily={MONO} fontSize={15} fill={R.goal} fontWeight={600}>
         {RESOLVED[target]}

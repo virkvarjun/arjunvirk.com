@@ -202,7 +202,7 @@ const GOAL_6_2: [number, number] = [9, 4];
 type SearchTrace = { order: [number, number][]; path: [number, number][] };
 
 // Run a uniform-cost search with a heuristic weight (0 = Dijkstra, 1 = A*).
-// Returns the expansion order and the recovered path — fully deterministic.
+// Returns the expansion order and the recovered path, fully deterministic.
 function runSearch(useHeuristic: boolean): SearchTrace {
   const key = (x: number, y: number) => `${x},${y}`;
   const h = (x: number, y: number) =>
@@ -849,7 +849,7 @@ export function RbRrtVsRrtStar() {
       <text x={ox + 8} y={PH + 34} fontFamily={MONO} fontSize={13} fill={R.world}>
         path length:{" "}
         <tspan fill={R.plan} fontWeight={600}>
-          {Number.isFinite(data.len) ? Math.round(data.len) : "—"}
+          {Number.isFinite(data.len) ? Math.round(data.len) : "–"}
         </tspan>
       </text>
     </g>

@@ -38,21 +38,21 @@ const TASKS: {
     label: "arm pick-and-place",
     known: 0.92,
     rec: "classical",
-    why: "clean rigid-body dynamics — the model is trustworthy",
+    why: "clean rigid-body dynamics: the model is trustworthy",
   },
   {
     id: "quad",
     label: "quadruped on rubble",
     known: 0.22,
     rec: "RL",
-    why: "unpredictable contact — a foot can slip or roll any step",
+    why: "unpredictable contact: a foot can slip or roll any step",
   },
   {
     id: "hand",
     label: "in-hand reorientation",
     known: 0.1,
     rec: "RL",
-    why: "discontinuous multi-contact — fingers make and break contact",
+    why: "discontinuous multi-contact: fingers make and break contact",
   },
 ];
 
@@ -338,7 +338,7 @@ export function RbAgentEnvLoop() {
         action a
       </text>
 
-      {/* return arrow (state s', reward r) — dips below */}
+      {/* return arrow (state s', reward r), dips below */}
       <path
         d={`M ${E2.x} ${E2.y + E2.h / 2} C ${E2.x} ${A2.y + 130} ${A2.x} ${A2.y + 130} ${A2.x} ${A2.y + A2.h / 2}`}
         fill="none"
@@ -705,7 +705,7 @@ export function RbPolicyGradient() {
       }
     >
       <text x={40} y={40} fontFamily={MONO} fontSize={14} fill={R.world}>
-        rollouts colored by return — green high, red low
+        rollouts colored by return: green high, red low
       </text>
 
       {/* goal region */}
@@ -771,7 +771,7 @@ export function RbPolicyGradient() {
       {/* variance note lane (fixed, bottom) */}
       <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={variance > 0.6 ? R.error : R.world}>
         {variance > 0.6
-          ? "high variance: re-sampling swings the update direction wildly — REINFORCE's fatal flaw"
+          ? "high variance: re-sampling swings the update direction wildly; REINFORCE's fatal flaw"
           : "low variance: the update points cleanly toward the high-return rollouts"}
       </text>
     </Stage>
@@ -836,7 +836,7 @@ export function RbAdvantage() {
       }
     >
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={reinforceView ? R.error : R.world}>
-        {reinforceView ? "raw return G — huge common offset, high variance" : "advantage A = Q(s,a) − V(s)"}
+        {reinforceView ? "raw return G: huge common offset, high variance" : "advantage A = Q(s,a) − V(s)"}
       </text>
 
       {/* baseline line */}
@@ -1019,7 +1019,7 @@ export function RbPPOClip() {
         objective = min( ratio·A, clip(ratio)·A )
       </text>
       <text x={markerX} y={py0 - 18} textAnchor="middle" fontFamily={MONO} fontSize={13} fontWeight={600} fill={inBand ? R.goal : R.error}>
-        {inBand ? "inside — gradient live" : "clipped — gradient ≈ 0"}
+        {inBand ? "inside: gradient live" : "clipped: gradient ≈ 0"}
       </text>
 
       {reduced && (
@@ -1036,7 +1036,7 @@ export function RbPPOClip() {
 // A robot on terrain with a panel of physics params (friction, mass, motor,
 // latency, terrain). "Roll new episode" re-randomizes each within its range;
 // a "randomization width" slider narrows/widens the bands; a reality marker
-// sits inside — green if covered, red if the band is too narrow to reach it.
+// sits inside: green if covered, red if the band is too narrow to reach it.
 // ===========================================================================
 
 type Param = { name: string; reality: number }; // reality ∈ 0..1 within range
@@ -1168,7 +1168,7 @@ export function RbDomainRandomization() {
         </>
       )}
       <text x={40} y={392} fontFamily={MONO} fontSize={13} fontWeight={600} fill={allCovered ? R.goal : R.error}>
-        {allCovered ? "reality inside range — transfers ✓" : "reality outside range — reality gap"}
+        {allCovered ? "reality inside range, transfers ✓" : "reality outside range, reality gap"}
       </text>
     </Stage>
   );
@@ -1301,7 +1301,7 @@ export function RbTeacherStudent() {
 
       {/* ---- STUDENT ROW ---- */}
       <text x={40} y={sY - 42} fontFamily={MONO} fontSize={14} fill={deployed ? R.goal : R.world} fontWeight={deployed ? 600 : 400}>
-        STUDENT (deployable){deployed ? " — on the real robot" : ""}
+        STUDENT (deployable){deployed ? ", on the real robot" : ""}
       </text>
       {/* sensor history input */}
       <rect x={40} y={sY - 26} width={130} height={52} rx={8} fill={R.fillBlue} stroke={R.signal} strokeWidth={2.5} />
@@ -1338,7 +1338,7 @@ export function RbTeacherStudent() {
       {/* verdict lane (fixed, bottom) */}
       <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={deployed ? R.goal : R.world}>
         {deployed
-          ? "privileged channel gone — only the sensor-only student survives onto the real robot"
+          ? "privileged channel gone: only the sensor-only student survives onto the real robot"
           : "the teacher cheats with ground truth; the student learns to match it from sensors alone"}
       </text>
     </Stage>

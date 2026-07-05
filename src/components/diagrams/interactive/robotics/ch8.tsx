@@ -19,7 +19,7 @@ import {
 } from "./shared";
 
 // ===========================================================================
-// Fig 8.1 · Query, Key, Value — reading out a weighted sum  (draggable field)
+// Fig 8.1 · Query, Key, Value: reading out a weighted sum  (draggable field)
 // A row of token cards, each advertising a Key. One token is the active Query.
 // Its Query is dotted against every Key, scaled by 1/√d, softmaxed into weights,
 // and the readout box shows the resulting weighted sum of Values. A √d slider
@@ -103,7 +103,7 @@ export function RbAttentionQkv() {
   return (
     <Stage
       innerRef={ref}
-      title="Fig 8.1 · Query, Key, Value — reading out a weighted sum"
+      title="Fig 8.1 · Query, Key, Value: reading out a weighted sum"
       ariaLabel={`Attention: the query token ${QKV_TOKENS[q].word} reads out a weighted sum of values`}
       controls={
         <>
@@ -249,7 +249,7 @@ export function RbAttentionQkv() {
 
 // ===========================================================================
 // Fig 8.2 · Patchify: turning an image into a sequence of tokens
-// (slider-driven diagram) — a patch-size selector re-tiles a sample image live
+// (slider-driven diagram): a patch-size selector re-tiles a sample image live
 // and reports patches-per-side, total tokens, and the ∝ tokens² attention cost.
 // A "show positional embeddings" toggle stamps each token with a position badge.
 // ===========================================================================
@@ -576,7 +576,7 @@ export function RbSharedSpace() {
 
 // ===========================================================================
 // Fig 8.4 · CLIP's softmax-over-batch vs SigLIP's independent sigmoid pairs
-// (toggle-compare) — the same batch grid two ways. CLIP mode draws the softmax
+// (toggle-compare): the same batch grid two ways. CLIP mode draws the softmax
 // coupling links across each row; shrinking the batch dims CLIP's contrast while
 // SigLIP's per-cell yes/no decisions stay crisp.
 // ===========================================================================
@@ -679,7 +679,7 @@ export function RbClipVsSiglip() {
             each image normalized
           </text>
           <text x={492} y={170} fontFamily={MONO} fontSize={13} fill={R.world}>
-            over the whole batch —
+            over the whole batch,
           </text>
           <text x={492} y={190} fontFamily={MONO} fontSize={13} fill={R.plan}>
             couples every cell (amber)
@@ -700,7 +700,7 @@ export function RbClipVsSiglip() {
             each cell is an
           </text>
           <text x={492} y={170} fontFamily={MONO} fontSize={13} fill={R.world}>
-            independent yes / no —
+            independent yes / no,
           </text>
           <text x={492} y={190} fontFamily={MONO} fontSize={13} fill={R.goal}>
             no cross-cell coupling
@@ -727,7 +727,7 @@ export function RbClipVsSiglip() {
 
 // ===========================================================================
 // Fig 8.5 · Anatomy of a VLM: vision encoder → projector → LLM
-// (animated pipeline) — an image flows through VISION ENCODER (SigLIP) →
+// (animated pipeline): an image flows through VISION ENCODER (SigLIP) →
 // PROJECTOR → LLM; projected visual tokens interleave with prompt tokens and the
 // LLM types out an answer. A prompt selector changes the emitted answer.
 // ===========================================================================

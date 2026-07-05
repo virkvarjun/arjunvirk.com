@@ -88,7 +88,7 @@ export function RbOpenClosedLoop() {
         </>
       }
     >
-      {/* readout lane, top-left — never overlaps the arm */}
+      {/* readout lane, top-left, never overlaps the arm */}
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
         tracking error
       </text>
@@ -137,7 +137,7 @@ export function RbOpenClosedLoop() {
       {/* explanatory line, bottom lane */}
       <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={R.world}>
         {mode === "open"
-          ? "open-loop: the load sags the arm and the error is frozen — the controller is oblivious"
+          ? "open-loop: the load sags the arm and the error is frozen; the controller is oblivious"
           : "closed-loop: the arm sags an instant, then feedback drives the error back to zero"}
       </text>
     </Stage>
@@ -263,7 +263,7 @@ export function RbPvsPI() {
 
       {/* label */}
       <text x={P42.x0 + 8} y={P42.y0 + 20} fontFamily={MONO} fontSize={13} fill={R.world}>
-        {Ki < 0.05 ? "P-only — parks short" : "PI — walks up to the line"}
+        {Ki < 0.05 ? "P-only, parks short" : "PI walks up to the line"}
       </text>
     </Stage>
   );
@@ -328,7 +328,7 @@ export function RbPidTuner() {
   // regime label from the gains (intuition axis, not a formal computation)
   const damping = Kd;
   const regime =
-    damping < 0.28 ? "underdamped — it rings" : damping > 1.0 ? "overdamped — sluggish" : "critically damped — clean";
+    damping < 0.28 ? "underdamped: it rings" : damping > 1.0 ? "overdamped: sluggish" : "critically damped: clean";
   const regimeCol = damping < 0.28 ? R.error : damping > 1.0 ? R.plan : R.goal;
 
   // error curve path
@@ -522,8 +522,8 @@ export function RbGravityComp() {
       {/* bottom explanatory line */}
       <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={R.world}>
         {comp
-          ? "feedforward cancels gravity before it can cause a sag — the arm reaches the command"
-          : "feedback alone fights gravity and settles short — a residual sag it never fully closes"}
+          ? "feedforward cancels gravity before it can cause a sag; the arm reaches the command"
+          : "feedback alone fights gravity and settles short, a residual sag it never fully closes"}
       </text>
     </Stage>
   );
@@ -574,7 +574,7 @@ export function RbImpedance() {
   const dy = pos.y - REST45.y;
   const disp = Math.hypot(dx, dy) / 2000; // px → metres-ish for the readout
   const force = K * disp; // F = K·Δx (N)
-  const stiffLabel = K < 800 ? "soft — follows your hand" : K > 3000 ? "rigid — resists like a position controller" : "medium";
+  const stiffLabel = K < 800 ? "soft: follows your hand" : K > 3000 ? "rigid: resists like a position controller" : "medium";
   const stiffCol = K < 800 ? R.goal : K > 3000 ? R.error : R.plan;
 
   const onMove = (e: ReactPointerEvent<SVGElement>) => {

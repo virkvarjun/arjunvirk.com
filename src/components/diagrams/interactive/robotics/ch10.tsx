@@ -534,7 +534,7 @@ export function RbDiffusionPolicy() {
           <polyline points={toPts(meanPath)} fill="none" stroke={R.plan} strokeWidth={4.5} strokeLinecap="round" />
           <circle cx={obs.x} cy={obs.y} r={34} fill="none" stroke={R.error} strokeWidth={3} />
           <text x={obs.x} y={obs.y - 46} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.error} fontWeight={600}>
-            collision — the mean of left & right
+            collision: the mean of left & right
           </text>
         </>
       ) : (
@@ -555,8 +555,8 @@ export function RbDiffusionPolicy() {
 
       <text x={90} y={412} fontFamily={MONO} fontSize={12} fill={R.world}>
         {tab === "reg"
-          ? "squared-error regression predicts the average — the one path that fails"
-          : "diffusion denoises to a single clean mode — resample to flip lanes"}
+          ? "squared-error regression predicts the average: the one path that fails"
+          : "diffusion denoises to a single clean mode; resample to flip lanes"}
       </text>
 
       {reduced && tab === "dp" && (
@@ -778,7 +778,7 @@ export function RbUmi() {
       {/* scene */}
       <line x1={40} y1={300} x2={430} y2={300} stroke={R.line} strokeWidth={2} />
       <text x={235} y={40} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>
-        {tab === "collect" ? "a kitchen — no robot present" : "a robot arm in the lab"}
+        {tab === "collect" ? "a kitchen, no robot present" : "a robot arm in the lab"}
       </text>
 
       {/* the object on the counter */}
@@ -860,7 +860,7 @@ export function RbUmi() {
 
       <text x={30} y={412} fontFamily={MONO} fontSize={12} fill={R.world}>
         {tab === "collect"
-          ? "collect anywhere with a handheld gripper + GoPro — no robot in the loop"
+          ? "collect anywhere with a handheld gripper + GoPro, no robot in the loop"
           : "deploy on a robot whose gripper + camera match the handheld interface"}
       </text>
     </Stage>
@@ -890,7 +890,7 @@ export function RbEmbodimentGap() {
   const a = reduced ? action : disp;
 
   const rad = (d: number) => (d * Math.PI) / 180;
-  // robot A (blue) — long link; robot B (amber) — short link
+  // robot A (blue): long link; robot B (amber): short link
   const baseA = { x: 175, y: 320 };
   const baseB = { x: 175, y: 150 };
   const La = 150;
@@ -942,7 +942,7 @@ export function RbEmbodimentGap() {
         one action → two bodies:
       </text>
       <text x={230} y={34} fontFamily={MONO} fontSize={13} fill={pools ? R.goal : R.error} fontWeight={600}>
-        {pools ? "hands correspond — data pools ✓" : "hands differ — data won't pool"}
+        {pools ? "hands correspond, data pools ✓" : "hands differ, data won't pool"}
       </text>
 
       {/* robot A (blue) */}
@@ -1009,8 +1009,8 @@ export function RbEmbodimentGap() {
 
 // ===========================================================================
 // Fig 10.8 · A demonstration is synchronized multimodal streams on one timeline
-// A scrubber timeline with stacked lanes — scene cam, wrist cam, joint traces,
-// gripper, action — sharing one axis. A playhead cuts every lane. Step advances
+// A scrubber timeline with stacked lanes (scene cam, wrist cam, joint traces,
+// gripper, action) sharing one axis. A playhead cuts every lane. Step advances
 // k/N at a fixed rate; "chunk" boxes the next H actions; "desync" nudges the
 // camera lane and flags a red mispairing.
 // ===========================================================================
@@ -1161,7 +1161,7 @@ export function RbSyncTimeline() {
       </text>
       {desync ? (
         <text x={356} y={368} fontFamily={MONO} fontSize={13} fill={R.error} fontWeight={600}>
-          ⚠ mispaired — camera drifted out of sync
+          ⚠ mispaired: camera drifted out of sync
         </text>
       ) : (
         <text x={356} y={368} fontFamily={MONO} fontSize={13} fill={R.goal} fontWeight={600}>

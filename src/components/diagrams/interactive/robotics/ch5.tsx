@@ -57,7 +57,7 @@ export function RbBeliefGaussian() {
   const { ref, inView } = useStageVisibility();
   const [playing, toggle] = useReducer((p) => !p, true);
   // target belief (what buttons set), displayed belief (eased toward it),
-  // a measurement flag, and an ambient-demo phase timer — one state object so
+  // a measurement flag, and an ambient-demo phase timer, one state object so
   // the raf loop never nests setState calls.
   const [st, setSt] = useState({
     tgtMu: 3.0,
@@ -371,7 +371,7 @@ export function RbBayesLoop() {
       />
       <circle cx={bx} cy={by} r={4} fill={R.signal} />
       <text x={bx} y={by + unc * 0.62 + 20} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={runaway ? R.error : R.world}>
-        {runaway ? "dead-reckoning drift — belief blowing up" : "belief (grows on predict, shrinks on update)"}
+        {runaway ? "dead-reckoning drift: belief blowing up" : "belief (grows on predict, shrinks on update)"}
       </text>
 
       {reduced && (
@@ -1048,7 +1048,7 @@ export function RbLoopClosure() {
         drift gap
       </text>
       <text x={110} y={38} fontFamily={MONO} fontSize={14} fill={rel > 0.5 ? R.goal : R.error} fontWeight={600}>
-        {Math.round(driftGap)} px {rel > 0.5 ? "— corrected" : ""}
+        {Math.round(driftGap)} px {rel > 0.5 ? "(corrected)" : ""}
       </text>
 
       {/* true trajectory (green) */}

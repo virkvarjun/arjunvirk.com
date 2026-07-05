@@ -151,7 +151,7 @@ export function RbDreamingLoop() {
       <rect x={590} y={30} width={100} height={12} rx={6} fill="#e7e7e4" />
       <rect x={590} y={30} width={100 * (reduced ? 1 : st.cost)} height={12} rx={6} fill={R.error} />
 
-      {/* edges — real loop (left) */}
+      {/* edges: real loop (left) */}
       <g opacity={dream ? 0.28 : 1}>
         {svgArrow(POLICY.x - NW, POLICY.y - 8, REAL_NODES[0].x + 40, REAL_NODES[0].y + 20, R.line, 3, 10)}
         {svgArrow(REAL_NODES[0].x, REAL_NODES[0].y + NH, REAL_NODES[1].x, REAL_NODES[1].y - NH, R.line, 3, 10)}
@@ -165,7 +165,7 @@ export function RbDreamingLoop() {
         </text>
       </g>
 
-      {/* edges — dream loop (right) */}
+      {/* edges: dream loop (right) */}
       <g opacity={dream ? 1 : 0.28}>
         {svgArrow(POLICY.x + NW, POLICY.y - 8, DREAM_NODES[0].x - NW, DREAM_NODES[0].y + 8, R.line, 3, 10)}
         {svgArrow(DREAM_NODES[0].x, DREAM_NODES[0].y + NH, DREAM_NODES[1].x, DREAM_NODES[1].y - NH, R.line, 3, 10)}
@@ -333,7 +333,7 @@ export function RbLatentVsPixel() {
               />
             )}
 
-            {/* latent track — small tidy vector-blob, stays crisp */}
+            {/* latent track: small tidy vector-blob, stays crisp */}
             <rect
               x={cx - 13}
               y={latentY - 13}
@@ -493,7 +493,7 @@ export function RbActionVideo() {
       </text>
 
       <text x={300} y={140} fontFamily={MONO} fontSize={13} fill={R.signal} fontWeight={600}>
-        generated future — p(o&apos; | o, a)
+        generated future: p(o&apos; | o, a)
       </text>
       {Array.from({ length: steps }).map((_, i) => {
         const { dx, dy } = blockPos(i);
@@ -508,7 +508,7 @@ export function RbActionVideo() {
       </text>
 
       <text x={70} y={330} fontFamily={MONO} fontSize={13} fill={R.world}>
-        change the action and the future changes — that is what makes it a world model, not a fixed movie
+        change the action and the future changes; that is what makes it a world model, not a fixed movie
       </text>
     </Stage>
   );
@@ -638,7 +638,7 @@ export function RbReconstructVsAlign() {
       <text x={30} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
         {active === "reconstruct"
           ? "adding clutter balloons the pixel model's wasted effort (red) on detail it will discard"
-          : "the embedding model's cost barely moves as clutter rises — it never had to render the detail"}
+          : "the embedding model's cost barely moves as clutter rises; it never had to render the detail"}
       </text>
     </Stage>
   );
@@ -646,7 +646,7 @@ export function RbReconstructVsAlign() {
 
 // ===========================================================================
 // Fig 11.5 · Domain randomization  (stepper)
-// Cycle through randomized episodes — table, light, mass, friction all sampled
+// Cycle through randomized episodes: table, light, mass, friction all sampled
 // from ranges set by a strength slider. A "real world" frame slots in as just
 // one more sample when the range is wide.
 // ===========================================================================
@@ -715,7 +715,7 @@ export function RbDomainRandomization() {
       }
     >
       <text x={60} y={64} fontFamily={MONO} fontSize={14} fill={R.world}>
-        episode {idx + 1} — a fresh sample every time
+        episode {idx + 1}: a fresh sample every time
       </text>
 
       {/* lighting wash */}
@@ -779,7 +779,7 @@ export function RbDomainRandomization() {
         <g>
           <rect x={sceneX} y={sceneY + sceneH + 14} width={sceneW} height={8} rx={4} fill={R.fillGreen} stroke={R.goal} strokeWidth={2} />
           <text x={sceneX} y={sceneY + sceneH + 46} fontFamily={MONO} fontSize={13} fill={R.goal}>
-            {s > 0.4 ? "✓ the real frame slots in — just another sample" : "real frame sticks out — range too narrow"}
+            {s > 0.4 ? "✓ the real frame slots in, just another sample" : "real frame sticks out; range too narrow"}
           </text>
         </g>
       )}
@@ -892,7 +892,7 @@ export function RbNerfVsSplat() {
             );
           })()}
           <text x={cx} y={cy + 90} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>
-            implicit MLP — ray-marched
+            implicit MLP, ray-marched
           </text>
         </g>
       ) : (
@@ -912,7 +912,7 @@ export function RbNerfVsSplat() {
             />
           ))}
           <text x={cx} y={cy + 96} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.signal}>
-            {nGauss} explicit Gaussians — projected &amp; blended
+            {nGauss} explicit Gaussians, projected &amp; blended
           </text>
           <text x={cx + 92} y={cy - 40} fontFamily={MONO} fontSize={12} fill={R.goal}>
             no per-ray queries
@@ -1188,7 +1188,7 @@ export function RbDriftDemo() {
       }
     >
       <text x={30} y={44} fontFamily={MONO} fontSize={13} fill={R.world}>
-        world-model rollout — {grounded ? "grounded" : "naive"}
+        world-model rollout: {grounded ? "grounded" : "naive"}
       </text>
 
       {/* coherence band legend (fixed top-right lane) */}
@@ -1220,7 +1220,7 @@ export function RbDriftDemo() {
               stroke={c}
               strokeWidth={2}
             />
-            {/* object dot — teleports/melts as degrade rises */}
+            {/* object dot: teleports/melts as degrade rises */}
             {on && (
               <circle
                 cx={cxx + (degrade > 1 ? (((i * 37) % 11) - 5) * 2.4 : 0)}
@@ -1270,8 +1270,8 @@ export function RbDriftDemo() {
       {/* warning when trust extends past reliability */}
       <text x={30} y={410} fontFamily={MONO} fontSize={13} fill={inHallucination ? R.error : R.goal} fontWeight={600}>
         {inHallucination
-          ? "⚠ past the line — a policy would learn garbage from these hallucinated steps"
-          : "within the trustworthy horizon — predictions are coherent and executable here"}
+          ? "⚠ past the line; a policy would learn garbage from these hallucinated steps"
+          : "within the trustworthy horizon; predictions are coherent and executable here"}
       </text>
     </Stage>
   );

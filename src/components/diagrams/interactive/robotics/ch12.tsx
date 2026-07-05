@@ -26,7 +26,7 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 // Fig 12.1 · Finding an antipodal grasp  (draggable field)
 // Drag/rotate a blob; a parallel-jaw gripper closes on two opposing points.
 // If the two surface normals point at each other inside their friction cones,
-// the readout flips to "force closure — holds"; otherwise "will slip".
+// the readout flips to "force closure, holds"; otherwise "will slip".
 // ===========================================================================
 
 // A closed blob defined as a radius function of angle (deterministic).
@@ -213,7 +213,7 @@ export function RbAntipodalGrasp() {
         grasp status
       </text>
       <text x={40} y={68} fontFamily={MONO} fontSize={17} fontWeight={600} fill={grasp}>
-        {holds ? "force closure — holds ✓" : "will slip ✗"}
+        {holds ? "force closure, holds ✓" : "will slip ✗"}
       </text>
 
       {/* pinch line (the antipodal axis) */}
@@ -304,8 +304,8 @@ export function RbAntipodalGrasp() {
       {/* legend lane, bottom */}
       <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={R.world}>
         {holds
-          ? "opposing normals inside the friction cones — the pinch resists any wrench"
-          : "normals miss each other — a shove would break this grip"}
+          ? "opposing normals inside the friction cones; the pinch resists any wrench"
+          : "normals miss each other; a shove would break this grip"}
       </text>
       {reduced && (
         <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
@@ -547,7 +547,7 @@ const REGION_INFO: Record<
     method: "RL locomotion",
     chapter: "Ch 7",
     color: R.goal,
-    why: "walking is contact-rich and hand-code-resistant — learned in sim.",
+    why: "walking is contact-rich and hand-code-resistant, learned in sim.",
   },
   arms: {
     label: "arms / hands",
@@ -936,7 +936,7 @@ export function RbPubSubGraph() {
       {/* status lane, bottom */}
       <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={killed ? R.error : R.world}>
         {killed
-          ? "perception killed — only its subscribers go dark; camera & TF keep publishing"
+          ? "perception killed: only its subscribers go dark; camera & TF keep publishing"
           : "one token traces sense → plan → act; nodes agree on topics, not on each other"}
       </text>
       {reduced && (
@@ -1097,8 +1097,8 @@ export function RbGeneralizationGap() {
       {/* status lane, bottom */}
       <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={gapNoisy ? R.error : R.world}>
         {gapNoisy
-          ? "too few trials — the gap has dissolved into noise; the comparison is meaningless"
-          : "the seen/unseen gap is the honest measure — a big gap means it memorized, not learned"}
+          ? "too few trials: the gap has dissolved into noise; the comparison is meaningless"
+          : "the seen/unseen gap is the honest measure; a big gap means it memorized, not learned"}
       </text>
       {reduced && (
         <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
@@ -1263,11 +1263,11 @@ export function RbStiffVsCompliant() {
       <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={danger ? R.error : mode === "compliant" ? R.goal : R.world}>
         {mode === "stiff"
           ? danger
-            ? "STIFF: drives through the hand — force spikes past the limit into the danger zone"
-            : "stiff, position-controlled: it will not yield — press run"
+            ? "STIFF: drives through the hand; force spikes past the limit into the danger zone"
+            : "stiff, position-controlled: it will not yield. Press run"
           : force >= forceLimit - 0.03 && reach >= contactReach - 0.005
             ? "COMPLIANT: senses the resistance and halts safely under its force cap ✓"
-            : "compliant, force-limited: it yields on contact — press run"}
+            : "compliant, force-limited: it yields on contact. Press run"}
       </text>
       {reduced && (
         <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>

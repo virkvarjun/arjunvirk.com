@@ -178,7 +178,7 @@ export function RbSensePlanAct() {
         </g>
       )}
 
-      {/* fixed readout lane, top-left — never overlaps the loop */}
+      {/* fixed readout lane, top-left; never overlaps the loop */}
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
         tracking error
       </text>
@@ -256,10 +256,10 @@ export function RbJointTypes() {
     >
       <line x1={370} y1={40} x2={370} y2={400} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
       <text x={195} y={54} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.world}>
-        revolute — rotates
+        revolute: rotates
       </text>
       <text x={545} y={54} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.world}>
-        prismatic — slides
+        prismatic: slides
       </text>
 
       <rect x={px - 34} y={py} width={68} height={40} rx={6} fill="#eeeeec" stroke={R.line} strokeWidth={2} />
@@ -362,7 +362,7 @@ export function RbGearbox() {
         {outRPS.toFixed(3)} rev/s
       </text>
       <text x={330} y={44} fontFamily={MONO} fontSize={14} fill={stalled ? R.error : R.goal} fontWeight={600}>
-        {stalled ? "STALLED — load too heavy for this ratio" : "lifting"}
+        {stalled ? "STALLED: load too heavy for this ratio" : "lifting"}
       </text>
 
       {gear(motorC, mA, R.signal, 10)}
@@ -506,7 +506,7 @@ export function RbConfigSpace() {
           <circle cx={S13.x} cy={S13.y} r={REACH_IN} fill="var(--background)" />
           <circle cx={S13.x} cy={S13.y} r={REACH_OUT} fill="none" stroke={R.goal} strokeWidth={2} strokeDasharray="5 5" />
           <text x={S13.x} y={S13.y + REACH_OUT + 18} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
-            reachable ring — outside is unreachable
+            reachable ring; outside is unreachable
           </text>
         </>
       )}
@@ -561,7 +561,7 @@ export function RbConfigSpace() {
 // ===========================================================================
 // Fig 1.7 · Holonomic vs nonholonomic motion  (draggable field)
 // Drag the target. The omni base slides straight to it; the car can reach the
-// same spot but only via a feasible curve — it can't move straight sideways.
+// same spot but only via a feasible curve; it can't move straight sideways.
 // ===========================================================================
 
 export function RbHolonomic() {
@@ -705,10 +705,10 @@ const SENSOR_TABS: { id: SensorTab; label: string }[] = [
   { id: "fuse", label: "Fuse all" },
 ];
 const BLIND: Record<SensorTab, string> = {
-  encoder: "blind to wheel slip — counts turns, not the world",
-  imu: "drifts — tiny errors integrate into big ones",
-  camera: "no depth — the 3D world arrives flattened to 2D",
-  lidar: "no meaning — sees shape, not that it's a person",
+  encoder: "blind to wheel slip: counts turns, not the world",
+  imu: "drifts: tiny errors integrate into big ones",
+  camera: "no depth: the 3D world arrives flattened to 2D",
+  lidar: "no meaning: sees shape, not that it's a person",
   fuse: "each sensor covers another's blind spot",
 };
 

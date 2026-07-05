@@ -128,7 +128,7 @@ export function RbForwardKinematics() {
       <circle cx={Ex} cy={Ey} r={7} fill={R.ink} />
       <circle cx={Hx} cy={Hy} r={9} fill={R.signal} stroke="var(--background)" strokeWidth={2} />
 
-      {/* readout panel — fixed top-right lane, never overlaps the arm */}
+      {/* readout panel, fixed top-right lane, never overlaps the arm */}
       <line x1={470} y1={40} x2={470} y2={392} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
       <text x={490} y={70} fontFamily={MONO} fontSize={14} fill={R.world}>hand position</text>
       <text x={490} y={108} fontFamily={MONO} fontSize={13} fill={R.plan}>x = L₁cosθ₁ + L₂cos(θ₁+θ₂)</text>
@@ -479,7 +479,7 @@ export function RbWorkspace() {
         }}
       />
 
-      {/* readout — fixed top-left */}
+      {/* readout, fixed top-left */}
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>probe status</text>
       <text
         x={40}
@@ -491,7 +491,7 @@ export function RbWorkspace() {
       >
         {status}
       </text>
-      {/* legend — fixed bottom lane */}
+      {/* legend, fixed bottom lane */}
       <circle cx={44} cy={408} r={6} fill={R.world} opacity={0.5} />
       <text x={56} y={412} fontFamily={MONO} fontSize={12} fill={R.world}>reachable ring</text>
       <circle cx={230} cy={408} r={6} fill={R.goal} />
@@ -593,7 +593,7 @@ export function RbInverseKinematics() {
       <circle cx={ORIGIN.x} cy={ORIGIN.y} r={outer * PPU} fill="none" stroke={R.line} strokeWidth={1.5} strokeDasharray="5 6" />
       <circle cx={ORIGIN.x} cy={ORIGIN.y} r={inner * PPU} fill="none" stroke={R.line} strokeWidth={1.2} strokeDasharray="4 6" />
 
-      {/* ghost (alternate) solution — only when reachable */}
+      {/* ghost (alternate) solution, only when reachable */}
       {reachable && (
         <g opacity={0.4}>
           <line x1={ORIGIN.x} y1={ORIGIN.y} x2={ghost.E[0]} y2={ghost.E[1]} stroke={R.world} strokeWidth={8} strokeLinecap="round" />
@@ -639,10 +639,10 @@ export function RbInverseKinematics() {
         }}
       />
 
-      {/* readout — fixed top-left */}
+      {/* readout, fixed top-left */}
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>solutions</text>
       <text x={40} y={68} fontFamily={MONO} fontSize={17} fontWeight={600} fill={reachable ? R.ink : R.error}>
-        {reachable ? "2 (elbow-up / elbow-down)" : "0 — unreachable"}
+        {reachable ? "2 (elbow-up / elbow-down)" : "0: unreachable"}
       </text>
       {/* legend bottom */}
       <line x1={40} y1={408} x2={64} y2={408} stroke={R.signal} strokeWidth={6} strokeLinecap="round" />
@@ -759,7 +759,7 @@ export function RbJacobianEllipse() {
       <circle cx={ORIGIN.x} cy={ORIGIN.y} r={9} fill={R.ink} />
       <circle cx={wx(ex)} cy={wy(ey)} r={7} fill={R.ink} />
 
-      {/* manipulability ellipse (amber) — flips to red line near singular */}
+      {/* manipulability ellipse (amber), flips to red line near singular */}
       <g transform={`translate(${Hx} ${Hy}) rotate(${-deg(phi)})`}>
         <ellipse
           cx={0}
@@ -787,14 +787,14 @@ export function RbJacobianEllipse() {
         setDrag(true);
       }} />
 
-      {/* readout — fixed top-left */}
+      {/* readout, fixed top-left */}
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>manipulability |det J|</text>
       <text x={40} y={68} fontFamily={MONO} fontSize={17} fontWeight={600} fill={near ? R.error : R.ink}>
         {manip.toFixed(2)}
       </text>
       {near && (
         <text x={40} y={92} fontFamily={MONO} fontSize={14} fontWeight={600} fill={R.error}>
-          rank lost — ellipse collapsed to a line
+          rank lost: ellipse collapsed to a line
         </text>
       )}
     </Stage>
@@ -906,7 +906,7 @@ export function RbSingularity() {
         fontWeight={600}
         fill={exploding ? R.error : R.ink}
       >
-        {command ? (exploding ? "→ ∞  °/s" : `${Math.round(qDegPerS)} °/s`) : "— off"}
+        {command ? (exploding ? "→ ∞  °/s" : `${Math.round(qDegPerS)} °/s`) : "off"}
       </text>
       {exploding && (
         <text x={barX} y={barY + 132} fontFamily={MONO} fontSize={13} fontWeight={600} fill={R.error}>
@@ -1093,7 +1093,7 @@ export function RbNullSpace() {
       <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>fingertip</text>
       <text x={40} y={68} fontFamily={MONO} fontSize={15} fontWeight={600} fill={R.goal}>frozen on target</text>
       <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={R.plan}>
-        amber = elbow swinging through the null space — the hand never moves
+        amber = elbow swinging through the null space; the hand never moves
       </text>
     </Stage>
   );
