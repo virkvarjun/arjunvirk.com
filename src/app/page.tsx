@@ -151,7 +151,7 @@ export default function Home() {
           {"."}
         </p>
 
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-10">
           {workSection.projects.map((project) => {
             const hasLink = Boolean(project.href) && project.href !== "#";
             const isExternal = hasLink && !project.href.startsWith("/");
