@@ -73,23 +73,13 @@ export const workSection = {
   subtitle: "Writing, research, and projects.",
   projects: [
     {
-      title: "OpenPI-GPU",
+      title: "OpenPi-GPU SHARDER",
       category: "Research",
       date: "Jun 2026",
       description:
         "An implementation of a multi-node FSDP for the OpenPI repo.",
       href: "https://virkvarjun.github.io/OpenPI-GPU/",
       image: "/projects/openpi-gpu.svg",
-      imageContain: true,
-    },
-    {
-      title: "ECE 657: Course Collaborator",
-      category: "Teaching",
-      date: "Jun 2026",
-      description:
-        "Collaborating with Prof. Amir-Hossein Karimi on Machine Learning Fundamentals at UWaterloo Graduate ECE Department. More soon.",
-      href: "#",
-      image: "/projects/uwaterloo-logo.png",
       imageContain: true,
     },
     {
@@ -103,15 +93,6 @@ export const workSection = {
       imagePosition: "30% center",
     },
     {
-      title: "Robotics Bible",
-      category: "Writing",
-      date: "Jul 2026",
-      description: "A full guide of ML in Robotics.",
-      href: "/writing/robotics-guide",
-      image: "/projects/robotics-bible.svg",
-      imageContain: true,
-    },
-    {
       title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
       category: "Research",
       date: "Apr 2026",
@@ -119,6 +100,15 @@ export const workSection = {
         "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
       href: "https://virkvarjun.github.io/KhemKernel/",
       image: "/projects/picochem.png",
+    },
+    {
+      title: "Robotics Bible",
+      category: "Writing",
+      date: "Jul 2026",
+      description: "A full guide of ML in Robotics.",
+      href: "/writing/robotics-guide",
+      image: "/projects/robotics-bible.svg",
+      imageContain: true,
     },
     {
       title: "LoRA VLA Research @ BracketBot",
@@ -130,13 +120,43 @@ export const workSection = {
       image: "/projects/lora.png",
     },
     {
-      title: "Inference Engineering: A Deep Dive",
-      category: "Writing",
+      title: "ECE 657: Course Collaborator",
+      category: "Teaching",
       date: "Jun 2026",
       description:
-        "A deep dive into LLM inference and GPU architecture.",
-      href: "/inference-engineering.html",
-      image: "/projects/inference-engineering.png",
+        "Collaborating with Prof. Amir-Hossein Karimi on Machine Learning Fundamentals at UWaterloo Graduate ECE Department. More soon.",
+      href: "#",
+      image: "/projects/uwaterloo-logo.png",
+      imageContain: true,
+    },
+    {
+      title: "Meridian",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "An app that logs what you are doing every ten minutes, learns your peak productivity hours, and builds a dynamic daily schedule around them.",
+      href: "#",
+      image: "/projects/meridian.svg",
+      imageContain: true,
+    },
+    {
+      title: "Backtracking",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "An app that fights the forgetting curve by tracking what you have learned and tuning the questions it asks each day so the material sticks.",
+      href: "#",
+      image: "/projects/backtracking.svg",
+      imageContain: true,
+    },
+    {
+      title: "Currentz",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "A personal daily digest of paper recommendations, relevant news, and takes from the leaders you follow on X, built as a calmer replacement for endless scrolling.",
+      href: "#",
+      image: "/projects/currentz.svg",
       imageContain: true,
     },
     {
@@ -149,6 +169,15 @@ export const workSection = {
       image: "/projects/faact.png",
     },
     {
+      title: "Sweep JEPA",
+      category: "Research",
+      date: "Jun 2025",
+      description:
+        "Worked with Dr. William Speier and Ashwath Radhachandran, PhD, on JEPA and ViT-based models to improve thyroid cancer risk stratification beyond ACR TI-RADS. (more soon)",
+      href: "https://bair.seas.ucla.edu/",
+      image: "/projects/ucla.png",
+    },
+    {
       title: "SOTA Pan-Cancer Immunotherapy Quantification",
       category: "Research",
       date: "Apr 2024",
@@ -158,13 +187,14 @@ export const workSection = {
       image: "/projects/immuno.png",
     },
     {
-      title: "Novel Thyroid Cancer Risk Stratification System (UCLA BAIR)",
-      category: "Research",
-      date: "Jun 2025",
+      title: "Inference Engineering: A Deep Dive",
+      category: "Writing",
+      date: "Jun 2026",
       description:
-        "Worked with Dr. William Speier and Ashwath Radhachandran, PhD, on JEPA and ViT-based models to improve thyroid cancer risk stratification beyond ACR TI-RADS. (more soon)",
-      href: "https://bair.seas.ucla.edu/",
-      image: "/projects/ucla.png",
+        "A deep dive into LLM inference and GPU architecture.",
+      href: "/inference-engineering.html",
+      image: "/projects/inference-engineering.png",
+      imageContain: true,
     },
     {
       title: "Explanation Tuning Research (Triage)",
