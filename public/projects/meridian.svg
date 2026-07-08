@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Meridian">
+  <line x1="36" y1="150" x2="284" y2="150" stroke="#111111" stroke-width="3"/>
+  <path d="M40 150 Q160 40 280 150" fill="none" stroke="#111111" stroke-width="3"/>
+  <line x1="160" y1="95" x2="160" y2="150" stroke="#7a7a72" stroke-width="2" stroke-dasharray="4 5"/>
+  <circle cx="160" cy="95" r="9" fill="#3f5fd6"/>
+  <g stroke="#7a7a72" stroke-width="2">
+    <line x1="72" y1="150" x2="72" y2="158"/>
+    <line x1="116" y1="150" x2="116" y2="158"/>
+    <line x1="204" y1="150" x2="204" y2="158"/>
+    <line x1="248" y1="150" x2="248" y2="158"/>
+  </g>
+</svg>

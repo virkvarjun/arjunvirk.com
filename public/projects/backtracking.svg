@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Backtracking">
+  <line x1="32" y1="162" x2="288" y2="162" stroke="#111111" stroke-width="3"/>
+  <line x1="40" y1="162" x2="40" y2="40" stroke="#111111" stroke-width="3"/>
+  <path d="M40 60 Q80 120 120 132 M120 74 Q160 122 200 130 M200 76 Q240 118 280 126"
+        fill="none" stroke="#111111" stroke-width="3"/>
+  <g stroke="#3f5fd6" stroke-width="3">
+    <line x1="120" y1="132" x2="120" y2="74"/>
+    <line x1="200" y1="130" x2="200" y2="76"/>
+  </g>
+  <circle cx="120" cy="74" r="7" fill="#3f5fd6"/>
+  <circle cx="200" cy="76" r="7" fill="#3f5fd6"/>
+</svg>
