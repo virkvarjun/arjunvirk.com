@@ -66,6 +66,9 @@ export type WorkProject = {
   // When true, render the image with object-contain + padding (for logos)
   // instead of the default object-cover crop.
   imageContain?: boolean;
+  // When true, render the image at its natural aspect ratio with no card
+  // background, ring, or padding (the image is the whole tile).
+  imageBare?: boolean;
 };
 
 export const workSection = {
@@ -80,7 +83,7 @@ export const workSection = {
         "An implementation of a multi-node FSDP for the OpenPI repo.",
       href: "https://virkvarjun.github.io/OpenPI-GPU/",
       image: "/projects/openpi-gpu-sharder.png",
-      imageContain: true,
+      imageBare: true,
     },
     {
       title: "Machine Learning Bible",

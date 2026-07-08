@@ -155,21 +155,30 @@ export default function Home() {
           {workSection.projects.map((project) => {
             const hasLink = Boolean(project.href) && project.href !== "#";
             const isExternal = hasLink && !project.href.startsWith("/");
-            const imageClasses =
-              "block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)]";
+            const imageClasses = project.imageBare
+              ? "block overflow-hidden rounded-lg"
+              : "block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)]";
             const thumbnail = project.image ? (
-              <img
-                src={project.image}
-                alt={project.title}
-                className={`h-full w-full ${
-                  project.imageContain ? "object-contain p-5" : "object-cover"
-                }`}
-                style={
-                  project.imagePosition && !project.imageContain
-                    ? { objectPosition: project.imagePosition }
-                    : undefined
-                }
-              />
+              project.imageBare ? (
+                <img
+                  src={project.image}
+                  alt={project.title}
+                  className="block h-auto w-full"
+                />
+              ) : (
+                <img
+                  src={project.image}
+                  alt={project.title}
+                  className={`h-full w-full ${
+                    project.imageContain ? "object-contain p-5" : "object-cover"
+                  }`}
+                  style={
+                    project.imagePosition && !project.imageContain
+                      ? { objectPosition: project.imagePosition }
+                      : undefined
+                  }
+                />
+              )
             ) : null;
             return (
               <article key={project.title} className="flex flex-col">
