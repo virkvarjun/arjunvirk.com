@@ -79,7 +79,7 @@ export const workSection = {
       description:
         "An implementation of a multi-node FSDP for the OpenPI repo.",
       href: "https://virkvarjun.github.io/OpenPI-GPU/",
-      image: "/projects/openpi-gpu.svg",
+      image: "/projects/openpi-gpu-sharder.png",
       imageContain: true,
     },
     {
@@ -130,36 +130,6 @@ export const workSection = {
       imageContain: true,
     },
     {
-      title: "Meridian",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "An app that logs what you are doing every ten minutes, learns your peak productivity hours, and builds a dynamic daily schedule around them.",
-      href: "#",
-      image: "/projects/meridian.svg",
-      imageContain: true,
-    },
-    {
-      title: "Backtracking",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "An app that fights the forgetting curve by tracking what you have learned and tuning the questions it asks each day so the material sticks.",
-      href: "#",
-      image: "/projects/backtracking.svg",
-      imageContain: true,
-    },
-    {
-      title: "Currentz",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "A personal daily digest of paper recommendations, relevant news, and takes from the leaders you follow on X, built as a calmer replacement for endless scrolling.",
-      href: "#",
-      image: "/projects/currentz.svg",
-      imageContain: true,
-    },
-    {
       title: "Failure-Aware ACT (FAACT)",
       category: "Research",
       date: "Mar 2026",
@@ -201,7 +171,7 @@ export const workSection = {
       category: "Engineering",
       date: "Jun 2024",
       description:
-        "Worked under Mat Kallada from Mila to organize medical sequence data pipelines and research explanation-guided tuning for medical vision-language transformers. (more soon)",
+        "Worked under Mat Kallada from the Mila Institute to organize medical sequence data pipelines and research explanation-guided tuning for medical vision-language transformers. (more soon)",
       href: "https://github.com/triagemd",
       image: "/projects/triage.png",
     },
@@ -224,6 +194,16 @@ export const workSection = {
       image: "/projects/wisp.png",
     },
     {
+      title: "Meridian",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "An app that logs what you are doing every ten minutes, learns your peak productivity hours, and builds a dynamic daily schedule around them.",
+      href: "#",
+      image: "/projects/meridian.svg",
+      imageContain: true,
+    },
+    {
       title: "Dancing Humanoid (1st Place Provincially)",
       category: "Engineering",
       date: "Jul 2022",
@@ -233,6 +213,16 @@ export const workSection = {
       image: "/projects/dancing.png",
     },
     {
+      title: "Backtracking",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "An app that fights the forgetting curve by tracking what you have learned and tuning the questions it asks each day so the material sticks.",
+      href: "#",
+      image: "/projects/backtracking.svg",
+      imageContain: true,
+    },
+    {
       title: "Hack49: 700K Reached, $13K Funding",
       category: "Leadership",
       date: "Jun 2024",
@@ -240,6 +230,16 @@ export const workSection = {
         "Led a 13-person team to reach 700K+ students, secure $13K in funding, recruit judges from Amazon, Elegoo, and Dell, and scale Hack49 into a global student hackathon.",
       href: "https://www.youtube.com/@hack_49",
       image: "/projects/hack49.png",
+    },
+    {
+      title: "Currentz",
+      category: "Engineering",
+      date: "Jul 2026",
+      description:
+        "A personal daily digest of paper recommendations, relevant news, and takes from the leaders you follow on X, built as a calmer replacement for endless scrolling.",
+      href: "#",
+      image: "/projects/currentz.svg",
+      imageContain: true,
     },
     {
       title: "Robot See, Robot Do",
