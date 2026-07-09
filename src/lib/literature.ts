@@ -5,6 +5,7 @@ import { singer } from "./reviews/singer";
 import { piMakeItFly } from "./reviews/pi-make-it-fly";
 import { worldModelSurvey } from "./reviews/world-model-survey";
 import { enpire } from "./reviews/enpire";
+import { aspire } from "./reviews/aspire";
 
 export type Paper = {
   slug: string;
@@ -34,7 +35,7 @@ export const literatureReviews: LiteratureCategory[] = [
     title: "Robot Learning",
     description:
       "Reviews of papers on robot perception, exploration, manipulation, and policy learning.",
-    papers: [enpire, vista, phys2real, singer, piMakeItFly, worldModelSurvey],
+    papers: [enpire, aspire, vista, phys2real, singer, piMakeItFly, worldModelSurvey],
   },
   {
     key: "machine-learning",
