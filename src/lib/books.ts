@@ -51,4 +51,10 @@ export const books: Book[] = [
     author: "Napoleon Hill",
     sections: soon(),
   },
+  {
+    slug: "almanack-of-naval-ravikant",
+    title: "The Almanack of Naval Ravikant",
+    author: "Eric Jorgenson",
+    sections: soon(),
+  },
 ];
