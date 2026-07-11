@@ -39,4 +39,10 @@ export const books: Book[] = [
     author: "Yuval Noah Harari",
     sections: soon(),
   },
+  {
+    slug: "psychology-of-money",
+    title: "The Psychology of Money",
+    author: "Morgan Housel",
+    sections: soon(),
+  },
 ];
