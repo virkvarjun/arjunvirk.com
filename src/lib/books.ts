@@ -27,4 +27,10 @@ export const books: Book[] = [
     author: "Marcus Aurelius",
     sections: soon(),
   },
+  {
+    slug: "48-laws-of-power",
+    title: "The 48 Laws of Power",
+    author: "Robert Greene",
+    sections: soon(),
+  },
 ];
