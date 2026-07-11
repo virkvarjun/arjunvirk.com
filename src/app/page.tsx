@@ -148,6 +148,13 @@ export default function Home() {
           >
             Literature Reviews
           </Link>
+          {", "}
+          <Link
+            href="/books"
+            className="underline underline-offset-2 hover:text-[var(--foreground)] transition-colors"
+          >
+            Books
+          </Link>
           {"."}
         </p>
 
