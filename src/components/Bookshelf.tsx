@@ -6,17 +6,18 @@ import { books } from "@/lib/books";
 // a real shelf, titles run bottom-to-top, and hovering a spine lifts it out and
 // reveals its title and author. Text-only (no cover art); scrolls horizontally.
 
-// One color per book (cycles if more books are added). Light spines get dark text.
+// One color per book, chosen to evoke that book's actual cover (cycles if more
+// books are added). Light spines get dark text.
 const SPINES = [
-  { bg: "#2f3542", fg: "#f4f4f3" }, // Meditations
-  { bg: "#6b2f2f", fg: "#f4f4f3" }, // The 48 Laws of Power
-  { bg: "#b0894a", fg: "#241a0e" }, // Sapiens
-  { bg: "#2f6b52", fg: "#f4f4f3" }, // The Psychology of Money
-  { bg: "#8a6a2b", fg: "#f8f4ea" }, // Think and Grow Rich
-  { bg: "#24405e", fg: "#eef2f7" }, // The Almanack of Naval Ravikant
-  { bg: "#1c1c22", fg: "#ececec" }, // Elon Musk
-  { bg: "#b5502a", fg: "#fdf1ea" }, // Shoe Dog
-  { bg: "#e7e1d3", fg: "#2b2a26" }, // Limitless
+  { bg: "#e7dfcf", fg: "#26251f" }, // Meditations — classical parchment
+  { bg: "#151515", fg: "#d9b45b" }, // The 48 Laws of Power — black + gold
+  { bg: "#f1eee6", fg: "#262521" }, // Sapiens — white with red thumbprint
+  { bg: "#e6e7e3", fg: "#262521" }, // The Psychology of Money — light
+  { bg: "#1f2a44", fg: "#dcc17a" }, // Think and Grow Rich — navy + gold
+  { bg: "#9fbfd4", fg: "#1c2b36" }, // The Almanack of Naval Ravikant — sky blue
+  { bg: "#d7d9dd", fg: "#26262a" }, // Elon Musk — silver/white
+  { bg: "#c0562a", fg: "#fdf1ea" }, // Shoe Dog — burnt orange
+  { bg: "#2f7fbf", fg: "#eef6fb" }, // Limitless — bright blue
 ];
 const WIDTHS = [44, 40, 52, 46, 42, 48, 44, 50, 46];
 const HEIGHTS = [256, 262, 250, 258, 254, 260, 252, 258, 256];
@@ -38,6 +39,11 @@ export default function Bookshelf() {
               className="group relative flex shrink-0 items-center justify-center transition-transform duration-300 ease-out hover:-translate-y-5 hover:shadow-xl hover:z-10 motion-reduce:transition-none"
               style={{ width, height, background: bg }}
             >
+              {/* hairline seam between adjacent spines */}
+              <span
+                aria-hidden
+                className="absolute inset-y-0 right-0 w-px bg-black/10"
+              />
               {/* vertical title, reading bottom-to-top */}
               <span
                 className="max-h-[88%] overflow-hidden px-1 text-center text-[12px] font-semibold leading-tight tracking-tight rotate-180 [writing-mode:vertical-rl]"
