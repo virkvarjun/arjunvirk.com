@@ -45,4 +45,10 @@ export const books: Book[] = [
     author: "Morgan Housel",
     sections: soon(),
   },
+  {
+    slug: "think-and-grow-rich",
+    title: "Think and Grow Rich",
+    author: "Napoleon Hill",
+    sections: soon(),
+  },
 ];
