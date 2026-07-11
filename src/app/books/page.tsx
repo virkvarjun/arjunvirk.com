@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { books } from "@/lib/books";
+import Bookshelf from "@/components/Bookshelf";
 
 export default function BooksPage() {
   return (
@@ -33,6 +34,8 @@ export default function BooksPage() {
           .
         </p>
       </header>
+
+      <Bookshelf />
 
       <p className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)] mb-4">
         Reading list
