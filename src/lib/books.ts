@@ -57,4 +57,10 @@ export const books: Book[] = [
     author: "Eric Jorgenson",
     sections: soon(),
   },
+  {
+    slug: "elon-musk",
+    title: "Elon Musk",
+    author: "Walter Isaacson",
+    sections: soon(),
+  },
 ];
