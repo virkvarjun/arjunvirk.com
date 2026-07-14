@@ -1,7 +1,6 @@
 "use client";
 
-import { useReducer, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useReducer, useRef, useState } from "react";
 import {
   R,
   MONO,
@@ -13,172 +12,265 @@ import {
   usePrefersReducedMotion,
   useStageVisibility,
   svgArrow,
-  svgPoint,
   approach,
   clamp,
   lerp,
+  type V3,
+  type Prim3D,
+  type Seg3D,
+  type Camera3D,
+  v3,
+  quat,
+  seg3,
+  dot3,
+  label3,
+  ring3,
+  grid3,
+  box3,
+  Scene3D,
+  useOrbit,
+  Legend,
+  Readout,
+  Transport,
 } from "./shared";
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
+const deg = (r: number) => (r * 180) / Math.PI;
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
+// --- Shared 3D helpers for this chapter --------------------------------------
+
+// Intersect the line p(t) = o + t·d with a box (center c, yaw about z, half
+// extents h). Returns entry/exit points and their outward world normals. This
+// is the real contact geometry both grasp figures compute against.
+function rayBox(
+  o: V3,
+  d: V3,
+  c: V3,
+  yawRad: number,
+  h: V3,
+): { pIn: V3; nIn: V3; pOut: V3; nOut: V3 } | null {
+  const cw = Math.cos(-yawRad);
+  const sw = Math.sin(-yawRad);
+  const toLocal = (p: V3): V3 => [p[0] * cw - p[1] * sw, p[0] * sw + p[1] * cw, p[2]];
+  const ol = toLocal(v3.sub(o, c));
+  const dl = toLocal(d);
+  let tmin = -Infinity;
+  let tmax = Infinity;
+  let axMin = -1;
+  let sgMin = 1;
+  let axMax = -1;
+  let sgMax = 1;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(dl[i]) < 1e-9) {
+      if (Math.abs(ol[i]) > h[i]) return null;
+      continue;
+    }
+    let t1 = (-h[i] - ol[i]) / dl[i];
+    let t2 = (h[i] - ol[i]) / dl[i];
+    let s1 = -1;
+    let s2 = 1;
+    if (t1 > t2) {
+      const tt = t1;
+      t1 = t2;
+      t2 = tt;
+      s1 = 1;
+      s2 = -1;
+    }
+    if (t1 > tmin) {
+      tmin = t1;
+      axMin = i;
+      sgMin = s1;
+    }
+    if (t2 < tmax) {
+      tmax = t2;
+      axMax = i;
+      sgMax = s2;
+    }
+  }
+  if (tmax <= tmin || axMin < 0 || axMax < 0) return null;
+  const at = (t: number): V3 => [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+  const cy2 = Math.cos(yawRad);
+  const sy2 = Math.sin(yawRad);
+  const nOf = (ax: number, sg: number): V3 => {
+    const n: V3 = ax === 0 ? [sg, 0, 0] : ax === 1 ? [0, sg, 0] : [0, 0, sg];
+    return [n[0] * cy2 - n[1] * sy2, n[0] * sy2 + n[1] * cy2, n[2]];
+  };
+  return { pIn: at(tmin), nIn: nOf(axMin, sgMin), pOut: at(tmax), nOut: nOf(axMax, sgMax) };
+}
+
+// A wireframe friction cone: apex at the contact, axis pointing into the
+// object, half-angle arctan(μ). Ten base points, alternate spokes.
+function cone3(apex: V3, axis: V3, L: number, halfAng: number, color: string): Seg3D[] {
+  const a = v3.norm(axis);
+  const ref: V3 = Math.abs(a[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const u = v3.norm(v3.cross(ref, a));
+  const w = v3.cross(a, u);
+  const r = L * Math.tan(halfAng);
+  const base = v3.add(apex, v3.scale(a, L));
+  const N = 10;
+  const pts: V3[] = [];
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    pts.push(v3.add(base, v3.add(v3.scale(u, r * Math.cos(t)), v3.scale(w, r * Math.sin(t)))));
+  }
+  const out: Seg3D[] = [];
+  for (let i = 0; i < N; i++) {
+    out.push(seg3(pts[i], pts[(i + 1) % N], color, { width: 1, opacity: 0.7 }));
+    if (i % 2 === 0) out.push(seg3(apex, pts[i], color, { width: 1, opacity: 0.5 }));
+  }
+  return out;
+}
+
+// Rotate a vector about the world y-axis (forward lean when a > 0).
+const rotY = (p: V3, a: number): V3 => [
+  p[0] * Math.cos(a) + p[2] * Math.sin(a),
+  p[1],
+  -p[0] * Math.sin(a) + p[2] * Math.cos(a),
+];
+
+// Monotone-chain convex hull, counter-clockwise.
+function hull2(pts: [number, number][]): [number, number][] {
+  const s = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: [number, number][] = [];
+  for (const p of s) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0)
+      lower.pop();
+    lower.push(p);
+  }
+  const upper: [number, number][] = [];
+  for (let i = s.length - 1; i >= 0; i--) {
+    const p = s[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0)
+      upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+// Point-in-convex-polygon (CCW hull) + signed distance to the boundary
+// (positive inside). This is the actual stability test in Fig 12.3.
+function hullMargin(hull: [number, number][], p: [number, number]) {
+  let inside = true;
+  let dmin = Infinity;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const cr = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    if (cr < 0) inside = false;
+    const vx = b[0] - a[0];
+    const vy = b[1] - a[1];
+    const t = clamp(((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (vx * vx + vy * vy || 1), 0, 1);
+    dmin = Math.min(dmin, Math.hypot(p[0] - (a[0] + t * vx), p[1] - (a[1] + t * vy)));
+  }
+  return { inside, margin: inside ? dmin : -dmin };
+}
+
 // ===========================================================================
-// Fig 12.1 · Finding an antipodal grasp  (draggable field)
-// Drag/rotate a blob; a parallel-jaw gripper closes on two opposing points.
-// If the two surface normals point at each other inside their friction cones,
-// the readout flips to "force closure, holds"; otherwise "will slip".
+// Fig 12.1 · Finding an antipodal grasp  (true 3D, orbitable)
+// A parallel-jaw gripper pinches a 3D box. The two contacts and their face
+// normals come from a real ray–box intersection; the verdict is the honest
+// two-contact antipodal test: the pinch axis must lie inside the friction
+// cone (half-angle arctan μ) at BOTH contacts. Swing the approach, rotate the
+// object, or drop μ, and watch a holding grasp become a slipping one.
 // ===========================================================================
 
-// A closed blob defined as a radius function of angle (deterministic).
-const BLOB_K = [1, 0.16, -0.1, 0.08, -0.05];
-const blobR = (ang: number) =>
-  92 *
-  (1 +
-    BLOB_K[1] * Math.cos(2 * ang) +
-    BLOB_K[2] * Math.cos(3 * ang + 0.6) +
-    BLOB_K[3] * Math.cos(4 * ang - 0.4) +
-    BLOB_K[4] * Math.cos(5 * ang));
+const BOX_C: V3 = [0, 0, 0.5];
+const BOX_H: V3 = [0.46, 0.3, 0.26];
 
 export function RbAntipodalGrasp() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
+  const orbit = useOrbit(-32, 22);
+  const [approachDeg, setApproachDeg] = useState(90);
+  const [objYaw, setObjYaw] = useState(12);
+  const [mu, setMu] = useState(0.4);
   const [showCone, setShowCone] = useState(true);
-  const [approachDeg, setApproachDeg] = useState(90); // gripper approach angle
-  const [rot, setRot] = useState(24); // object rotation (deg), target
-  const [center, setCenter] = useState({ x: 275, y: 230 });
-  const [disp, setDisp] = useState({ rot: 24, close: 0 }); // eased rot + finger close
-  const [drag, setDrag] = useState<null | "move" | "rotate">(null);
+  const [close, setClose] = useState(0); // eased finger close, 0..1
 
-  const CX0 = center.x;
-  const CY0 = center.y;
+  useRafLoop((dt) => setClose((c) => approach(c, 1, 0.1, dt)), {
+    playing: inView && !reduced,
+  });
+  const closeT = reduced ? 1 : close;
+
+  const yawRad = rad(objYaw);
   const app = rad(approachDeg);
-  // gripper axis unit vector and its perpendicular (the pinch line)
-  const ux = Math.cos(app);
-  const uy = Math.sin(app);
+  const u: V3 = [Math.cos(app), Math.sin(app), 0]; // pinch axis, horizontal
 
-  // Ray-march the blob boundary along +/- the pinch line to find contacts.
-  const contactFor = (dir: number, rotRad: number) => {
-    for (let d = 190; d > 4; d -= 1.5) {
-      const px = CX0 + dir * ux * d;
-      const py = CY0 + dir * uy * d;
-      const rx = px - CX0;
-      const ry = py - CY0;
-      const localAng = Math.atan2(ry, rx) - rotRad;
-      const rr = blobR(localAng);
-      if (Math.hypot(rx, ry) <= rr) {
-        // just inside: step back to the surface for a clean contact point
-        const cd = rr;
-        const a = Math.atan2(ry, rx);
-        const cx = CX0 + Math.cos(a) * cd;
-        const cy = CY0 + Math.sin(a) * cd;
-        // outward surface normal (numerical) in local frame -> world
-        const eps = 0.02;
-        const r1 = blobR(localAng + eps);
-        const r0 = blobR(localAng - eps);
-        const dr = (r1 - r0) / (2 * eps);
-        // tangent, then normal (pointing outward)
-        const worldAng = a;
-        let nx = Math.cos(worldAng) + (dr / rr) * Math.sin(worldAng);
-        let ny = Math.sin(worldAng) - (dr / rr) * Math.cos(worldAng);
-        const nl = Math.hypot(nx, ny) || 1;
-        nx /= nl;
-        ny /= nl;
-        return { x: cx, y: cy, nx, ny };
-      }
-    }
-    return null;
-  };
+  // Real contact geometry: where the pinch line pierces the box, and the
+  // outward normals of the faces it pierces.
+  const hit = rayBox(BOX_C, u, BOX_C, yawRad, BOX_H)!; // line through center: always hits
+  const pA = hit.pOut; // +u side contact
+  const nA = hit.nOut;
+  const pB = hit.pIn; // -u side contact
+  const nB = hit.nIn;
 
-  useRafLoop(
-    (dt) => {
-      setDisp((s) => ({
-        rot: approach(s.rot, rot, 0.2, dt),
-        close: approach(s.close, 1, 0.12, dt),
-      }));
-    },
-    { playing: inView && !reduced },
-  );
-
-  const curRot = reduced ? rot : disp.rot;
-  const closeT = reduced ? 1 : disp.close;
-  const rotRad = rad(curRot);
-
-  const cA = contactFor(1, rotRad);
-  const cB = contactFor(-1, rotRad);
-
-  // Force closure test: each contact's outward normal should point back along
-  // the pinch line toward the other contact, within the friction cone (~ ±18°).
-  const FRICTION = rad(18);
-  let holds = false;
-  if (cA && cB) {
-    // pinch line direction from A to B
-    const okA = Math.acos(clamp(-(cA.nx * ux + cA.ny * uy), -1, 1)) < FRICTION;
-    const okB = Math.acos(clamp(cB.nx * ux + cB.ny * uy, -1, 1)) < FRICTION;
-    holds = okA && okB;
-  }
+  // The antipodal force-closure test, computed for real: the pinch axis must
+  // lie within arctan(μ) of the contact normal at both contacts.
+  const coneHalf = Math.atan(mu);
+  const angA = Math.acos(clamp(v3.dot(u, nA), -1, 1));
+  const angB = Math.acos(clamp(-v3.dot(u, nB), -1, 1));
+  const okA = angA < coneHalf;
+  const okB = angB < coneHalf;
+  const holds = okA && okB;
   const grasp = holds ? R.goal : R.error;
 
-  // finger positions: retract from contact by (1 - closeT) * gap
-  const gap = 150;
-  const fingerA = cA
-    ? { x: lerp(CX0 + ux * gap, cA.x, closeT), y: lerp(CY0 + uy * gap, cA.y, closeT) }
-    : null;
-  const fingerB = cB
-    ? { x: lerp(CX0 - ux * gap, cB.x, closeT), y: lerp(CY0 - uy * gap, cB.y, closeT) }
-    : null;
+  // Gripper: pads retract along the pinch axis when open, plus a yoke above.
+  const padA = v3.add(pA, v3.scale(u, (1 - closeT) * 0.5));
+  const padB = v3.add(pB, v3.scale(u, -(1 - closeT) * 0.5));
+  const zTop = BOX_C[2] + 0.62;
+  const yA: V3 = [padA[0], padA[1], zTop];
+  const yB: V3 = [padB[0], padB[1], zTop];
 
-  const blobPath = (() => {
-    const N = 72;
-    let p = "";
-    for (let i = 0; i <= N; i++) {
-      const a = (i / N) * Math.PI * 2;
-      const rr = blobR(a);
-      const wx = CX0 + rr * Math.cos(a + rotRad);
-      const wy = CY0 + rr * Math.sin(a + rotRad);
-      p += `${i === 0 ? "M" : "L"} ${wx.toFixed(1)} ${wy.toFixed(1)} `;
-    }
-    return p + "Z";
-  })();
+  const qBox = quat.fromAxisAngle([0, 0, 1], yawRad);
+  const prims: Prim3D[] = [
+    ...grid3(1.2, 0.4),
+    // the object
+    ...box3(BOX_C, qBox, BOX_H[0] * 2, BOX_H[1] * 2, BOX_H[2] * 2, R.signal),
+    // pinch axis
+    seg3(v3.add(BOX_C, v3.scale(u, -1.35)), v3.add(BOX_C, v3.scale(u, 1.35)), R.plan, {
+      width: 1.5,
+      dash: "6 6",
+      opacity: 0.8,
+    }),
+    // friction cones (axis = inward normal, half-angle = arctan μ)
+    ...(showCone ? cone3(pA, v3.scale(nA, -1), 0.36, coneHalf, R.world) : []),
+    ...(showCone ? cone3(pB, v3.scale(nB, -1), 0.36, coneHalf, R.world) : []),
+    // contact normals
+    seg3(pA, v3.add(pA, v3.scale(nA, 0.32)), grasp, { width: 3 }),
+    dot3(v3.add(pA, v3.scale(nA, 0.32)), grasp, { r: 3 }),
+    seg3(pB, v3.add(pB, v3.scale(nB, 0.32)), grasp, { width: 3 }),
+    dot3(v3.add(pB, v3.scale(nB, 0.32)), grasp, { r: 3 }),
+    // contact points
+    dot3(pA, grasp, { r: 5 }),
+    dot3(pB, grasp, { r: 5 }),
+    // gripper: pads, risers, crossbar
+    seg3(v3.add(padA, [0, 0, -0.15]), v3.add(padA, [0, 0, 0.15]), R.plan, { width: 6 }),
+    seg3(v3.add(padB, [0, 0, -0.15]), v3.add(padB, [0, 0, 0.15]), R.plan, { width: 6 }),
+    seg3(v3.add(padA, [0, 0, 0.15]), yA, R.plan, { width: 3 }),
+    seg3(v3.add(padB, [0, 0, 0.15]), yB, R.plan, { width: 3 }),
+    seg3(yA, yB, R.plan, { width: 3 }),
+    label3(v3.lerp(yA, yB, 0.5), "gripper", R.plan, { anchor: "middle", dy: -8, size: 12 }),
+  ];
 
-  const onMove = (e: ReactPointerEvent<SVGElement>) => {
-    if (!drag) return;
-    const [x, y] = svgPoint(e);
-    if (drag === "move") {
-      setCenter({ x: clamp(x, 150, 400), y: clamp(y, 130, 320) });
-    } else {
-      const a = (Math.atan2(y - CY0, x - CX0) * 180) / Math.PI;
-      setRot(a);
-    }
-  };
-
-  const cone = (c: { x: number; y: number; nx: number; ny: number }) => {
-    const L = 46;
-    const base = Math.atan2(c.ny, c.nx);
-    const p1x = c.x + Math.cos(base + FRICTION) * L;
-    const p1y = c.y + Math.sin(base + FRICTION) * L;
-    const p2x = c.x + Math.cos(base - FRICTION) * L;
-    const p2y = c.y + Math.sin(base - FRICTION) * L;
-    return (
-      <polygon
-        points={`${c.x},${c.y} ${p1x},${p1y} ${p2x},${p2y}`}
-        fill={R.world}
-        opacity={0.22}
-        stroke={R.world}
-        strokeWidth={1}
-      />
-    );
+  const cam: Camera3D = {
+    yawDeg: orbit.yawDeg,
+    pitchDeg: orbit.pitchDeg,
+    dist: 4.6,
+    zoom: 190,
+    target: [0, 0, 0.4],
   };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 12.1 · Finding an antipodal grasp"
-      ariaLabel={`A parallel-jaw gripper pinching a rotatable object; ${holds ? "force closure holds" : "the grasp will slip"}`}
-      svgProps={{
-        onPointerMove: onMove,
-        onPointerUp: () => setDrag(null),
-        onPointerLeave: () => setDrag(null),
-      }}
+      ariaLabel={`A parallel-jaw gripper pinching a 3D box; ${holds ? "force closure holds" : "the grasp will slip"}. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
           <Slider
@@ -189,228 +281,218 @@ export function RbAntipodalGrasp() {
             onChange={setApproachDeg}
             fmt={(v) => `${v}°`}
           />
+          <Slider
+            label="rotate object"
+            min={-90}
+            max={90}
+            value={objYaw}
+            onChange={setObjYaw}
+            fmt={(v) => `${v}°`}
+          />
+          <Slider label="μ" min={0.1} max={0.9} step={0.05} value={mu} onChange={setMu} fmt={(v) => v.toFixed(2)} />
           <Btn onClick={() => setShowCone((v) => !v)} active={showCone}>
-            {showCone ? "✓ friction cone" : "show friction cone"}
+            {showCone ? "✓ friction cones" : "show friction cones"}
           </Btn>
           <Btn
             onClick={() => {
-              setRot(24);
               setApproachDeg(90);
-              setCenter({ x: 275, y: 230 });
-              setDisp({ rot: 24, close: 0 });
+              setObjYaw(12);
+              setMu(0.4);
+              setClose(0);
+              orbit.reset();
             }}
           >
             ↺ reset
           </Btn>
-          <span className="font-mono text-[13px] text-[var(--muted)]">
-            drag body to move · drag ring to rotate
-          </span>
         </>
       }
     >
-      {/* readout lane, top-left */}
-      <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
-        grasp status
-      </text>
-      <text x={40} y={68} fontFamily={MONO} fontSize={17} fontWeight={600} fill={grasp}>
-        {holds ? "force closure, holds ✓" : "will slip ✗"}
-      </text>
-
-      {/* pinch line (the antipodal axis) */}
-      <line
-        x1={CX0 - ux * 200}
-        y1={CY0 - uy * 200}
-        x2={CX0 + ux * 200}
-        y2={CY0 + uy * 200}
-        stroke={R.plan}
-        strokeWidth={1.5}
-        strokeDasharray="5 6"
-        opacity={0.7}
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          {
+            label: "grasp",
+            value: holds ? "holds ✓" : "will slip ✗",
+            color: grasp,
+          },
+          { label: "angle A", value: `${deg(angA).toFixed(0)}°`, color: okA ? R.goal : R.error },
+          { label: "angle B", value: `${deg(angB).toFixed(0)}°`, color: okB ? R.goal : R.error },
+          { label: "cone ±", value: `${deg(coneHalf).toFixed(0)}°`, color: R.ink },
+        ]}
       />
-
-      {/* the object */}
-      <path d={blobPath} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
-      {/* rotate handle ring */}
-      <circle
-        cx={CX0}
-        cy={CY0}
-        r={112}
-        fill="none"
-        stroke={R.line}
-        strokeWidth={1.5}
-        strokeDasharray="3 7"
-        style={{ cursor: "grab" }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          setDrag("rotate");
-        }}
+      <Legend
+        items={[
+          { color: R.signal, label: "object" },
+          { color: R.plan, label: "gripper · pinch axis" },
+          { color: R.world, label: "friction cone" },
+          { color: grasp, label: "contacts + normals" },
+        ]}
       />
-      <circle
-        cx={CX0}
-        cy={CY0}
-        r={12}
-        fill={R.signal}
-        stroke="var(--background)"
-        strokeWidth={2}
-        style={{ cursor: "grab" }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          setDrag("move");
-        }}
-      />
-
-      {/* friction cones */}
-      {showCone && cA && cone(cA)}
-      {showCone && cB && cone(cB)}
-
-      {/* contact normals */}
-      {cA && svgArrow(cA.x, cA.y, cA.x + cA.nx * 42, cA.y + cA.ny * 42, grasp, 2.5, 8)}
-      {cB && svgArrow(cB.x, cB.y, cB.x + cB.nx * 42, cB.y + cB.ny * 42, grasp, 2.5, 8)}
-
-      {/* gripper fingers */}
-      {fingerA && (
-        <g>
-          <line
-            x1={fingerA.x + ux * 26}
-            y1={fingerA.y + uy * 26}
-            x2={fingerA.x}
-            y2={fingerA.y}
-            stroke={R.plan}
-            strokeWidth={9}
-            strokeLinecap="round"
-          />
-          <circle cx={fingerA.x} cy={fingerA.y} r={6} fill={R.plan} />
-        </g>
-      )}
-      {fingerB && (
-        <g>
-          <line
-            x1={fingerB.x - ux * 26}
-            y1={fingerB.y - uy * 26}
-            x2={fingerB.x}
-            y2={fingerB.y}
-            stroke={R.plan}
-            strokeWidth={9}
-            strokeLinecap="round"
-          />
-          <circle cx={fingerB.x} cy={fingerB.y} r={6} fill={R.plan} />
-        </g>
-      )}
-
-      {/* contact dots */}
-      {cA && <circle cx={cA.x} cy={cA.y} r={5} fill={grasp} />}
-      {cB && <circle cx={cB.x} cy={cB.y} r={5} fill={grasp} />}
-
-      {/* legend lane, bottom */}
-      <text x={40} y={412} fontFamily={MONO} fontSize={13} fill={R.world}>
+      <text
+        x={360}
+        y={424}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={12.5}
+        fill={holds ? R.world : R.error}
+        fontWeight={holds ? 400 : 600}
+      >
         {holds
-          ? "opposing normals inside the friction cones; the pinch resists any wrench"
-          : "normals miss each other; a shove would break this grip"}
+          ? `pinch axis within arctan μ = ${deg(coneHalf).toFixed(0)}° of both face normals → force closure · drag to orbit`
+          : "pinch axis leaves a friction cone: the finger pushes off-normal and the object shears out"}
       </text>
-      {reduced && (
-        <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: fingers shown closed; sliders and drag still update the grasp.
-        </text>
-      )}
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 12.2 · Reorienting an object in-hand  (stepper)
-// A multi-finger hand rotates a cube toward a ghosted target by a sequence of
-// contact make/break/slide switches. Step advances one contact-switch (k/N);
-// the risky finger (breaking/sliding) flashes red.
+// Fig 12.2 · Reorienting an object in-hand  (true 3D stepper, orbitable)
+// Four fingers arch over a palm and pinch a cube at real ray–box contacts.
+// Each step is one contact-switch: the cube rotates one increment about the
+// vertical axis while the risky finger breaks contact, swings with the lift,
+// and re-lands on the surface. Ghost cube = the commanded target orientation.
 // ===========================================================================
 
-const IH_STEPS = 6; // contact-switches
-const FINGERS = 4;
+const IH_STEPS = 6;
+const FINGER_ANGLES = [20, 110, 200, 290]; // deg, offset so contacts avoid corners
+const CUBE_C: V3 = [0, 0, 0.62];
+const CUBE_H: V3 = [0.28, 0.28, 0.28];
 
 export function RbInHandReorient() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [playing, toggle] = useReducer((p) => !p, false);
+  const orbit = useOrbit(-30, 26);
+  const [playing, setPlaying] = useState(false);
   const [showForce, setShowForce] = useState(true);
   const [targetDeg, setTargetDeg] = useState(90);
-  const [step, setStep] = useState(0); // 0..IH_STEPS
-  // eased cube angle, pulse phase, and an accumulator that auto-advances steps.
-  const [disp, setDisp] = useState({ ang: 0, phase: 0, acc: 0 });
+  const [step, setStep] = useState(0); // 0..IH_STEPS contact-switches done
+  const [st, setSt] = useState({ ang: 0, phase: 0 });
+  const acc = useRef(0);
 
-  // cube angle target = fraction of steps done * commanded target
   const cubeTarget = (step / IH_STEPS) * targetDeg;
-  // which finger is the "risky" one at this step
-  const riskyFinger = step > 0 ? (step - 1) % FINGERS : -1;
+  const riskyFinger = step > 0 ? (step - 1) % FINGER_ANGLES.length : -1;
 
   useRafLoop(
     (dt) => {
-      setDisp((s) => {
-        let ph = s.phase + dt * 2.2;
-        if (ph > Math.PI * 2) ph -= Math.PI * 2;
-        let acc = s.acc;
-        if (playing) {
-          acc += dt;
-          if (acc >= 1.1) {
-            acc = 0;
-            setStep((k) => (k >= IH_STEPS ? k : k + 1));
-          }
-        } else {
-          acc = 0;
+      setSt((s) => ({
+        ang: approach(s.ang, cubeTarget, 0.12, dt),
+        phase: (s.phase + dt * 2.2) % (Math.PI * 2),
+      }));
+      if (playing) {
+        acc.current += dt;
+        if (acc.current >= 1.15) {
+          acc.current = 0;
+          setStep((k) => (k >= IH_STEPS ? k : k + 1));
         }
-        return { ang: approach(s.ang, cubeTarget, 0.14, dt), phase: ph, acc };
-      });
+      } else {
+        acc.current = 0;
+      }
     },
     { playing: inView && !reduced },
   );
 
-  const cubeAng = reduced ? targetDeg : disp.ang;
-  const pulse = reduced ? 0.5 : (Math.sin(disp.phase) + 1) / 2;
+  const cubeAng = reduced ? cubeTarget : st.ang;
+  const pulse = reduced ? 0.5 : (Math.sin(st.phase) + 1) / 2;
+  // lift envelope: right after a switch the cube still has degrees to go, so
+  // the risky finger is off the surface; it eases back on as the cube settles.
+  const stepSize = Math.max(targetDeg / IH_STEPS, 4);
+  const lift = reduced ? 0 : clamp(Math.abs(cubeAng - cubeTarget) / (stepSize * 0.7), 0, 1);
 
-  const CX = 260;
-  const CY = 232;
-  const half = 58;
+  const yawRad = rad(cubeAng);
+  const qCube = quat.fromAxisAngle([0, 0, 1], yawRad);
+  const qGhost = quat.fromAxisAngle([0, 0, 1], rad(targetDeg));
 
-  // cube corners rotated
-  const corners = (ang: number) => {
-    const c = Math.cos(rad(ang));
-    const s = Math.sin(rad(ang));
-    return [
-      [-half, -half],
-      [half, -half],
-      [half, half],
-      [-half, half],
-    ].map(([x, y]) => [CX + x * c - y * s, CY + x * s + y * c]);
-  };
-  const cs = corners(cubeAng);
-  const ghost = corners(targetDeg);
-
-  // finger contact points sit on the cube edges, spaced around it
-  const fingerPts = cs.map(([x, y], i) => {
-    const nx = x - CX;
-    const ny = y - CY;
-    const nl = Math.hypot(nx, ny) || 1;
-    return { x, y, ox: (nx / nl) * 44, oy: (ny / nl) * 44, i };
+  // fingers: base on a ring at the palm edge, tip at the real cube contact.
+  const fingers = FINGER_ANGLES.map((aDeg, i) => {
+    const a = rad(aDeg);
+    const base: V3 = [Math.cos(a) * 0.95, Math.sin(a) * 0.95, 0.06];
+    const dir: V3 = [-Math.cos(a), -Math.sin(a), 0]; // toward the cube axis
+    const hit = rayBox([base[0], base[1], CUBE_C[2]], dir, CUBE_C, yawRad, CUBE_H);
+    const contact: V3 = hit ? hit.pIn : CUBE_C;
+    const n: V3 = hit ? hit.nIn : [Math.cos(a), Math.sin(a), 0];
+    const risky = i === riskyFinger;
+    const tip = risky
+      ? v3.add(v3.add(contact, v3.scale(n, 0.3 * lift)), [0, 0, 0.18 * lift])
+      : contact;
+    const knuckle: V3 = [lerp(base[0], tip[0], 0.55), lerp(base[1], tip[1], 0.55), 0.92];
+    return { base, knuckle, tip, contact, n, risky };
   });
+
+  const inFlight = riskyFinger >= 0 && lift > 0.4;
+  const marker = v3.add(CUBE_C, v3.add(quat.rotate(qCube, [0.28, 0, 0]), [0, 0, 0.29]));
+
+  const prims: Prim3D[] = [
+    ...grid3(1.0, 0.5),
+    // palm
+    ...ring3([0, 0, 0.02], [0, 0, 1], 0.8, R.world, { width: 2 }),
+    label3([0, -0.8, 0.02], "palm", R.world, { anchor: "middle", dy: 16, size: 12 }),
+    // rotation axis
+    seg3([0, 0, 0], [0, 0, 1.25], R.world, { width: 1.5, dash: "4 5", opacity: 0.7 }),
+    label3([0, 0, 1.25], "rotation axis", R.world, { anchor: "middle", dy: -6, size: 11.5 }),
+    // ghost target orientation
+    ...box3(CUBE_C, qGhost, 0.6, 0.6, 0.6, R.plan).map((s) => ({
+      ...s,
+      dash: "4 4",
+      width: 1.2,
+      opacity: 0.75,
+    })),
+    // the cube + a face marker so rotation is visible
+    ...box3(CUBE_C, qCube, 0.56, 0.56, 0.56, R.signal).map((s) => ({ ...s, width: 2 })),
+    seg3(v3.add(CUBE_C, [0, 0, 0.29]), marker, R.signal, { width: 3.5 }),
+    dot3(marker, R.signal, { r: 4 }),
+    // fingers
+    ...fingers.flatMap((f): Prim3D[] => {
+      const col = f.risky ? R.error : R.goal;
+      const out: Prim3D[] = [
+        dot3(f.base, R.world, { r: 4 }),
+        seg3(f.base, f.knuckle, R.world, { width: 4 }),
+        seg3(f.knuckle, f.tip, R.world, { width: 4 }),
+        dot3(f.tip, col, { r: 5.5 }),
+      ];
+      if (showForce && !f.risky) {
+        out.push(
+          seg3(v3.add(f.contact, v3.scale(f.n, 0.26)), v3.add(f.contact, v3.scale(f.n, 0.06)), R.goal, {
+            width: 2.5,
+            opacity: 0.35 + 0.5 * pulse,
+          }),
+          dot3(v3.add(f.contact, v3.scale(f.n, 0.06)), R.goal, { r: 2.5 }),
+        );
+      }
+      return out;
+    }),
+  ];
+
+  const cam: Camera3D = {
+    yawDeg: orbit.yawDeg,
+    pitchDeg: orbit.pitchDeg,
+    dist: 4.8,
+    zoom: 165,
+    target: [0, 0, 0.5],
+  };
 
   const doStep = () => setStep((k) => (k >= IH_STEPS ? k : k + 1));
   const reset = () => {
     setStep(0);
-    setDisp({ ang: 0, phase: 0, acc: 0 });
+    setSt({ ang: 0, phase: 0 });
+    setPlaying(false);
+    acc.current = 0;
+    orbit.reset();
   };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 12.2 · Reorienting an object in-hand"
-      ariaLabel={`A four-finger hand rotating a cube toward a target; contact switch ${step} of ${IH_STEPS}`}
+      ariaLabel={`A four-finger hand rotating a cube toward a target; contact switch ${step} of ${IH_STEPS}. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
-          <Btn onClick={doStep} title="advance one contact-switch">
-            ⏭ step
-          </Btn>
-          <Btn onClick={reset}>↺ reset</Btn>
+          <Transport
+            playing={playing}
+            onPlay={() => setPlaying((p) => !p)}
+            onStep={doStep}
+            onReset={reset}
+          />
           <Slider
             label="target"
             min={0}
@@ -425,116 +507,50 @@ export function RbInHandReorient() {
         </>
       }
     >
-      {/* readout lane */}
-      <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
-        contact switch
-      </text>
-      <text x={200} y={44} fontFamily={MONO} fontSize={15} fontWeight={600} fill={R.ink}>
-        {step} / {IH_STEPS}
-      </text>
-      <text x={300} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
-        cube angle
-      </text>
-      <text x={430} y={44} fontFamily={MONO} fontSize={15} fontWeight={600} fill={R.signal}>
-        {Math.round(cubeAng)}°
-      </text>
-
-      {/* hand structure (palm) */}
-      <ellipse cx={CX} cy={CY + 108} rx={96} ry={30} fill="#eeeeec" stroke={R.world} strokeWidth={2} />
-      <text x={CX} y={CY + 150} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
-        hand
-      </text>
-
-      {/* ghosted target orientation */}
-      <polygon
-        points={ghost.map(([x, y]) => `${x},${y}`).join(" ")}
-        fill="none"
-        stroke={R.plan}
-        strokeWidth={2}
-        strokeDasharray="6 6"
-        opacity={0.8}
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "switch", value: `${step} / ${IH_STEPS}`, color: R.ink },
+          { label: "cube yaw", value: `${Math.round(cubeAng)}°`, color: R.signal },
+          {
+            label: "contacts",
+            value: inFlight ? "3 / 4" : "4 / 4",
+            color: inFlight ? R.error : R.goal,
+          },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "cube" },
+          { color: R.plan, label: "target pose", dash: true },
+          { color: R.goal, label: "holding contact" },
+          { color: R.error, label: "switching finger" },
+        ]}
       />
       <text
-        x={ghost[1][0] + 8}
-        y={ghost[1][1] - 6}
+        x={360}
+        y={424}
+        textAnchor="middle"
         fontFamily={MONO}
-        fontSize={12}
-        fill={R.plan}
+        fontSize={12.5}
+        fill={step >= IH_STEPS ? R.goal : R.world}
+        fontWeight={step >= IH_STEPS ? 600 : 400}
       >
-        target
+        {step >= IH_STEPS
+          ? "reached the target orientation ✓ — six contact switches, six different dynamics regimes"
+          : "every lift-and-replace is a discontinuous switch in the dynamics · drag to orbit"}
       </text>
-
-      {/* the cube */}
-      <polygon
-        points={cs.map(([x, y]) => `${x},${y}`).join(" ")}
-        fill={R.fillBlue}
-        stroke={R.signal}
-        strokeWidth={3}
-      />
-
-      {/* fingers */}
-      {fingerPts.map((f) => {
-        const risky = f.i === riskyFinger;
-        const col = risky ? R.error : R.goal;
-        return (
-          <g key={f.i}>
-            <line
-              x1={f.x + f.ox}
-              y1={f.y + f.oy}
-              x2={f.x + f.ox * 0.15}
-              y2={f.y + f.oy * 0.15}
-              stroke={R.world}
-              strokeWidth={7}
-              strokeLinecap="round"
-            />
-            <circle
-              cx={f.x}
-              cy={f.y}
-              r={7}
-              fill={col}
-              stroke="var(--background)"
-              strokeWidth={1.5}
-            />
-            {showForce && !risky && (
-              <g opacity={0.4 + 0.5 * pulse}>
-                {svgArrow(
-                  f.x + f.ox * 0.7,
-                  f.y + f.oy * 0.7,
-                  f.x + f.ox * 0.2,
-                  f.y + f.oy * 0.2,
-                  R.goal,
-                  2,
-                  6,
-                )}
-              </g>
-            )}
-          </g>
-        );
-      })}
-
-      {/* legend / status lane, bottom */}
-      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
-        <tspan fill={R.goal}>green</tspan> = gripping contact ·{" "}
-        <tspan fill={R.error}>red</tspan> = the finger breaking/sliding (the risky moment)
-      </text>
-      {step >= IH_STEPS && (
-        <text x={40} y={430} fontFamily={MONO} fontSize={13} fill={R.goal} fontWeight={600}>
-          reached target orientation ✓
-        </text>
-      )}
-      {reduced && step < IH_STEPS && (
-        <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: cube shown at target; step still advances the sequence.
-        </text>
-      )}
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 12.3 · Which chapter runs which body part?  (toggle-compare)
-// A line-art humanoid. Click a region to reveal which chapter's method controls
-// it; "show all" labels every region. Each region does a calm idle motion.
+// Fig 12.3 · Which chapter runs which body part?  (true 3D, orbitable)
+// A stick humanoid with each region colored by the chapter that controls it,
+// standing on a real support polygon (convex hull of both feet). Lean and
+// reach sliders move a mass-weighted center of mass; the stability verdict is
+// an honest point-in-polygon test of the CoM's ground projection — the
+// quasi-static version of the ZMP rule from the text.
 // ===========================================================================
 
 type BodyRegion = "legs" | "arms" | "torso" | "head" | "all";
@@ -561,7 +577,7 @@ const REGION_INFO: Record<
     method: "balance control (ZMP)",
     chapter: "Ch 4",
     color: R.signal,
-    why: "keep the ZMP inside the support so the body doesn't tip.",
+    why: "keep the CoM over the support polygon; lean and watch it move.",
   },
   head: {
     label: "head / eyes",
@@ -575,34 +591,140 @@ const REGION_INFO: Record<
 export function RbBodyPartChapters() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
+  const orbit = useOrbit(-35, 16);
   const [sel, setSel] = useState<BodyRegion>("all");
-  const [t, setT] = useState(0);
+  const [lean, setLean] = useState(8);
+  const [reach, setReach] = useState(20);
+  const [stance, setStance] = useState(0.16);
+  const [disp, setDisp] = useState({ lean: 8, reach: 20 });
 
-  useRafLoop((dt) => setT((v) => v + dt), { playing: inView && !reduced });
-  const osc = reduced ? 0 : Math.sin(t * 1.5);
+  useRafLoop(
+    (dt) =>
+      setDisp((s) => ({
+        lean: approach(s.lean, lean, 0.15, dt),
+        reach: approach(s.reach, reach, 0.15, dt),
+      })),
+    { playing: inView && !reduced },
+  );
+  const L = rad(reduced ? lean : disp.lean);
+  const RCH = rad(reduced ? reach : disp.reach);
 
-  const CX = 220;
-  const active = (r: Exclude<BodyRegion, "all">) => sel === "all" || sel === r;
-  const glow = (r: Exclude<BodyRegion, "all">) =>
-    sel === r ? 1 : sel === "all" ? 0.55 : 0.18;
+  // --- skeleton (a stick humanoid; torso and head pitch forward by `lean`,
+  // arms swing forward by `reach`, feet stay planted at ±stance) ------------
+  const pelvis: V3 = [0, 0, 0.92];
+  const hipL: V3 = [0, 0.13, 0.9];
+  const hipR: V3 = [0, -0.13, 0.9];
+  const ankleL: V3 = [0.02, stance, 0.06];
+  const ankleR: V3 = [0.02, -stance, 0.06];
+  const kneeL = v3.add(v3.lerp(hipL, ankleL, 0.55), [0.07, 0, 0]);
+  const kneeR = v3.add(v3.lerp(hipR, ankleR, 0.55), [0.07, 0, 0]);
+  const chest = v3.add(pelvis, rotY([0, 0, 0.44], L));
+  const headC = v3.add(pelvis, rotY([0, 0, 0.62], L));
+  const shBase = v3.add(pelvis, rotY([0, 0, 0.42], L));
+  const shL = v3.add(shBase, [0, 0.21, 0]);
+  const shR = v3.add(shBase, [0, -0.21, 0]);
+  const armDir = rotY([Math.sin(RCH), 0, -Math.cos(RCH)], L);
+  const elbL = v3.add(shL, v3.scale(armDir, 0.24));
+  const elbR = v3.add(shR, v3.scale(armDir, 0.24));
+  const handL = v3.add(elbL, v3.scale(armDir, 0.24));
+  const handR = v3.add(elbR, v3.scale(armDir, 0.24));
 
-  const colFor = (r: Exclude<BodyRegion, "all">) =>
-    active(r) ? REGION_INFO[r].color : R.world;
+  // --- mass-weighted center of mass (rough human segment fractions) --------
+  const parts: { m: number; p: V3 }[] = [
+    { m: 0.08, p: headC },
+    { m: 0.48, p: v3.add(pelvis, rotY([0, 0, 0.26], L)) },
+    { m: 0.05, p: elbL },
+    { m: 0.05, p: elbR },
+    { m: 0.17, p: v3.lerp(hipL, ankleL, 0.45) },
+    { m: 0.17, p: v3.lerp(hipR, ankleR, 0.45) },
+  ];
+  const mTot = parts.reduce((s, q) => s + q.m, 0);
+  const com: V3 = [
+    parts.reduce((s, q) => s + q.m * q.p[0], 0) / mTot,
+    parts.reduce((s, q) => s + q.m * q.p[1], 0) / mTot,
+    parts.reduce((s, q) => s + q.m * q.p[2], 0) / mTot,
+  ];
 
-  // joints
-  const hip = { x: CX, y: 250 };
-  const shoulderL = { x: CX - 40, y: 150 };
-  const shoulderR = { x: CX + 40, y: 150 };
-  const armL = { x: CX - 66, y: 220 + osc * 16 };
-  const armR = { x: CX + 66, y: 220 - osc * 16 };
-  const footL = { x: CX - 26 + osc * 6, y: 360 };
-  const footR = { x: CX + 26 - osc * 6, y: 360 };
+  // --- support polygon: convex hull of both feet, then point-in-polygon ----
+  const footCorners = (fy: number): [number, number][] => [
+    [-0.08, fy - 0.055],
+    [0.19, fy - 0.055],
+    [0.19, fy + 0.055],
+    [-0.08, fy + 0.055],
+  ];
+  const hull = hull2([...footCorners(stance), ...footCorners(-stance)]);
+  const { inside: stable, margin } = hullMargin(hull, [com[0], com[1]]);
+  const verdict = stable ? R.goal : R.error;
+
+  const glow = (r: Exclude<BodyRegion, "all">) => (sel === "all" ? 0.95 : sel === r ? 1 : 0.2);
+  const cl = (r: Exclude<BodyRegion, "all">) => REGION_INFO[r].color;
+
+  const prims: Prim3D[] = [
+    ...grid3(0.9, 0.3),
+    // support polygon (the stability region) and the two feet
+    {
+      kind: "poly",
+      pts: hull.map(([x, y]): V3 => [x, y, 0.004]),
+      fill: stable ? R.fillGreen : R.fillRed,
+      opacity: 0.5,
+      stroke: verdict,
+    },
+    {
+      kind: "poly",
+      pts: footCorners(stance).map(([x, y]): V3 => [x, y, 0.012]),
+      fill: "#e3e3df",
+      opacity: 0.9,
+      stroke: cl("legs"),
+    },
+    {
+      kind: "poly",
+      pts: footCorners(-stance).map(([x, y]): V3 => [x, y, 0.012]),
+      fill: "#e3e3df",
+      opacity: 0.9,
+      stroke: cl("legs"),
+    },
+    // legs (Ch 7)
+    seg3(hipL, kneeL, cl("legs"), { width: 5, opacity: glow("legs") }),
+    seg3(kneeL, ankleL, cl("legs"), { width: 5, opacity: glow("legs") }),
+    seg3(hipR, kneeR, cl("legs"), { width: 5, opacity: glow("legs") }),
+    seg3(kneeR, ankleR, cl("legs"), { width: 5, opacity: glow("legs") }),
+    // torso / whole-body (Ch 4)
+    seg3(hipL, hipR, cl("torso"), { width: 5, opacity: glow("torso") }),
+    seg3(pelvis, chest, cl("torso"), { width: 7, opacity: glow("torso") }),
+    seg3(shL, shR, cl("torso"), { width: 4, opacity: glow("torso") }),
+    // arms (Ch 9)
+    seg3(shL, elbL, cl("arms"), { width: 4, opacity: glow("arms") }),
+    seg3(elbL, handL, cl("arms"), { width: 4, opacity: glow("arms") }),
+    seg3(shR, elbR, cl("arms"), { width: 4, opacity: glow("arms") }),
+    seg3(elbR, handR, cl("arms"), { width: 4, opacity: glow("arms") }),
+    dot3(handL, cl("arms"), { r: 4.5 }),
+    dot3(handR, cl("arms"), { r: 4.5 }),
+    // head (Ch 8)
+    seg3(chest, headC, cl("head"), { width: 3, opacity: glow("head") }),
+    ...ring3(headC, [0, 1, 0], 0.09, cl("head"), { width: 2, opacity: glow("head") }),
+    dot3(headC, cl("head"), { r: 3.5 }),
+    // center of mass + its ground projection (the quasi-static ZMP)
+    dot3(com, R.ink, { r: 5 }),
+    label3(com, "CoM", R.ink, { dx: 10, dy: -6, size: 12 }),
+    seg3(com, [com[0], com[1], 0.01], R.ink, { width: 1.5, dash: "3 4", opacity: 0.8 }),
+    dot3([com[0], com[1], 0.01], verdict, { r: 5.5 }),
+  ];
+
+  const cam: Camera3D = {
+    yawDeg: orbit.yawDeg,
+    pitchDeg: orbit.pitchDeg,
+    dist: 5,
+    zoom: 150,
+    cx: 240,
+    target: [0, 0, 0.65],
+  };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 12.3 · Which chapter runs which body part?"
-      ariaLabel={`A humanoid with body regions mapped to chapters; ${sel === "all" ? "all regions shown" : sel + " selected"}`}
+      ariaLabel={`A 3D humanoid with body regions mapped to chapters; ${sel === "all" ? "all regions shown" : sel + " selected"}; the robot is ${stable ? "balanced" : "tipping"}. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
           <Tabs
@@ -616,98 +738,92 @@ export function RbBodyPartChapters() {
             value={sel}
             onChange={setSel}
           />
+          <Slider label="lean" min={-25} max={45} value={lean} onChange={setLean} fmt={(v) => `${v}°`} />
+          <Slider label="reach" min={0} max={90} value={reach} onChange={setReach} fmt={(v) => `${v}°`} />
+          <Slider
+            label="stance"
+            min={0.1}
+            max={0.3}
+            step={0.01}
+            value={stance}
+            onChange={setStance}
+            fmt={(v) => `${Math.round(v * 100)} cm`}
+          />
+          <Btn
+            onClick={() => {
+              setLean(8);
+              setReach(20);
+              setStance(0.16);
+              orbit.reset();
+            }}
+          >
+            ↺ reset
+          </Btn>
         </>
       }
     >
-      {/* ground */}
-      <line x1={CX - 120} y1={366} x2={CX + 120} y2={366} stroke={R.line} strokeWidth={2} />
-
-      {/* legs (Ch7) */}
-      <g strokeWidth={9} strokeLinecap="round" opacity={glow("legs")}>
-        <line x1={hip.x - 16} y1={hip.y} x2={footL.x} y2={footL.y} stroke={colFor("legs")} />
-        <line x1={hip.x + 16} y1={hip.y} x2={footR.x} y2={footR.y} stroke={colFor("legs")} />
-      </g>
-      {/* torso / whole-body (Ch4) */}
-      <g opacity={glow("torso")}>
-        <line
-          x1={CX}
-          y1={150}
-          x2={CX}
-          y2={250}
-          stroke={colFor("torso")}
-          strokeWidth={12}
-          strokeLinecap="round"
-        />
-      </g>
-      {/* arms (Ch9) */}
-      <g strokeWidth={8} strokeLinecap="round" opacity={glow("arms")}>
-        <line x1={shoulderL.x} y1={shoulderL.y} x2={armL.x} y2={armL.y} stroke={colFor("arms")} />
-        <line x1={shoulderR.x} y1={shoulderR.y} x2={armR.x} y2={armR.y} stroke={colFor("arms")} />
-        <circle cx={armL.x} cy={armL.y} r={7} fill={colFor("arms")} />
-        <circle cx={armR.x} cy={armR.y} r={7} fill={colFor("arms")} />
-      </g>
-      {/* head (Ch8) */}
-      <g opacity={glow("head")}>
-        <circle cx={CX} cy={122} r={22} fill={active("head") ? R.fillBlue : "#eeeeec"} stroke={colFor("head")} strokeWidth={3} />
-      </g>
-
-      {/* selection glow ring on active region's anchor */}
-      {sel !== "all" && (
-        <circle
-          cx={sel === "legs" ? CX : sel === "arms" ? CX + 66 : sel === "torso" ? CX : CX}
-          cy={sel === "legs" ? 340 : sel === "arms" ? 220 : sel === "torso" ? 200 : 122}
-          r={30}
-          fill="none"
-          stroke={REGION_INFO[sel].color}
-          strokeWidth={2}
-          strokeDasharray="4 5"
-          opacity={0.6 + 0.3 * (reduced ? 0.5 : (Math.sin(t * 3) + 1) / 2)}
-        />
-      )}
-
-      {/* callout panel, right lane */}
-      <line x1={440} y1={60} x2={440} y2={390} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "balance", value: stable ? "stable ✓" : "tipping ✗", color: verdict },
+          { label: "margin", value: `${(margin * 100).toFixed(1)} cm`, color: verdict },
+          { label: "CoM fwd", value: `${(com[0] * 100).toFixed(1)} cm`, color: R.ink },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.goal, label: "legs · RL (Ch 7)" },
+          { color: R.plan, label: "arms · VLA (Ch 9)" },
+          { color: R.signal, label: "torso · ZMP (Ch 4)" },
+          { color: R.world, label: "head · VLM (Ch 8)" },
+        ]}
+      />
+      {/* callout panel, fixed right lane under the legend */}
       {sel === "all" ? (
         <>
-          <text x={468} y={96} fontFamily={MONO} fontSize={15} fontWeight={600} fill={R.ink}>
+          <text x={520} y={150} fontFamily={MONO} fontSize={13.5} fontWeight={600} fill={R.ink}>
             the factored humanoid
           </text>
-          {(["legs", "torso", "arms", "head"] as const).map((r, i) => (
-            <g key={r}>
-              <circle cx={472} cy={132 + i * 46} r={7} fill={REGION_INFO[r].color} />
-              <text x={488} y={128 + i * 46} fontFamily={MONO} fontSize={14} fill={R.ink} fontWeight={600}>
-                {REGION_INFO[r].label}
-              </text>
-              <text x={488} y={148 + i * 46} fontFamily={MONO} fontSize={12} fill={R.world}>
-                {REGION_INFO[r].method} · {REGION_INFO[r].chapter}
-              </text>
-            </g>
+          {wrapText(
+            "one body, four tools: pick a tab to inspect a region, or lean until the CoM leaves the feet.",
+            27,
+          ).map((ln, i) => (
+            <text key={i} x={520} y={172 + i * 18} fontFamily={MONO} fontSize={12} fill={R.world}>
+              {ln}
+            </text>
           ))}
         </>
       ) : (
         <>
-          <text x={468} y={110} fontFamily={MONO} fontSize={16} fontWeight={600} fill={REGION_INFO[sel].color}>
+          <text x={520} y={150} fontFamily={MONO} fontSize={13.5} fontWeight={600} fill={REGION_INFO[sel].color}>
             {REGION_INFO[sel].label}
           </text>
-          <text x={468} y={150} fontFamily={MONO} fontSize={14} fill={R.world}>
-            method
-          </text>
-          <text x={468} y={172} fontFamily={MONO} fontSize={15} fill={R.ink} fontWeight={600}>
+          <text x={520} y={172} fontFamily={MONO} fontSize={12.5} fill={R.ink}>
             {REGION_INFO[sel].method}
           </text>
-          <text x={468} y={206} fontFamily={MONO} fontSize={14} fill={R.world}>
-            chapter
-          </text>
-          <text x={468} y={228} fontFamily={MONO} fontSize={15} fill={R.ink} fontWeight={600}>
+          <text x={520} y={192} fontFamily={MONO} fontSize={12.5} fill={R.world}>
             {REGION_INFO[sel].chapter}
           </text>
-          {wrapText(REGION_INFO[sel].why, 30).map((ln, i) => (
-            <text key={i} x={468} y={266 + i * 20} fontFamily={MONO} fontSize={13} fill={R.world}>
+          {wrapText(REGION_INFO[sel].why, 27).map((ln, i) => (
+            <text key={i} x={520} y={218 + i * 18} fontFamily={MONO} fontSize={12} fill={R.world}>
               {ln}
             </text>
           ))}
         </>
       )}
+      <text
+        x={360}
+        y={424}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={12.5}
+        fill={stable ? R.world : R.error}
+        fontWeight={stable ? 400 : 600}
+      >
+        {stable
+          ? "quasi-static balance: the CoM ground projection (≈ ZMP) stays inside the support polygon"
+          : "CoM projects outside the support polygon — the robot tips"}
+      </text>
     </Stage>
   );
 }
@@ -730,7 +846,7 @@ function wrapText(s: string, maxChars: number): string[] {
 }
 
 // ===========================================================================
-// Fig 12.4 · The pub/sub graph of a real robot  (animated pipeline)
+// Fig 12.4 · The pub/sub graph of a real robot  (animated pipeline, 2D)
 // A ROS 2 node graph; a data token flows camera -> perception -> planner ->
 // controller -> gripper. Toggle sense/plan/act coloring; kill a node to show
 // only its subscribers go dark. TF node quietly pulses publishing transforms.
@@ -744,12 +860,12 @@ type GNode = {
   beat: "sense" | "plan" | "act" | "tf";
 };
 const GNODES: GNode[] = [
-  { id: "cam", x: 100, y: 120, label: "camera", beat: "sense" },
-  { id: "perc", x: 270, y: 120, label: "perception", beat: "sense" },
-  { id: "plan", x: 440, y: 120, label: "planner / VLA", beat: "plan" },
-  { id: "ctrl", x: 610, y: 220, label: "controller", beat: "act" },
-  { id: "grip", x: 440, y: 320, label: "gripper", beat: "act" },
-  { id: "tf", x: 190, y: 300, label: "TF", beat: "tf" },
+  { id: "cam", x: 100, y: 130, label: "camera", beat: "sense" },
+  { id: "perc", x: 270, y: 130, label: "perception", beat: "sense" },
+  { id: "plan", x: 440, y: 130, label: "planner / VLA", beat: "plan" },
+  { id: "ctrl", x: 610, y: 230, label: "controller", beat: "act" },
+  { id: "grip", x: 440, y: 330, label: "gripper", beat: "act" },
+  { id: "tf", x: 190, y: 310, label: "TF", beat: "tf" },
 ];
 // edges = the token path in order, with topic labels
 const GEDGES: { from: string; to: string; topic: string; path: boolean }[] = [
@@ -793,11 +909,26 @@ export function RbPubSubGraph() {
   );
 
   const node = (id: string) => GNODES.find((n) => n.id === id)!;
+  // trim edges to the node borders so arrowheads (and the token) stay visible
+  const trimEdge = (a: GNode, b: GNode) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const dEdge = 1 / Math.max(Math.abs(ux) / NW, Math.abs(uy) / NH);
+    return {
+      x1: a.x + ux * (dEdge + 4),
+      y1: a.y + uy * (dEdge + 4),
+      x2: b.x - ux * (dEdge + 8),
+      y2: b.y - uy * (dEdge + 8),
+    };
+  };
+
   // which nodes are starved: any node downstream of the killed one on the path
   const starved = new Set<string>();
   if (killed) {
     starved.add(killed);
-    // propagate along path edges
     let changed = true;
     while (changed) {
       changed = false;
@@ -815,8 +946,9 @@ export function RbPubSubGraph() {
   const e = pathEdges[seg];
   const a = node(e.from);
   const b = node(e.to);
-  const tokenX = reduced ? a.x : lerp(a.x, b.x, f);
-  const tokenY = reduced ? a.y : lerp(a.y, b.y, f);
+  const t = trimEdge(a, b);
+  const tokenX = reduced ? t.x1 : lerp(t.x1, t.x2, f);
+  const tokenY = reduced ? t.y1 : lerp(t.y1, t.y2, f);
   const tokenAlive = !killed || (!starved.has(e.from) && !starved.has(e.to));
   const tfPulse = reduced ? 0.5 : (Math.sin(st.tf) + 1) / 2;
 
@@ -844,9 +976,14 @@ export function RbPubSubGraph() {
       ariaLabel="A ROS 2 node graph with a data token flowing through the sense-plan-act loop"
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
+          <Transport
+            playing={playing}
+            onPlay={toggle}
+            onReset={() => {
+              setSt({ phase: 0, tf: 0 });
+              setKilled(null);
+            }}
+          />
           <Slider
             label="speed"
             min={0.25}
@@ -869,18 +1006,19 @@ export function RbPubSubGraph() {
         </>
       }
     >
-      {/* edges */}
+      {/* edges, trimmed to node borders */}
       {GEDGES.map((ed, i) => {
         const na = node(ed.from);
         const nb = node(ed.to);
+        const tr = trimEdge(na, nb);
         const dead = killed != null && (starved.has(ed.from) || starved.has(ed.to));
-        const col = dead ? R.error : ed.path ? R.line : R.world;
+        const col = dead ? R.error : ed.path ? R.world : R.line;
         return (
-          <g key={i} opacity={dead ? 0.5 : 0.9}>
-            {svgArrow(na.x, na.y, nb.x, nb.y, col, 2.5, 9)}
+          <g key={i} opacity={dead ? 0.55 : 0.9}>
+            {svgArrow(tr.x1, tr.y1, tr.x2, tr.y2, col, 2.5, 9)}
             <text
               x={(na.x + nb.x) / 2}
-              y={(na.y + nb.y) / 2 - 8}
+              y={(na.y + nb.y) / 2 - 10}
               textAnchor="middle"
               fontFamily={MONO}
               fontSize={12}
@@ -894,8 +1032,7 @@ export function RbPubSubGraph() {
 
       {/* nodes */}
       {GNODES.map((n) => {
-        const near =
-          !reduced && Math.hypot(n.x - tokenX, n.y - tokenY) < 40 && tokenAlive;
+        const near = !reduced && Math.hypot(n.x - tokenX, n.y - tokenY) < 40 && tokenAlive;
         const isTf = n.beat === "tf";
         return (
           <g key={n.id}>
@@ -933,26 +1070,50 @@ export function RbPubSubGraph() {
         </g>
       )}
 
-      {/* status lane, bottom */}
-      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={killed ? R.error : R.world}>
-        {killed
-          ? "perception killed: only its subscribers go dark; camera & TF keep publishing"
-          : "one token traces sense → plan → act; nodes agree on topics, not on each other"}
+      <Readout
+        rows={[
+          { label: "in flight", value: e.topic, color: tokenAlive ? R.ink : R.error },
+          { label: "hop", value: `${seg + 1} / ${pathEdges.length}`, color: R.ink },
+          {
+            label: "graph",
+            value: killed ? "degraded" : "nominal",
+            color: killed ? R.error : R.goal,
+          },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "sense nodes" },
+          { color: R.plan, label: "plan nodes" },
+          { color: R.goal, label: "act nodes" },
+          { color: R.world, label: "TF (transforms)" },
+        ]}
+      />
+      <text
+        x={360}
+        y={424}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={12.5}
+        fill={killed ? R.error : R.world}
+        fontWeight={killed ? 600 : 400}
+      >
+        {reduced
+          ? "Reduced motion: graph shown static; kill / phase toggles still work."
+          : killed
+            ? "perception killed: only its subscribers go dark; camera and TF keep publishing"
+            : "one token traces sense → plan → act; nodes agree on topics, not on each other"}
       </text>
-      {reduced && (
-        <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: graph shown static; kill / phase toggles still work.
-        </text>
-      )}
     </Stage>
   );
 }
 
 // ===========================================================================
 // Fig 12.5 · The generalization gap: seen vs unseen  (slider-driven diagram)
-// Two success-rate distributions (seen = green, unseen = amber) drawn as bell
-// curves with confidence bands. Fewer trials fattens the bands; more novelty
-// pushes the unseen mean down and widens the gap.
+// Each bell is the *sampling distribution* of a measured success rate over n
+// trials: standard error sqrt(p(1-p)/n), 95% band = ±1.96·se. Fewer trials
+// fatten the bells; more novelty drags the unseen mean down. The verdict is
+// a real two-proportion significance test on the gap.
 // ===========================================================================
 
 export function RbGeneralizationGap() {
@@ -961,20 +1122,23 @@ export function RbGeneralizationGap() {
   const [trials, setTrials] = useState(50);
   const [novelty, setNovelty] = useState(50);
   const [showCI, setShowCI] = useState(true);
-  const [disp, setDisp] = useState({ seen: 0.88, unseen: 0.55, band: 0.08 });
+  const [disp, setDisp] = useState({ seen: 0.88, unseen: 0.57, bs: 0.09, bu: 0.14 });
 
-  // targets
+  // targets: binomial standard errors, the honest statistics of n trials
   const seenMean = 0.88;
   const unseenMean = clamp(0.88 - (novelty / 100) * 0.62, 0.15, 0.88);
-  // confidence half-width ~ 1/sqrt(trials), scaled
-  const band = clamp(0.55 / Math.sqrt(trials), 0.015, 0.25);
+  const seS = Math.sqrt((seenMean * (1 - seenMean)) / trials);
+  const seU = Math.sqrt((unseenMean * (1 - unseenMean)) / trials);
+  const bandS = 1.96 * seS;
+  const bandU = 1.96 * seU;
 
   useRafLoop(
     (dt) => {
       setDisp((s) => ({
         seen: approach(s.seen, seenMean, 0.16, dt),
         unseen: approach(s.unseen, unseenMean, 0.16, dt),
-        band: approach(s.band, band, 0.16, dt),
+        bs: approach(s.bs, bandS, 0.16, dt),
+        bu: approach(s.bu, bandU, 0.16, dt),
       }));
     },
     { playing: inView && !reduced },
@@ -982,62 +1146,48 @@ export function RbGeneralizationGap() {
 
   const sMean = reduced ? seenMean : disp.seen;
   const uMean = reduced ? unseenMean : disp.unseen;
-  const bw = reduced ? band : disp.band;
+  const bS = reduced ? bandS : disp.bs;
+  const bU = reduced ? bandU : disp.bu;
 
   // plot area
   const X0 = 90;
   const X1 = 640;
-  const Y0 = 90;
+  const Y0 = 112;
   const Y1 = 330;
   const rateToX = (r: number) => X0 + r * (X1 - X0);
-  const sigma = 0.05 + bw; // curve spread grows with uncertainty
 
-  // gaussian curve as a path across the plot, peaked at mean
-  const curve = (mean: number, color: string, fill: string) => {
+  // sampling-distribution bell for a measured rate: sigma = se
+  const curve = (mean: number, sigma: number, color: string, fill: string) => {
     const N = 60;
+    const s = Math.max(sigma, 0.012);
     let p = `M ${X0} ${Y1} `;
     for (let i = 0; i <= N; i++) {
       const r = i / N;
-      const g = Math.exp(-0.5 * ((r - mean) / sigma) ** 2);
+      const g = Math.exp(-0.5 * ((r - mean) / s) ** 2);
       const x = rateToX(r);
       const y = Y1 - g * (Y1 - Y0) * 0.82;
       p += `L ${x.toFixed(1)} ${y.toFixed(1)} `;
     }
     p += `L ${X1} ${Y1} Z`;
-    return (
-      <path d={p} fill={fill} opacity={0.55} stroke={color} strokeWidth={2.5} />
-    );
+    return <path d={p} fill={fill} opacity={0.55} stroke={color} strokeWidth={2.5} />;
   };
 
-  const gapNoisy = Math.abs(sMean - uMean) < bw * 1.6;
+  // two-proportion z-test on the gap (the real "is this meaningful" check)
+  const sig = Math.abs(seenMean - unseenMean) > 1.96 * Math.hypot(seS, seU);
+  const gapNoisy = !sig;
   const gapPct = Math.round((sMean - uMean) * 100);
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 12.5 · The generalization gap: seen vs unseen"
-      ariaLabel={`Success-rate distributions for seen and unseen conditions; gap ${gapPct} percent, ${gapNoisy ? "inside the noise band" : "statistically clear"}`}
+      ariaLabel={`Success-rate sampling distributions for seen and unseen conditions; gap ${gapPct} points, ${gapNoisy ? "inside the noise band" : "statistically clear"}`}
       controls={
         <>
-          <Slider
-            label="trials"
-            min={5}
-            max={400}
-            step={5}
-            value={trials}
-            onChange={setTrials}
-            fmt={(v) => `${v}`}
-          />
-          <Slider
-            label="novelty"
-            min={0}
-            max={100}
-            value={novelty}
-            onChange={setNovelty}
-            fmt={(v) => `${v}%`}
-          />
+          <Slider label="trials" min={5} max={400} step={5} value={trials} onChange={setTrials} fmt={(v) => `${v}`} />
+          <Slider label="novelty" min={0} max={100} value={novelty} onChange={setNovelty} fmt={(v) => `${v}%`} />
           <Btn onClick={() => setShowCI((v) => !v)} active={showCI}>
-            {showCI ? "✓ confidence" : "show confidence"}
+            {showCI ? "✓ 95% bands" : "show 95% bands"}
           </Btn>
           <Btn
             onClick={() => {
@@ -1061,18 +1211,32 @@ export function RbGeneralizationGap() {
         </g>
       ))}
       <text x={(X0 + X1) / 2} y={Y1 + 44} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>
-        success rate →
+        measured success rate →
       </text>
 
-      {/* distributions */}
-      {curve(uMean, R.plan, R.fillAmber)}
-      {curve(sMean, R.goal, R.fillGreen)}
+      {/* sampling distributions */}
+      {curve(uMean, bU / 1.96, R.plan, R.fillAmber)}
+      {curve(sMean, bS / 1.96, R.goal, R.fillGreen)}
 
-      {/* confidence bands at each mean */}
+      {/* 95% confidence bands at each mean */}
       {showCI && (
         <>
-          <rect x={rateToX(clamp(sMean - bw, 0, 1))} y={Y0 - 6} width={rateToX(sMean + bw) - rateToX(sMean - bw)} height={Y1 - Y0 + 6} fill={R.goal} opacity={0.12} />
-          <rect x={rateToX(clamp(uMean - bw, 0, 1))} y={Y0 - 6} width={rateToX(clamp(uMean + bw, 0, 1)) - rateToX(clamp(uMean - bw, 0, 1))} height={Y1 - Y0 + 6} fill={R.plan} opacity={0.12} />
+          <rect
+            x={rateToX(clamp(sMean - bS, 0, 1))}
+            y={Y0 - 6}
+            width={rateToX(clamp(sMean + bS, 0, 1)) - rateToX(clamp(sMean - bS, 0, 1))}
+            height={Y1 - Y0 + 6}
+            fill={R.goal}
+            opacity={0.12}
+          />
+          <rect
+            x={rateToX(clamp(uMean - bU, 0, 1))}
+            y={Y0 - 6}
+            width={rateToX(clamp(uMean + bU, 0, 1)) - rateToX(clamp(uMean - bU, 0, 1))}
+            height={Y1 - Y0 + 6}
+            fill={R.plan}
+            opacity={0.12}
+          />
         </>
       )}
 
@@ -1081,37 +1245,64 @@ export function RbGeneralizationGap() {
       <line x1={rateToX(uMean)} y1={Y0 - 6} x2={rateToX(uMean)} y2={Y1} stroke={R.plan} strokeWidth={2} strokeDasharray="5 5" />
 
       {/* the gap bracket */}
-      <line x1={rateToX(uMean)} y1={Y0 - 14} x2={rateToX(sMean)} y2={Y0 - 14} stroke={R.error} strokeWidth={2} strokeDasharray={gapNoisy ? "3 4" : undefined} />
-      <text x={(rateToX(uMean) + rateToX(sMean)) / 2} y={Y0 - 20} textAnchor="middle" fontFamily={MONO} fontSize={13} fontWeight={600} fill={R.error}>
-        gap {gapPct}%
+      <line
+        x1={rateToX(uMean)}
+        y1={Y0 - 12}
+        x2={rateToX(sMean)}
+        y2={Y0 - 12}
+        stroke={R.error}
+        strokeWidth={2}
+        strokeDasharray={gapNoisy ? "3 4" : undefined}
+      />
+      <text
+        x={(rateToX(uMean) + rateToX(sMean)) / 2}
+        y={Y0 - 20}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={13}
+        fontWeight={600}
+        fill={R.error}
+      >
+        gap {gapPct} pp
       </text>
 
-      {/* legend lane, top-left */}
-      <text x={40} y={44} fontFamily={MONO} fontSize={13} fill={R.goal} fontWeight={600}>
-        ● seen (flattering)
+      <Readout
+        rows={[
+          { label: "seen", value: `${Math.round(sMean * 100)}% ± ${Math.round(bS * 100)}`, color: R.goal },
+          { label: "unseen", value: `${Math.round(uMean * 100)}% ± ${Math.round(bU * 100)}`, color: R.plan },
+          { label: "gap", value: `${gapPct} pp`, color: R.error },
+          { label: "verdict", value: sig ? "clear" : "noise", color: sig ? R.goal : R.error },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.goal, label: "seen (flattering)" },
+          { color: R.plan, label: "unseen (honest)" },
+          { color: R.error, label: "the gap", dash: true },
+        ]}
+      />
+      <text
+        x={360}
+        y={424}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={12.5}
+        fill={gapNoisy ? R.error : R.world}
+        fontWeight={gapNoisy ? 600 : 400}
+      >
+        {reduced
+          ? "Reduced motion: distributions shown static; sliders still recompute the gap."
+          : gapNoisy
+            ? "too few trials: the 95% intervals overlap and the gap dissolves into noise"
+            : "each bell = the spread of a measured rate over n trials; a big seen/unseen gap means it memorized"}
       </text>
-      <text x={230} y={44} fontFamily={MONO} fontSize={13} fill={R.plan} fontWeight={600}>
-        ● unseen (honest)
-      </text>
-
-      {/* status lane, bottom */}
-      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={gapNoisy ? R.error : R.world}>
-        {gapNoisy
-          ? "too few trials: the gap has dissolved into noise; the comparison is meaningless"
-          : "the seen/unseen gap is the honest measure; a big gap means it memorized, not learned"}
-      </text>
-      {reduced && (
-        <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: distributions shown static; sliders still recompute the gap.
-        </text>
-      )}
     </Stage>
   );
 }
 
 // ===========================================================================
 // Fig 12.6 · Stiff vs compliant: what happens when a human is in the way
-// (toggle-compare)
+// (toggle-compare, 2D)
 // The same arm runs into a hand two ways. Stiff drives through and spikes the
 // force past the limit (red). Compliant senses the resistance and halts at its
 // force cap (green). A force gauge tracks the contact force live.
@@ -1173,9 +1364,9 @@ export function RbStiffVsCompliant() {
     setSt({ reach: 0, force: 0 });
   };
 
-  // gauge geometry (top-left readout lane)
-  const GX = 40;
-  const GY = 60;
+  // gauge geometry (top-left readout lane, under the numeric rows)
+  const GX = 24;
+  const GY = 96;
   const GW = 240;
   const limitX = GX + forceLimit * GW;
 
@@ -1213,28 +1404,28 @@ export function RbStiffVsCompliant() {
         </>
       }
     >
-      {/* force gauge, top-left */}
-      <text x={GX} y={48} fontFamily={MONO} fontSize={14} fill={R.world}>
-        contact force
-      </text>
+      <Readout
+        rows={[
+          { label: "mode", value: mode, color: R.ink },
+          { label: "contact force", value: `${Math.round(force * 100)}%`, color: danger ? R.error : R.goal },
+          { label: "force limit", value: `${Math.round(forceLimit * 100)}%`, color: R.ink },
+        ]}
+      />
+      {/* force gauge under the readout */}
       <rect x={GX} y={GY} width={GW} height={16} rx={8} fill="#e7e7e4" />
-      {/* danger zone (past limit) */}
-      <rect x={limitX} y={GY} width={GX + GW - limitX} height={16} rx={0} fill={R.fillRed} opacity={0.6} />
+      <rect x={limitX} y={GY} width={GX + GW - limitX} height={16} fill={R.fillRed} opacity={0.6} />
       <rect x={GX} y={GY} width={GW * force} height={16} rx={8} fill={danger ? R.error : R.goal} />
       <line x1={limitX} y1={GY - 5} x2={limitX} y2={GY + 21} stroke={R.ink} strokeWidth={2} />
-      <text x={limitX} y={GY - 10} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.ink}>
+      <text x={limitX} y={GY + 36} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.ink}>
         limit
-      </text>
-      <text x={GX + GW + 14} y={GY + 13} fontFamily={MONO} fontSize={14} fontWeight={600} fill={danger ? R.error : R.goal}>
-        {Math.round(force * 100)}%
       </text>
 
       {/* ground / bench */}
       <line x1={100} y1={330} x2={660} y2={330} stroke={R.line} strokeWidth={2} />
 
       {/* target marker (command) */}
-      <line x1={TARGET_X} y1={150} x2={TARGET_X} y2={330} stroke={R.plan} strokeWidth={1.5} strokeDasharray="5 6" />
-      <text x={TARGET_X} y={144} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.plan}>
+      <line x1={TARGET_X} y1={160} x2={TARGET_X} y2={330} stroke={R.plan} strokeWidth={1.5} strokeDasharray="5 6" />
+      <text x={TARGET_X} y={152} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.plan}>
         target
       </text>
 
@@ -1259,21 +1450,33 @@ export function RbStiffVsCompliant() {
         <circle cx={HAND_X} cy={265} r={danger ? 16 : 12} fill="none" stroke={danger ? R.error : R.goal} strokeWidth={3} opacity={0.8} />
       )}
 
-      {/* status lane, bottom */}
-      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={danger ? R.error : mode === "compliant" ? R.goal : R.world}>
-        {mode === "stiff"
-          ? danger
-            ? "STIFF: drives through the hand; force spikes past the limit into the danger zone"
-            : "stiff, position-controlled: it will not yield. Press run"
-          : force >= forceLimit - 0.03 && reach >= contactReach - 0.005
-            ? "COMPLIANT: senses the resistance and halts safely under its force cap ✓"
-            : "compliant, force-limited: it yields on contact. Press run"}
+      <Legend
+        items={[
+          { color: R.signal, label: "arm (safe)" },
+          { color: R.error, label: "over the limit" },
+          { color: R.plan, label: "commanded target", dash: true },
+          { color: R.world, label: "human hand" },
+        ]}
+      />
+      <text
+        x={360}
+        y={424}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={12.5}
+        fill={danger ? R.error : mode === "compliant" ? R.goal : R.world}
+        fontWeight={danger ? 600 : 400}
+      >
+        {reduced
+          ? "Reduced motion: final state shown per tab; the force limit slider still applies."
+          : mode === "stiff"
+            ? danger
+              ? "STIFF: drives through the hand; force spikes past the limit into the danger zone"
+              : "stiff, position-controlled: it will not yield — press run"
+            : force >= forceLimit - 0.03 && reach >= contactReach - 0.005
+              ? "COMPLIANT: senses the resistance and halts safely under its force cap ✓"
+              : "compliant, force-limited: it yields on contact — press run"}
       </text>
-      {reduced && (
-        <text x={40} y={430} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: final state shown per tab; the force limit slider still applies.
-        </text>
-      )}
     </Stage>
   );
 }
