@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MathText } from "../Math";
 
 // Shared palette for chapter diagrams. Monochrome marks use the site's theme
 // variables; a small set of accent colors distinguishes classes/clusters.
@@ -155,7 +156,7 @@ export function InteractiveFrame({
       </div>
       {caption && (
         <figcaption className="mt-2 text-xs text-[var(--muted)]">
-          {caption}
+          <MathText>{caption}</MathText>
         </figcaption>
       )}
     </figure>
@@ -188,7 +189,7 @@ export function DiagramFrame({
       </div>
       {caption && (
         <figcaption className="mt-2 text-xs text-[var(--muted)]">
-          {caption}
+          <MathText>{caption}</MathText>
         </figcaption>
       )}
     </figure>

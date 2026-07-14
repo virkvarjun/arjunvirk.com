@@ -238,7 +238,7 @@ export default async function ChapterPage({
               {chapter.updated ? ` · as of ${chapter.updated}` : ""}
             </p>
             <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">
-              {chapter.futureRef}
+              <MathText>{chapter.futureRef}</MathText>
             </p>
           </aside>
         )}
