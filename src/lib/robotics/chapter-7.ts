@@ -228,7 +228,7 @@ export const chapter7: Chapter = {
       diagram: {
         id: "rb-7-4",
         caption:
-          "Policy gradients push up the probability of whatever led to high return and push down the rest. It works, but because it weights every action by the whole noisy episode return, the update direction jitters violently, which is REINFORCE's fatal high-variance flaw.",
+          "Policy gradients push up the probability of whatever led to high return and push down the rest. It works, but because every action is weighted by the whole noisy episode return, the update swings from batch to batch — crank the wind and the measured spread of the update overtakes the update itself, which is REINFORCE's fatal high-variance flaw.",
       },
     },
     {
@@ -273,7 +273,7 @@ export const chapter7: Chapter = {
     },
     {
       paragraphs: [
-        "Same shape as REINFORCE, one crucial swap: we weight the \"make-this-action-likelier\" direction by the **advantage** instead of the raw return. And this is a genuinely better signal. The raw return $G$ swings wildly with luck that has nothing to do with the action; the advantage subtracts off the state's baseline value, cancelling most of that common noise and leaving a much cleaner read on *this action's contribution.* Same unbiased direction as before, dramatically less variance. The whisper gets louder because we turned down the hurricane.",
+        "Same shape as REINFORCE, one crucial swap: we weight the \"make-this-action-likelier\" direction by the **advantage** instead of the raw return. And this is a genuinely better signal. The raw return $G$ swings wildly with luck that has nothing to do with the action; the advantage subtracts off the state's baseline value, cancelling most of that common noise and leaving a much cleaner read on *this action's contribution.* Same unbiased direction as before, dramatically less variance. (Why is subtracting something *legal*? First principles: the \"make-it-likelier\" directions, averaged over every action the policy might pick, sum to exactly zero, because the probabilities have to keep summing to 1. So multiplying them by any number that depends only on the state, like $V(s)$, also averages to zero. Subtracting the baseline changes the noise, never the average direction.) The whisper gets louder because we turned down the hurricane.",
         "Worked example. Your robot is in a state where the critic says the expected return is $V(s) = 5$. It tries an action and things work out to an estimated $Q(s, a) = 7$. The advantage is $A = 7 - 5 = +2$: this action beat the baseline by 2, so nudge it up, but only *gently* (it was a bit better than average, not a miracle). Contrast plain REINFORCE, which might have weighted that same action by a raw return of $+7$, a much bigger, blunter push that also swept in all the value that was coming *anyway* just from being in a good state. The advantage strips out the \"anyway\" and keeps only the credit the action actually earned. That's the whole trick.",
         "One practical wrinkle worth naming, because you'll see it in every real system: we don't have true Q and V, only estimates, and how we estimate the advantage trades bias against variance. The standard tool is **GAE, Generalized Advantage Estimation** (Schulman et al., 2015), which blends short-horizon estimates (low variance, a bit biased) and long-horizon ones (low bias, higher variance) with a knob (usually written λ) to tune the mix. You don't need the derivation; you need the name and the idea: **GAE is the practical recipe for computing the advantage that goes into the update, and it's essentially universal in modern policy-gradient robotics.**",
       ],
@@ -282,7 +282,7 @@ export const chapter7: Chapter = {
       diagram: {
         id: "rb-7-5",
         caption:
-          "The critic supplies a baseline, the average value of the state, and the actor updates on the advantage, the gap above or below it. Subtracting the baseline cancels the luck that's common to the whole state, which is how actor-critic tames policy-gradient variance.",
+          "The critic supplies a baseline, the average value of the state, and the actor updates on the advantage, the gap above or below it. Subtracting the baseline cancels the luck that's common to the whole state: the same sampled visits, reweighted by advantage instead of raw return, collapse to a measurably tighter spread — actor-critic taming policy-gradient variance.",
       },
     },
     {
@@ -298,7 +298,7 @@ export const chapter7: Chapter = {
       paragraphs: [
         "Actor–critic gives us a lower-variance gradient. But there's one more villain, and it's the one that historically made policy-gradient RL a nightmare to actually run: **a single update that's too big can destroy the policy.**",
         "Here's the trap. The gradient tells you a *direction* to move $\\theta$, and it's only trustworthy *locally*, near your current policy. But if you take a big step in that direction, you can overshoot into a region where the policy is much worse, and (this is the cruel part) **because RL is on-policy, all your data was collected by the old policy.** Once you've lurched to a bad new policy, the experience you have is no longer about the policy you're now running, so you can't easily recover; you just collected a batch of garbage and stepped off a cliff. Performance collapses, sometimes irreversibly. Old policy-gradient methods were maddeningly sensitive to step size for exactly this reason.",
-        "The fix is to **limit how far the policy is allowed to move in a single update**, to keep each step inside a \"trust region\" where the gradient's promise still holds. The method that made this practical, robust, and stupidly popular is **PPO, Proximal Proximal... sorry, Proximal Policy Optimization** (Schulman et al., 2017). PPO is, no exaggeration, **the workhorse of robot RL**, the default algorithm that trains the overwhelming majority of legged-locomotion and manipulation policies you've read about.",
+        "The fix is to **limit how far the policy is allowed to move in a single update**, to keep each step inside a \"trust region\" where the gradient's promise still holds. The method that made this practical, robust, and stupidly popular is **PPO, Proximal Policy Optimization** (Schulman et al., 2017), \"proximal\" as in *stay close*: never let one update carry the policy far from the one that gathered the data. PPO is, no exaggeration, **the workhorse of robot RL**, the default algorithm that trains the overwhelming majority of legged-locomotion and manipulation policies you've read about.",
         "The mechanism is a small, clever tweak to the objective. Define the **probability ratio**, how much more (or less) likely the new policy is to take the action than the old one was:",
       ],
     },
@@ -309,7 +309,7 @@ export const chapter7: Chapter = {
     },
     {
       paragraphs: [
-        "A ratio of 1 means the policy hasn't changed on this action; 1.3 means the new policy is 30% more likely to take it; 0.7 means 30% less likely. The plain policy-gradient objective is basically $\\text{ratio} \\cdot A$: push the ratio up when the advantage is positive, down when it's negative. The danger is that $\\text{ratio}$ can run away, the update making a good action *wildly* more likely in one step, far past where the gradient was trustworthy.",
+        "A ratio of 1 means the policy hasn't changed on this action; 1.3 means the new policy is 30% more likely to take it; 0.7 means 30% less likely. The plain policy-gradient objective is basically $\\text{ratio} \\cdot A$: push the ratio up when the advantage is positive, down when it's negative. The danger is that $\\text{ratio}$ can run away, the update making a good action *wildly* more likely in one step, far past where the gradient was trustworthy. Concretely: with ε = 0.2 the band is $[0.8, 1.2]$, so an action the old policy took 10% of the time can rise to at most 12% in this update; a 1.5× leap to 15% gets clipped, and the rest of the improvement has to wait for fresh data collected under the new policy.",
         "PPO's answer is the **clipped surrogate objective.** In words: **let the ratio help you, but only up to a limit; clip it so the policy can't move too far in one step.** Formally you take the *smaller* of the raw objective and a version where the ratio is clipped to a band around 1 (typically $[1-\\varepsilon,\\ 1+\\varepsilon]$ with ε ≈ 0.2):",
       ],
     },
