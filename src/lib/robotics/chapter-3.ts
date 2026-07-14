@@ -14,7 +14,7 @@ export const chapter3: Chapter = {
   published: "Jul 20, 2026",
   updated: "Jul 20, 2026",
   futureRef:
-    "This chapter is timeless. Forward kinematics, DH parameters, IK's ill-posedness, the Jacobian, singularities, and null-space redundancy are settled math that hasn't moved in decades and won't. Denavit & Hartenberg (1955) is still the convention. Come back to the Jacobian specifically whenever a later chapter mentions \"action space,\" \"task-space control,\" or \"velocity command\": it's the same $\\dot{x} = J\\dot{q}$ gearing every time, whether it's a classical controller or a learned policy commanding the hand. And return to Fig 3.5's ellipse whenever a robot behaves strangely near the edge of its reach; nine times out of ten you're near a singularity.",
+    "This chapter is timeless. Forward kinematics, DH parameters, IK's ill-posedness, the Jacobian, singularities, and null-space redundancy are settled math that hasn't moved in decades and won't. Denavit & Hartenberg (1955) is still the convention. Come back to the Jacobian specifically whenever a later chapter mentions \"action space,\" \"task-space control,\" or \"velocity command\": it's the same $\\dot{x} = J\\dot{q}$ gearing every time, whether it's a classical controller or a learned policy commanding the hand. And return to Fig 3.5's ellipsoid whenever a robot behaves strangely near the edge of its reach; nine times out of ten you're near a singularity.",
   sections: [
     {
       paragraphs: [
@@ -80,13 +80,14 @@ export const chapter3: Chapter = {
     {
       paragraphs: [
         "The hand is at (3.12, 3.43). No guessing, no iteration, no second answer lurking. Change either angle and the point moves smoothly and predictably. This is why Chapter 1 said the arm is the cleanest place to learn: bolt the base down, and *where the hand is* reduces to arithmetic.",
+        "And nothing about this is stuck in flatland. Add a base joint that yaws the whole plane about the vertical and the same chain runs in 3D: the figure below composes three joint rotations (as quaternions, Chapter 2's tool of choice) and the hand still lands in exactly one place. Grab the scene and orbit it; the readout is the chain being multiplied live.",
       ],
     },
     {
       diagram: {
         id: "rb-3-1",
         caption:
-          "Forward kinematics is chaining links nose to tail: each term is one link pointing in the accumulated angle, and the sum is always a single, unique hand position.",
+          "Forward kinematics is chaining links nose to tail: each joint hands its rotation down the chain, and however you set the angles the hand lands in exactly one place.",
       },
     },
     {
@@ -123,7 +124,7 @@ export const chapter3: Chapter = {
       diagram: {
         id: "rb-3-2",
         caption:
-          "A convention buys portability: four numbers per joint, three fixed by the metal, one free to move, describe any arm unambiguously, so anyone's software can chain the transforms.",
+          "A convention buys portability: four numbers per joint — three fixed by the metal, one free to move — describe any arm unambiguously, so anyone's software can chain the transforms.",
       },
     },
     {
@@ -151,13 +152,14 @@ export const chapter3: Chapter = {
     {
       paragraphs: [
         "The dexterous workspace is always a subset of the reachable one, and often much smaller. Out at the very edge of reach, the arm is stretched nearly straight and has no freedom left to reorient the hand. It can *touch* the point but only one way, so that point is reachable but not dexterous. This isn't academic: when you're choosing where to mount a robot over a workbench, you place the actual work inside the dexterous workspace, because that's where the arm can approach a part from whatever angle the task demands. The edges are for reaching, not for working.",
+        "(To make \"orientation\" visible on our 2-link toy, Fig 3.3 bolts a short tool onto the wrist. The fan at the probe shows every approach direction the arm can actually deliver to that point: a full green circle deep inside the workspace, a thinning sliver near the edge, nothing outside. Same idea as a real arm's wrist, one link smaller.)",
       ],
     },
     {
       diagram: {
         id: "rb-3-3",
         caption:
-          "The workspace is the arm's territory: a ring you can touch, with a smaller core you can touch from any angle. The edges reach but can't reorient, so put the real work in the dexterous core.",
+          "The workspace is the arm's territory: a big ring the tool can touch somehow, and a smaller core it can approach from every direction — the edges reach but can't reorient, so put the real work in the dexterous core.",
       },
     },
     {
@@ -187,7 +189,7 @@ export const chapter3: Chapter = {
     },
     {
       paragraphs: [
-        "Reading the symbols: the numerator is how far the target is (squared) minus what the two links \"cost\" straight, and it measures how much the elbow has to bend. Now the crucial fact: to recover θ₂ you take an inverse cosine, **and cosine is even**: cos(θ₂) and cos(−θ₂) are identical. So both +θ₂ and −θ₂ satisfy the equation. *That is the elbow-up and elbow-down solution, dropping straight out of the algebra.* The two ways to fold a triangle onto the same base, the elbow poking up or poking down, are the ± of one arccosine. This is the whole \"multiple solutions\" story in one sign.",
+        "Reading the symbols: the triangle's interior angle at the elbow is actually 180° − θ₂ (θ₂ is measured from the *extension* of link 1), and that sign flip is already folded into the formula. The numerator compares the squared distance to the target against the squared link lengths: push the target out to full stretch and cos θ₂ → 1, so θ₂ → 0 (elbow straight); pull it all the way in and cos θ₂ → −1 (elbow fully folded). Now the crucial fact: to recover θ₂ you take an inverse cosine, **and cosine is even**: cos(θ₂) and cos(−θ₂) are identical. So both +θ₂ and −θ₂ satisfy the equation. *That is the elbow-up and elbow-down solution, dropping straight out of the algebra.* The two ways to fold a triangle onto the same base, the elbow poking up or poking down, are the ± of one arccosine. This is the whole \"multiple solutions\" story in one sign.",
         "With θ₂ in hand, θ₁ comes from lining up the first link so the chain lands on target:",
       ],
     },
@@ -220,7 +222,7 @@ export const chapter3: Chapter = {
       diagram: {
         id: "rb-3-4",
         caption:
-          "Invert the map and it turns ill-posed: most targets have two solutions (elbow-up and elbow-down), the ring's edge has exactly one, and outside the ring there are none: the arm goes red.",
+          "Invert the map and it turns ill-posed: most targets give two arms (elbow-up and elbow-down), the reach circle gives exactly one, and beyond it there are none — the arm stretches red toward a point no joint angles can deliver.",
       },
     },
     {
@@ -275,7 +277,7 @@ export const chapter3: Chapter = {
         "Reading the symbols: $\\dot{q}$ (q-dot) is the vector of **joint velocities**, how fast each joint is turning right now. $\\dot{x}$ (x-dot) is the resulting **end-effector velocity**, how fast the hand is moving and in what direction (and, in full 3D, how it's rotating). $J(q)$ is the **Jacobian matrix**, and that \"(q)\" is the whole point: it *depends on the current configuration q*. Move the arm and the Jacobian changes. Each entry of J is a partial derivative, literally \"how much does hand-coordinate *i* change when joint *j* moves a hair,\" but you don't need the calculus to use it. Read the equation as: **joint velocities in, hand velocity out, through a gearing that depends on the pose.**",
         "This one little equation is a workhorse, and it pays off in two directions:",
         "**Velocity control.** You want the hand to move in a straight line at 10 cm/s toward a bolt. That's a desired $\\dot{x}$. Solve $\\dot{x} = J\\dot{q}$ for the joint velocities $\\dot{q}$ (invert the Jacobian) and you get the motor speeds that produce exactly that hand motion. This is how you command a robot in *task space* (\"move the hand there\") instead of fussing over each joint.",
-        "**Inverse kinematics, finally solved for real arms.** Remember numeric IK: guess, measure the error, nudge the joints toward the target. The Jacobian *is* the nudge direction. Compute the error $\\Delta x$ = (target − current hand position), then take $\\Delta q = J^{-1} \\Delta x$ (or, when J isn't square or nicely invertible, the **pseudo-inverse** $J^{+}$, or even just the transpose $J^{T}$ for a cheap-and-cheerful version). Apply that small joint change, run FK again, and you've stepped the hand closer to the target. Iterate and it converges. That's it: that's how a 7-DoF arm solves IK when no formula exists. It descends the error using the Jacobian as its map, the exact same loop as the P-controller from the style guide, just in joint space. The Jacobian turns the ill-posed inverse problem into a solvable one-step-at-a-time chase.",
+        "**Inverse kinematics, finally solved for real arms.** Remember numeric IK: guess, measure the error, nudge the joints toward the target. The Jacobian *is* the nudge direction. Compute the error $\\Delta x$ = (target − current hand position), then take $\\Delta q = J^{-1} \\Delta x$ (or, when J isn't square or nicely invertible, the **pseudo-inverse** $J^{+}$, or even just the transpose $J^{T}$ for a cheap-and-cheerful version). Apply that small joint change, run FK again, and you've stepped the hand closer to the target. Iterate and it converges. That's it: that's how a 7-DoF arm solves IK when no formula exists. It descends the error using the Jacobian as its map — the exact same close-a-fraction-of-the-gap feedback loop from Chapter 1, just running in joint space. The Jacobian turns the ill-posed inverse problem into a solvable one-step-at-a-time chase.",
         "Let's ground it on the 2-link arm. The Jacobian is the 2×2 matrix of how (x, y) change with (θ₁, θ₂):",
       ],
     },
@@ -297,13 +299,14 @@ export const chapter3: Chapter = {
     {
       paragraphs: [
         "Read a column: turning θ₂ at unit speed moves the hand at velocity (−1.93, 0.52). Turn *both* joints and you add the columns, scaled by their speeds, and the matrix does the bookkeeping. That first column, (−3.43, 3.12), is exactly perpendicular to the line from the base to the hand at (3.12, 3.43): turning the base joint whips the whole arm around, so the hand moves *sideways* to its reach, as it must. The math and the physical picture agree.",
+        "One more picture before the figure, because it's the best one in robotics. Feed J every joint-velocity combination of unit size — the unit sphere in joint space — and collect the outputs. They sweep out an ellipsoid in hand-velocity space: the **manipulability ellipsoid**. Its long axis is the direction the hand moves easily (lots of hand speed per joint speed); its short axis is the direction the hand struggles. It's the Jacobian's gearing drawn as a shape you can look at, and its shape *changes as the arm moves*, because J does. Keep your eye on the shortest axis in Fig 3.5: when it shrinks toward zero, a whole direction of motion is about to vanish.",
       ],
     },
     {
       diagram: {
         id: "rb-3-5",
         caption:
-          "The Jacobian is configuration-dependent gearing: a fat ellipse means the hand moves freely in all directions; as the arm straightens the ellipse flattens, and at full stretch it collapses to a line: a lost degree of freedom.",
+          "The Jacobian is configuration-dependent gearing: a fat, round ellipsoid means the hand moves freely in every direction, and as the arm straightens the ellipsoid flattens to a pancake — a whole degree of freedom draining away in front of you.",
       },
     },
     {
@@ -317,17 +320,17 @@ export const chapter3: Chapter = {
     {
       heading: "Singularities: where the gearing breaks",
       paragraphs: [
-        "That collapsing ellipse in Fig 3.5 was a preview of the nastiest thing in this chapter, the fine print on the magic number: **singularities**. A singularity is a configuration where the Jacobian **loses rank**, where two or more joints momentarily gang up to do the same thing, so the arm secretly has fewer effective degrees of freedom than it has joints. The hand loses the ability to move in some direction *at all*, no matter how you spin the motors.",
-        "The cleanest example is our 2-link arm stretched dead straight (θ₂ = 0). Both links point the same way. Turning either joint now swings the hand along the same arc, perpendicular to the arm, so *both joints do the same thing* and there's no combination of them that moves the hand *outward*, along the line of the arm. The arm can go sideways but not out. In Jacobian terms, the two columns have become parallel, the matrix is rank-deficient, and its determinant is zero. That flat, collapsed ellipse is the picture of it: a whole direction of hand motion has vanished. This is exactly the \"exactly one IK solution\" point from before: full stretch is a singularity, which is *why* the solutions merged there.",
+        "That collapsing ellipsoid in Fig 3.5 was a preview of the nastiest thing in this chapter, the fine print on the magic number: **singularities**. A singularity is a configuration where the Jacobian **loses rank**, where two or more joints momentarily gang up to do the same thing, so the arm secretly has fewer effective degrees of freedom than it has joints. The hand loses the ability to move in some direction *at all*, no matter how you spin the motors.",
+        "The cleanest example is our 2-link arm stretched dead straight (θ₂ = 0). Both links point the same way. Turning either joint now swings the hand along the same arc, perpendicular to the arm, so *both joints do the same thing* and there's no combination of them that moves the hand *outward*, along the line of the arm. The arm can go sideways but not out. In Jacobian terms, the two columns have become parallel, the matrix is rank-deficient, and its determinant is zero. That flat, collapsed ellipsoid is the picture of it: a whole direction of hand motion has vanished. This is exactly the \"exactly one IK solution\" point from before: full stretch is a singularity, which is *why* the solutions merged there.",
         "Now the part that actually bites you in code. Numeric IK and velocity control both need to *invert* the Jacobian: $\\dot{q} = J^{-1}\\dot{x}$. Near a singularity, J is nearly rank-deficient, which means its inverse **blows up**: to make the hand move even a hair in the direction that's going scarce, the formula demands enormous joint velocities. Ask the outstretched arm to move its hand outward by a centimeter and the math politely replies \"sure, spin your joints at ten thousand degrees per second.\" That's not a metaphor; it's a real failure mode where a robot near a singularity suddenly whips its joints at dangerous speed because the pseudo-inverse divided by something near zero. **Singularity = rank-deficient Jacobian = a lost degree of freedom = exploding inverse.** Burn that chain into memory; it's the same phenomenon described four ways.",
-        "The engineering response is to *see it coming*. The **manipulability ellipsoid** (the ellipse in Fig 3.5, in full 3D it's an ellipsoid) is the visual early-warning system: fat and round means the hand moves freely in every direction, comfortably far from trouble; long and thin means you're near a singularity and one direction is going scarce; collapsed to a pancake means you've hit it. Its volume is a single number, **manipulability**, that controllers watch and steer away from, deliberately choosing configurations well inside the workspace where the ellipsoid is round. This is also, circling back, exactly why the dexterous workspace is smaller than the reachable one: the edges of reach *are* singular, so the arm loses dexterity precisely where the ellipsoid flattens. Every thread in this chapter meets at the singularity.",
+        "The engineering response is to *see it coming*. The **manipulability ellipsoid** (the shape you watched collapse in Fig 3.5) is the visual early-warning system: fat and round means the hand moves freely in every direction, comfortably far from trouble; long and thin means you're near a singularity and one direction is going scarce; collapsed to a pancake means you've hit it. Its volume is a single number, **manipulability**, that controllers watch and steer away from, deliberately choosing configurations well inside the workspace where the ellipsoid is round. This is also, circling back, exactly why the dexterous workspace is smaller than the reachable one: the edges of reach *are* singular, so the arm loses dexterity precisely where the ellipsoid flattens. Every thread in this chapter meets at the singularity.",
       ],
     },
     {
       diagram: {
         id: "rb-3-6",
         caption:
-          "As the arm straightens, manipulability drains to zero and the joint velocity IK demands explodes: the same event seen three ways, a flattening ellipse, a vanishing manipulability, and an inverse blowing up.",
+          "As the arm straightens, manipulability drains to zero and the joint speed that IK demands explodes off the chart: the same event seen three ways — a flattening ellipsoid, a vanishing determinant, and an inverse blowing up.",
       },
     },
     {
@@ -336,6 +339,7 @@ export const chapter3: Chapter = {
         "We close where Chapter 1 started teasing: **what do you do with a seventh joint?** If six is the minimum to hit any pose, a 7-DoF arm has one to spare, and that spare is a gift, but only if you know how to spend it. This is **redundancy resolution**, and it's the payoff of the whole chapter.",
         "Recall the setup: your 7-DoF arm holds a coffee cup at a fixed pose over the table. The task pins down six numbers (3 position + 3 orientation of the cup), the arm has seven, so **one degree of freedom is left completely free.** You can swing your elbow up, down, and around in a full arc while the cup stays *perfectly still*. There's a whole one-dimensional family of joint configurations, infinitely many, all holding the identical cup pose. That's the \"infinitely many IK solutions\" case from earlier, and now we're going to *use* it.",
         "The Jacobian hands us the tool. Recall $\\dot{x} = J\\dot{q}$: joint velocities produce hand motion. Now ask the reverse question: **which joint motions produce *zero* hand motion?** Those are the joint velocities $\\dot{q}$ for which $J\\dot{q} = 0$: the arm's joints are moving, but the hand isn't. This set has a name from linear algebra, the **null space** of the Jacobian, and for our redundant arm it's exactly that elbow-swinging freedom made precise. Any joint velocity in the null space reshuffles the arm's internal posture while leaving the end-effector *frozen*.",
+        "You can even count it. For the 7-DoF arm, J is a 6×7 matrix: six rows (the task's pose numbers), seven columns (the joints). Seven unknowns constrained by six equations always leaves at least a one-dimensional family of solutions to $J\\dot{q} = 0$ — one spare dimension of motion the task cannot see. That one dimension *is* the elbow arc in Fig 3.7.",
         "So here's the move that runs on real robots every day. Split the arm's motion into two pieces that don't fight each other:",
       ],
     },
@@ -355,14 +359,14 @@ export const chapter3: Chapter = {
       diagram: {
         id: "rb-3-7",
         caption:
-          "Redundancy is a second budget: the null space of the Jacobian is the joint motion that moves nothing at the hand, so the elbow can dodge an obstacle while the fingertip stays frozen: the coffee-cup slack, spent.",
+          "Redundancy is a second budget: the null space of the Jacobian is the joint motion that moves nothing at the hand, so the elbow can dodge an obstacle while the fingertip stays frozen — the coffee-cup slack from Chapter 1, finally spent.",
       },
     },
     {
       heading: "Where this leaves us",
       paragraphs: [
         "We made a clean deal at the top, ignore forces, keep only geometry, and it bought us the entire relationship between joint angles and hand pose, in both directions. **Forward kinematics** is the easy half: chain the Chapter 2 transforms base to tip, and the hand's pose falls out, unique and unambiguous, every time. **DH parameters** are how you write any arm down so anyone's software can do that chaining: four numbers per joint, three fixed, one free. The **workspace** is the arm's territory, a ring you can reach with a smaller dexterous core you can work in.",
-        "Then we flipped the arrow and met the villain. **Inverse kinematics** is ill-posed, with zero, one, several, or infinitely many solutions from one honest question, solvable in closed form for simple arms (elbow-up and elbow-down, straight out of the law of cosines' ±) and only numerically for the rest. That numeric solver runs on the **Jacobian**, the configuration-dependent gearing $\\dot{x} = J\\dot{q}$ between joint speeds and hand speed, which also proved why **six DoF** is magic (six pose numbers, six joints) and, at its rank-deficient configurations, gave us **singularities**: lost degrees of freedom where the inverse explodes and the manipulability ellipsoid collapses to a line. And the Jacobian's **null space** let us spend a redundant arm's extra joints on a second goal for free, delivering Chapter 1's coffee-cup promise.",
+        "Then we flipped the arrow and met the villain. **Inverse kinematics** is ill-posed, with zero, one, several, or infinitely many solutions from one honest question, solvable in closed form for simple arms (elbow-up and elbow-down, straight out of the law of cosines' ±) and only numerically for the rest. That numeric solver runs on the **Jacobian**, the configuration-dependent gearing $\\dot{x} = J\\dot{q}$ between joint speeds and hand speed, which also proved why **six DoF** is magic (six pose numbers, six joints) and, at its rank-deficient configurations, gave us **singularities**: lost degrees of freedom where the inverse explodes and the manipulability ellipsoid flattens to a pancake. And the Jacobian's **null space** let us spend a redundant arm's extra joints on a second goal for free, delivering Chapter 1's coffee-cup promise.",
         "But notice what we never once did: we never asked how hard the motors have to push. We commanded angles and velocities and *assumed* the arm obediently went there, frictionless and gravity-free. Real arms sag, overshoot, and fight momentum. Chapter 4 tears up our deal and puts the forces back: it takes the poses and velocities kinematics hands it and asks the harder question of how to actually *make the body track them*, from the humble PID loop up to whole-body torque control. Every target we computed here becomes a setpoint there. And the Jacobian doesn't retire: it reappears in control to map forces between joint and task space, in reinforcement learning as the action-space geometry, and in the vision-language-action stack as the thing standing between a predicted motion and a moving motor. It's the most reused matrix in the book.",
         "Onward.",
       ],
