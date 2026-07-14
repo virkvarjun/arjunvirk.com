@@ -610,25 +610,20 @@ export function Scene3D({ cam, prims }: { cam: Camera3D; prims: Prim3D[] }) {
   type Drawn = { depth: number; el: ReactNode };
   const drawn: Drawn[] = [];
   const labels: ReactNode[] = [];
-  let dMin = Infinity;
-  let dMax = -Infinity;
-  const proj = (p: V3) => {
-    const s = project(cam, p);
-    if (s.depth < dMin) dMin = s.depth;
-    if (s.depth > dMax) dMax = s.depth;
-    return s;
-  };
-  let k = 0;
   const staged: { prim: Prim3D; pts: P2[] }[] = prims.map((prim) => {
     const pts =
       prim.kind === "seg"
-        ? [proj(prim.a), proj(prim.b)]
+        ? [project(cam, prim.a), project(cam, prim.b)]
         : prim.kind === "poly"
-          ? prim.pts.map(proj)
-          : [proj(prim.p)];
+          ? prim.pts.map((p) => project(cam, p))
+          : [project(cam, prim.p)];
     return { prim, pts };
   });
+  const allDepths = staged.flatMap((s) => s.pts.map((p) => p.depth));
+  const dMin = Math.min(...allDepths, Infinity);
+  const dMax = Math.max(...allDepths, -Infinity);
   const span = Math.max(dMax - dMin, 1e-6);
+  let k = 0;
   for (const { prim, pts } of staged) {
     const depth = pts.reduce((s, p) => s + p.depth, 0) / pts.length;
     const t = (depth - dMin) / span;
@@ -734,6 +729,26 @@ export function useOrbit(initialYaw = -30, initialPitch = 22) {
     setPitch(initialPitch);
   };
   return { yawDeg, pitchDeg, svgProps, reset, setYaw, setPitch } as const;
+}
+
+// Convert a screen-space pointer delta (stage units) into a world-space move
+// of point p constrained to the z = p.z plane, by inverting the projection's
+// local Jacobian. This is what makes "drag the object on the floor" feel
+// exact under any camera angle.
+export function groundDrag(cam: Camera3D, p: V3, dsx: number, dsy: number): V3 {
+  const e = 0.01;
+  const p0 = project(cam, p);
+  const px = project(cam, [p[0] + e, p[1], p[2]]);
+  const py = project(cam, [p[0], p[1] + e, p[2]]);
+  const a = (px.x - p0.x) / e;
+  const b = (py.x - p0.x) / e;
+  const c = (px.y - p0.y) / e;
+  const d = (py.y - p0.y) / e;
+  const det = a * d - b * c;
+  if (Math.abs(det) < 1e-6) return p;
+  const dx = (d * dsx - b * dsy) / det;
+  const dy = (-c * dsx + a * dsy) / det;
+  return [p[0] + dx, p[1] + dy, p[2]];
 }
 
 // --- Figure chrome ----------------------------------------------------------

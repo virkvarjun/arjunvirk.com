@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   R,
@@ -15,111 +15,135 @@ import {
   approach,
   clamp,
   lerp,
+  type V3,
+  type Quat,
+  type Prim3D,
+  type Camera3D,
+  v3,
+  quat,
+  seg3,
+  dot3,
+  label3,
+  ring3,
+  grid3,
+  triad3,
+  curve3,
+  Scene3D,
+  useOrbit,
+  groundDrag,
+  project,
+  Legend,
+  Readout,
+  Transport,
 } from "./shared";
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
-const fmt2 = (v: number) => (v < 0 ? v.toFixed(2) : ` ${v.toFixed(2)}`);
 
 // ===========================================================================
-// Fig 2.1 · The same cup, three frames, three answers  (draggable field)
-// A top-down scene with three axis-cross frames: world (grey), base (blue),
-// camera (amber). Drag the cup; a fixed readout lane lists its coordinates in
-// all three frames at once. A "shift origin" toggle proves points move while a
-// pinned displacement vector's numbers stay put.
+// Fig 2.1 · The same cup, three frames, three answers  (true 3D, orbitable)
+// A 3D tabletop scene: world triad (grey), robot base triad (blue), camera
+// triad (amber), and a cup you drag across the floor. A fixed readout lists
+// the cup's coordinates in all three frames at once, computed with the real
+// inverse transforms. "Shift world origin" slides the world frame and proves
+// points move with the origin while a displacement vector's numbers stay put.
 // ===========================================================================
 
-type Frame21 = { x: number; y: number; ang: number };
-const WORLD_F: Frame21 = { x: 150, y: 300, ang: 0 };
-const BASE_F: Frame21 = { x: 330, y: 340, ang: -25 };
-const CAM_F0: Frame21 = { x: 520, y: 130, ang: 150 };
-
-// World->frame coordinates: express a stage point in a frame's own axes.
-// Stage y is screen-down; we flip so the frame's +y reads "up" like a plot.
-function inFrame(px: number, py: number, f: Frame21): [number, number] {
-  const dx = px - f.x;
-  const dy = -(py - f.y);
-  const c = Math.cos(rad(f.ang));
-  const s = Math.sin(rad(f.ang));
-  // rotate stage displacement into frame axes (inverse rotation)
-  const fx = c * dx + s * dy;
-  const fy = -s * dx + c * dy;
-  return [fx / 90, fy / 90]; // 90 px = 1.0 metre
+// Express world point p in a frame at `origin` with orientation `q`:
+// p_f = R^T (p - o). This is the actual math of the chapter, not a sketch.
+function inFrame3(p: V3, origin: V3, q: Quat): V3 {
+  return quat.rotate(quat.conj(q), v3.sub(p, origin));
 }
 
-function AxisCross({ f, color, label }: { f: Frame21; color: string; label: string }) {
-  const c = Math.cos(rad(f.ang));
-  const s = Math.sin(rad(f.ang));
-  const L = 46;
-  const xTip = { x: f.x + L * c, y: f.y - L * s };
-  const yTip = { x: f.x + L * s, y: f.y + L * c };
-  return (
-    <g>
-      <line x1={f.x} y1={f.y} x2={xTip.x} y2={xTip.y} stroke={color} strokeWidth={3} />
-      <line x1={f.x} y1={f.y} x2={yTip.x} y2={yTip.y} stroke={color} strokeWidth={3} strokeDasharray="4 3" />
-      <circle cx={f.x} cy={f.y} r={5} fill={color} />
-      <text x={xTip.x + 4} y={xTip.y + 4} fontFamily={MONO} fontSize={12} fill={color}>
-        x
-      </text>
-      <text x={yTip.x + 4} y={yTip.y + 4} fontFamily={MONO} fontSize={12} fill={color}>
-        y
-      </text>
-      <text x={f.x - 6} y={f.y + 22} fontFamily={MONO} fontSize={13} fill={color} fontWeight={600}>
-        {label}
-      </text>
-    </g>
-  );
-}
+const fmt3 = (p: V3) => `(${p.map((v) => (v < 0 ? v.toFixed(2) : ` ${v.toFixed(2)}`)).join(",")})`;
 
 export function RbThreeFrames() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [cup, setCup] = useState({ x: 420, y: 240 });
-  const [cam, setCam] = useState<Frame21>(CAM_F0);
+  const orbit = useOrbit(-34, 26);
+  const [cup, setCup] = useState<V3>([0.65, 0.4, 0]);
   const [shift, setShift] = useState(false);
-  const [drag, setDrag] = useState<null | "cup" | "cam">(null);
-  // eased world-origin offset for the "shift origin" demo
-  const [off, setOff] = useState(0);
+  const [off, setOff] = useState(0); // eased world-origin offset (metres)
+  const dragging = useRef(false);
+  const lastPt = useRef<[number, number] | null>(null);
 
-  useRafLoop(
-    (dt) => setOff((o) => approach(o, shift ? 120 : 0, 0.2, dt)),
-    { playing: inView && !reduced },
-  );
-  const oX = reduced ? (shift ? 120 : 0) : off;
-  const world: Frame21 = { ...WORLD_F, x: WORLD_F.x + oX };
+  useRafLoop((dt) => setOff((o) => approach(o, shift ? 0.8 : 0, 0.18, dt)), {
+    playing: inView && !reduced,
+  });
+  const oX = reduced ? (shift ? 0.8 : 0) : off;
 
-  const cW = inFrame(cup.x, cup.y, world);
-  const cB = inFrame(cup.x, cup.y, BASE_F);
-  const cC = inFrame(cup.x, cup.y, cam);
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 4.5, zoom: 128 };
 
-  const onMove = (e: ReactPointerEvent<SVGElement>) => {
-    if (!drag) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = clamp(((e.clientX - r.left) / r.width) * 720, 120, 660);
-    const y = clamp(((e.clientY - r.top) / r.height) * 440, 100, 380);
-    if (drag === "cup") setCup({ x, y });
-    else setCam((f) => ({ ...f, x: clamp(x, 380, 660), y: clamp(y, 60, 260) }));
+  // the three frames: world (slides with the demo), base, camera on a mast.
+  const worldO: V3 = [-1.15 + oX, -0.85, 0];
+  const qWorld = quat.id;
+  const baseO: V3 = [0.15, -0.35, 0];
+  const qBase = quat.fromAxisAngle([0, 0, 1], rad(35));
+  const camO: V3 = [-0.75, 0.85, 0.95];
+  // camera tilted down toward the table, yawed to face the cup area
+  const qCam = quat.mul(quat.fromAxisAngle([0, 0, 1], rad(-55)), quat.fromAxisAngle([0, 1, 0], rad(35)));
+
+  const cupW = inFrame3(cup, worldO, qWorld);
+  const cupB = inFrame3(cup, baseO, qBase);
+  const cupC = inFrame3(cup, camO, qCam);
+
+  // a fixed displacement vector out of the base origin: its world-frame
+  // numbers never change when the origin shifts, because vectors ignore
+  // translation. Points don't get that luxury.
+  const vec: V3 = [0.55, 0.55, 0];
+  const vecTip = v3.add(baseO, vec);
+
+  const prims: Prim3D[] = [
+    ...grid3(1.4, 0.35),
+    ...triad3(worldO, qWorld, 0.5, ["x", "y", "z"], [R.world, R.world, R.world]),
+    ...triad3(baseO, qBase, 0.45, ["x", "y", "z"], [R.signal, R.signal, R.signal]),
+    ...triad3(camO, qCam, 0.4, ["x", "y", "z"], [R.plan, R.plan, R.plan]),
+    label3(v3.add(worldO, [0, 0, 0.62]), "world", R.world, { anchor: "middle", dy: -4 }),
+    label3(v3.add(baseO, [0, 0, 0.58]), "base", R.signal, { anchor: "middle", dy: -4 }),
+    label3(v3.add(camO, [0, 0, 0.52]), "camera", R.plan, { anchor: "middle", dy: -4 }),
+    // camera mast down to the floor
+    seg3([camO[0], camO[1], 0], camO, R.plan, { width: 1.5, dash: "3 4" }),
+    // sight line: camera -> cup
+    seg3(camO, cup, R.plan, { width: 1, dash: "2 5", opacity: 0.7 }),
+    // the fixed displacement vector (green) off the base origin
+    seg3(baseO, vecTip, R.goal, { width: 3 }),
+    label3(vecTip, "vector: numbers frozen", R.goal, { dx: 8, dy: -6, size: 11.5 }),
+    // the cup: a dot with a stem so it reads as an object, not a mark
+    seg3(cup, v3.add(cup, [0, 0, 0.22]), R.goal, { width: 5 }),
+    dot3(v3.add(cup, [0, 0, 0.24]), R.goal, { r: 7 }),
+    label3(v3.add(cup, [0, 0, 0.36]), "cup", R.goal, { anchor: "middle", dy: -2 }),
+  ];
+
+  const svgProps = {
+    ...orbit.svgProps,
+    onPointerMove: (e: ReactPointerEvent<SVGSVGElement>) => {
+      if (dragging.current) {
+        const r = e.currentTarget.getBoundingClientRect();
+        const sx = ((e.clientX - r.left) / r.width) * 720;
+        const sy = ((e.clientY - r.top) / r.height) * 440;
+        if (lastPt.current) {
+          const np = groundDrag(cam, cup, sx - lastPt.current[0], sy - lastPt.current[1]);
+          setCup([clamp(np[0], -1.3, 1.3), clamp(np[1], -1.3, 1.3), 0]);
+        }
+        lastPt.current = [sx, sy];
+        return;
+      }
+      orbit.svgProps.onPointerMove?.(e);
+    },
+    onPointerUp: (e: ReactPointerEvent<SVGSVGElement>) => {
+      dragging.current = false;
+      lastPt.current = null;
+      orbit.svgProps.onPointerUp?.(e);
+    },
   };
 
-  // displacement vector: from base origin toward the cup, fixed length demo
-  const vTipX = BASE_F.x + 70;
-  const vTipY = BASE_F.y - 70;
-
-  const rows: [string, string, [number, number]][] = [
-    ["world", R.world, cW],
-    ["base", R.signal, cB],
-    ["camera", R.plan, cC],
-  ];
+  const cupScreen = project(cam, v3.add(cup, [0, 0, 0.24]));
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 2.1 · The same cup, three frames, three answers"
-      ariaLabel={`One cup shown with its coordinates in a world, base and camera frame at once`}
-      svgProps={{
-        onPointerMove: onMove,
-        onPointerUp: () => setDrag(null),
-        onPointerLeave: () => setDrag(null),
-      }}
+      ariaLabel="One cup in a 3D scene with world, base and camera frames; its coordinates are shown in all three frames at once. Drag the background to orbit."
+      svgProps={svgProps}
       controls={
         <>
           <Btn onClick={() => setShift((v) => !v)} active={shift}>
@@ -127,95 +151,49 @@ export function RbThreeFrames() {
           </Btn>
           <Btn
             onClick={() => {
-              setCup({ x: 420, y: 240 });
-              setCam(CAM_F0);
+              setCup([0.65, 0.4, 0]);
               setShift(false);
+              orbit.reset();
             }}
           >
             ↺ reset
           </Btn>
-          <span className="font-mono text-[13px] text-[var(--muted)]">drag the cup or the camera</span>
+          <span className="font-mono text-[13px] text-[var(--muted)]">drag the cup · drag empty space to orbit</span>
         </>
       }
     >
-      {/* fixed readout lane, top: three frames, three answers */}
-      <text x={30} y={34} fontFamily={MONO} fontSize={13} fill={R.world}>
-        cup coordinates (metres)
-      </text>
-      {rows.map(([name, col, xy], i) => (
-        <g key={name}>
-          <rect x={28 + i * 224} y={44} width={210} height={26} rx={5} fill="none" stroke={col} strokeWidth={1.5} />
-          <text x={38 + i * 224} y={61} fontFamily={MONO} fontSize={13} fill={col} fontWeight={600}>
-            {name}
-          </text>
-          <text
-            x={112 + i * 224}
-            y={61}
-            fontFamily={MONO}
-            fontSize={13}
-            fill={name === "world" && (shift || oX > 1) ? R.error : R.ink}
-          >
-            ({fmt2(xy[0])},{fmt2(xy[1])})
-          </text>
-        </g>
-      ))}
-
-      {/* frames */}
-      <AxisCross f={world} color={R.world} label="world" />
-      <AxisCross f={BASE_F} color={R.signal} label="base" />
-      <AxisCross f={cam} color={R.plan} label="camera" />
-
-      {/* fixed displacement vector off the base origin; numbers never change */}
-      <g opacity={0.9}>
-        <line x1={BASE_F.x} y1={BASE_F.y} x2={vTipX} y2={vTipY} stroke={R.goal} strokeWidth={2.5} />
-        <polygon
-          points={`${vTipX},${vTipY} ${vTipX - 8},${vTipY + 2} ${vTipX - 2},${vTipY + 8}`}
-          fill={R.goal}
-        />
-        <text x={vTipX + 4} y={vTipY - 4} fontFamily={MONO} fontSize={11} fill={R.goal}>
-          vector (0.78,0.78), unchanged
-        </text>
-      </g>
-
-      {/* draggable camera handle */}
+      <Scene3D cam={cam} prims={prims} />
+      {/* invisible, generous hit-target over the cup for dragging */}
       <circle
-        cx={cam.x}
-        cy={cam.y}
-        r={14}
-        fill="none"
-        stroke={R.plan}
-        strokeWidth={2}
-        strokeDasharray="3 3"
+        cx={cupScreen.x}
+        cy={cupScreen.y}
+        r={22}
+        fill="transparent"
         style={{ cursor: "grab" }}
         onPointerDown={(e) => {
-          e.preventDefault();
-          setDrag("cam");
+          e.stopPropagation();
+          dragging.current = true;
+          lastPt.current = null;
         }}
       />
-
-      {/* the cup */}
-      <circle
-        cx={cup.x}
-        cy={cup.y}
-        r={13}
-        fill={R.fillGreen}
-        stroke={R.goal}
-        strokeWidth={3}
-        style={{ cursor: "grab" }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          setDrag("cup");
-        }}
+      <Readout
+        rows={[
+          { label: "in world", value: fmt3(cupW), color: shift || oX > 0.02 ? R.error : R.ink },
+          { label: "in base", value: fmt3(cupB), color: R.ink },
+          { label: "in camera", value: fmt3(cupC), color: R.ink },
+        ]}
       />
-      <text x={cup.x} y={cup.y + 30} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
-        cup
+      <Legend
+        items={[
+          { color: R.world, label: "world frame" },
+          { color: R.signal, label: "base frame" },
+          { color: R.plan, label: "camera frame" },
+          { color: R.goal, label: "the cup" },
+        ]}
+      />
+      <text x={24} y={426} fontFamily={MONO} fontSize={12} fill={R.world}>
+        one point · three frames · three different, equally correct coordinates
       </text>
-
-      {reduced && (
-        <text x={30} y={412} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: origin shift shown at rest; the toggle still updates the numbers.
-        </text>
-      )}
     </Stage>
   );
 }
@@ -356,35 +334,72 @@ export function RbRotationMatrix() {
 export function RbGimbalLock() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [roll, setRoll] = useState(20);
-  const [pitch, setPitch] = useState(25); // target
-  const [yaw, setYaw] = useState(30);
-  const [pd, setPd] = useState(25); // eased pitch
+  const orbit = useOrbit(-28, 18);
+  const [roll, setRoll] = useState(15);
+  const [pitch, setPitch] = useState(20); // target
+  const [yaw, setYaw] = useState(25);
+  const [pd, setPd] = useState(20); // eased pitch (for the "drive to lock" ride)
 
-  useRafLoop((dt) => setPd((p) => approach(p, pitch, 0.16, dt)), {
+  useRafLoop((dt) => setPd((p) => approach(p, pitch, 0.1, dt)), {
     playing: inView && !reduced,
   });
   const p = reduced ? pitch : pd;
 
-  const lockAmt = clamp(1 - Math.abs(p - 90) / 18, 0, 1); // 1 at lock
-  const locked = lockAmt > 0.55;
+  // The real mechanism, composed with real quaternions (ZYX / yaw-pitch-roll):
+  //   q1 = Rz(yaw)      — outer ring, spins about the fixed vertical axis
+  //   q2 = q1 · Ry(pitch) — middle ring, pivoted on the outer ring
+  //   q3 = q2 · Rx(roll)  — inner ring, pivoted on the middle ring; body rides it
+  const q1 = quat.fromAxisAngle([0, 0, 1], rad(yaw));
+  const q2 = quat.mul(q1, quat.fromAxisAngle([0, 1, 0], rad(p)));
+  const q3 = quat.mul(q2, quat.fromAxisAngle([1, 0, 0], rad(roll)));
+
+  // Lock detector: the roll axis is the inner frame's x; the yaw axis is the
+  // fixed z. At pitch = ±90° they align and one degree of freedom is gone.
+  const rollAxis = quat.rotate(q2, [1, 0, 0]);
+  const align = Math.abs(v3.dot(rollAxis, [0, 0, 1])); // 0 = independent, 1 = locked
+  const locked = align > 0.92;
   const dof = locked ? 2 : 3;
+  const ringCol = locked ? R.error : R.plan;
 
-  const C = { x: 250, y: 240 };
-  // three concentric rings; pitch squashes the inner ring toward a line and
-  // rolls the outer ring's tilt so at 90° outer & inner share a plane.
-  const outerR = 150;
-  const midR = 112;
-  const innerR = 76;
+  const R1 = 1.05, R2 = 0.82, R3 = 0.6;
+  const y1 = quat.rotate(q1, [0, 1, 0]); // pitch pivot axis (on the outer ring)
+  const x2 = quat.rotate(q2, [1, 0, 0]); // roll pivot axis (on the middle ring)
 
-  // ellipse "squash": as pitch nears 90°, inner ring collapses to a line
-  const innerRy = innerR * Math.abs(Math.cos(rad(p)));
+  const prims: Prim3D[] = [
+    // fixed yaw axis: the vertical rod the outer ring spins about
+    seg3([0, 0, -1.25], [0, 0, 1.25], R.world, { width: 2, dash: "5 4" }),
+    label3([0, 0, 1.32], "yaw axis (fixed)", R.world, { anchor: "middle", dy: -4, size: 12 }),
+    // outer ring: contains the vertical axis and the pitch pivots
+    ...ring3([0, 0, 0], quat.rotate(q1, [1, 0, 0]), R1, ringCol, { width: 2.5 }),
+    // middle ring: pivoted on the outer at ±y1
+    ...ring3([0, 0, 0], quat.rotate(q2, [0, 0, 1]), R2, R.world, { width: 2.5 }),
+    // inner ring: pivoted on the middle at ±x2; carries the body
+    ...ring3([0, 0, 0], quat.rotate(q3, [0, 1, 0]), R3, ringCol, { width: 2.5 }),
+    // pivot bearings, so the mounting is visible mechanism, not decoration
+    seg3(v3.scale(y1, R2), v3.scale(y1, R1), R.ink, { width: 4 }),
+    seg3(v3.scale(y1, -R2), v3.scale(y1, -R1), R.ink, { width: 4 }),
+    seg3(v3.scale(x2, R3), v3.scale(x2, R2), R.ink, { width: 4 }),
+    seg3(v3.scale(x2, -R3), v3.scale(x2, -R2), R.ink, { width: 4 }),
+    // the roll axis arrow — watch it swing up into the yaw axis
+    seg3(v3.scale(x2, -1.25), v3.scale(x2, 1.25), locked ? R.error : R.signal, {
+      width: 2,
+      dash: "5 4",
+    }),
+    label3(v3.scale(x2, 1.32), "roll axis", locked ? R.error : R.signal, { dx: 6, size: 12 }),
+    // the body: nose along x3, wings along y3
+    seg3(v3.scale(quat.rotate(q3, [1, 0, 0]), -0.38), v3.scale(quat.rotate(q3, [1, 0, 0]), 0.45), R.signal, { width: 6 }),
+    dot3(v3.scale(quat.rotate(q3, [1, 0, 0]), 0.45), R.signal, { r: 6 }),
+    seg3(v3.scale(quat.rotate(q3, [0, 1, 0]), -0.3), v3.scale(quat.rotate(q3, [0, 1, 0]), 0.3), R.signal, { width: 4 }),
+  ];
+
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 5, zoom: 132 };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 2.3 · Gimbal lock: watch a degree of freedom vanish"
-      ariaLabel={`A gimbal with roll ${Math.round(roll)}, pitch ${Math.round(p)}, yaw ${Math.round(yaw)} degrees; ${dof} degrees of freedom remaining`}
+      ariaLabel={`A three-ring gimbal in 3D with roll ${Math.round(roll)}, pitch ${Math.round(p)}, yaw ${Math.round(yaw)} degrees; ${dof} degrees of freedom remaining. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
           <Slider label="roll" min={-90} max={90} value={roll} onChange={setRoll} fmt={(v) => `${v}°`} />
@@ -395,9 +410,10 @@ export function RbGimbalLock() {
           </Btn>
           <Btn
             onClick={() => {
-              setRoll(20);
-              setPitch(25);
-              setYaw(30);
+              setRoll(15);
+              setPitch(20);
+              setYaw(25);
+              orbit.reset();
             }}
           >
             ↺ reset
@@ -405,89 +421,30 @@ export function RbGimbalLock() {
         </>
       }
     >
-      {/* fixed readout lane, top-left */}
-      <text x={30} y={40} fontFamily={MONO} fontSize={14} fill={R.world}>
-        degrees of freedom remaining
-      </text>
-      <text x={30} y={70} fontFamily={MONO} fontSize={26} fill={locked ? R.error : R.goal} fontWeight={700}>
-        {dof}
-      </text>
-      <text x={62} y={70} fontFamily={MONO} fontSize={14} fill={locked ? R.error : R.goal}>
-        {locked ? ": roll & yaw collapsed" : ": all independent"}
-      </text>
-
-      {/* outer ring (yaw, amber) */}
-      <ellipse
-        cx={C.x}
-        cy={C.y}
-        rx={outerR}
-        ry={outerR * 0.42}
-        fill="none"
-        stroke={locked ? R.error : R.plan}
-        strokeWidth={locked ? 4 : 3}
-        transform={`rotate(${yaw * 0.15} ${C.x} ${C.y})`}
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "DoF left", value: String(dof), color: locked ? R.error : R.goal },
+          { label: "axis align", value: `${Math.round(align * 100)}%`, color: locked ? R.error : R.ink },
+          { label: "pitch", value: `${Math.round(p)}°`, color: R.ink },
+        ]}
       />
-      {/* mid ring (pitch, world grey): the one that still works */}
-      <ellipse
-        cx={C.x}
-        cy={C.y}
-        rx={midR * 0.42}
-        ry={midR}
-        fill="none"
-        stroke={R.world}
-        strokeWidth={3}
-        transform={`rotate(${p * 0.2} ${C.x} ${C.y})`}
+      <Legend
+        items={[
+          { color: R.plan, label: "yaw + roll rings" },
+          { color: R.world, label: "pitch ring" },
+          { color: R.signal, label: "body / roll axis" },
+          { color: R.error, label: "locked" },
+        ]}
       />
-      {/* inner ring (roll, amber): collapses onto the outer plane at lock */}
-      <ellipse
-        cx={C.x}
-        cy={C.y}
-        rx={innerR}
-        ry={Math.max(4, innerRy) * 0.42 + innerRy * 0.58}
-        fill="none"
-        stroke={locked ? R.error : R.plan}
-        strokeWidth={locked ? 4 : 3}
-        transform={`rotate(${roll * 0.15} ${C.x} ${C.y})`}
-      />
-
-      {/* aircraft body (blue), pitches up with p */}
-      <g transform={`rotate(${-p * 0.7} ${C.x} ${C.y})`}>
-        <polygon
-          points={`${C.x},${C.y - 40} ${C.x - 10},${C.y + 30} ${C.x + 10},${C.y + 30}`}
-          fill={R.fillBlue}
-          stroke={R.signal}
-          strokeWidth={2.5}
-        />
-        <line x1={C.x - 34} y1={C.y} x2={C.x + 34} y2={C.y} stroke={R.signal} strokeWidth={5} strokeLinecap="round" />
-      </g>
-
-      {/* label the two collapsed axes at lock */}
       {locked && (
-        <text x={C.x} y={C.y + 175} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.error} fontWeight={600}>
-          roll axis ∥ yaw axis: one motion, two knobs
+        <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={13.5} fill={R.error} fontWeight={600}>
+          roll axis ∥ yaw axis: two knobs now drive the same motion — one DoF is gone
         </text>
       )}
-
-      {/* legend, fixed right lane */}
-      <text x={470} y={140} fontFamily={MONO} fontSize={13} fill={R.plan}>
-        ● roll / yaw rings
-      </text>
-      <text x={470} y={166} fontFamily={MONO} fontSize={13} fill={R.world}>
-        ● pitch ring
-      </text>
-      <text x={470} y={192} fontFamily={MONO} fontSize={13} fill={R.signal}>
-        ● aircraft body
-      </text>
-      <text x={470} y={230} fontFamily={MONO} fontSize={12} fill={R.world}>
-        pitch = {Math.round(p)}°
-      </text>
-      <text x={470} y={252} fontFamily={MONO} fontSize={12} fill={locked ? R.error : R.world}>
-        {locked ? "LOCKED near 90°" : "away from lock"}
-      </text>
-
-      {reduced && (
-        <text x={30} y={414} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: rings shown static; the pitch slider still drives the lock.
+      {!locked && (
+        <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+          drag to orbit · push pitch toward 90° and watch the dashed axes merge
         </text>
       )}
     </Stage>
@@ -495,96 +452,106 @@ export function RbGimbalLock() {
 }
 
 // ===========================================================================
-// Fig 2.4 · Euler vs quaternion: which one takes the ugly path?  (toggle-compare)
-// Two objects blend from start A to end B along a shared scrub bar. Left uses
-// naive Euler interpolation (kinks, can flip near lock); right uses quaternion
-// slerp (clean even arc). Traced nose paths make the difference undeniable.
+// Fig 2.4 · Euler vs quaternion: which one takes the ugly path?  (true 3D)
+// One unit sphere, two interpolation laws, zero fakery: the amber path lerps
+// the three Euler angles independently and composes them; the blue path slerps
+// between the same two orientations as quaternions. Both nose traces are drawn
+// on the sphere so the detour is measured, not asserted. Orbitable.
 // ===========================================================================
 
 type Mode24 = "both" | "euler" | "slerp";
 
+// Euler triples (roll, pitch, yaw) in degrees for start and end orientations.
+const EUL_A: V3 = [0, 12, 20];
+const EUL_B_EASY: V3 = [0, 35, 150];
+const EUL_B_LOCK: V3 = [70, 85, 160]; // pitch grazes the pole: lerp goes wild
+
+const qFromEulDeg = (e: V3) => quat.fromEuler(rad(e[0]), rad(e[1]), rad(e[2]));
+const noseAt = (q: Quat): V3 => quat.rotate(q, [1, 0, 0]);
+
 export function RbQuaternionSlerp() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
+  const orbit = useOrbit(-20, 16);
   const [mode, setMode] = useState<Mode24>("both");
   const [nearLock, setNearLock] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [t, setT] = useState(0);
+  const [t, setT] = useState(0.35);
 
   useRafLoop(
-    (dt) =>
-      setT((v) => {
-        const nv = v + dt * 0.4;
-        return nv >= 1 ? 1 : nv;
-      }),
+    (dt) => setT((v) => (v + dt * 0.25 >= 1 ? 1 : v + dt * 0.25)),
     { playing: playing && inView && !reduced && t < 1 },
   );
+  const tv = reduced ? Math.max(t, 0.999) : t;
 
-  const tv = reduced ? 1 : t;
+  const eulB = nearLock ? EUL_B_LOCK : EUL_B_EASY;
+  const qA = qFromEulDeg(EUL_A);
+  const qB = qFromEulDeg(eulB);
 
-  // start A and end B headings (degrees); nearLock preset pushes B through a
-  // pole so the Euler path lurches and doubles back.
-  const A = 20;
-  const B = nearLock ? 340 : 150;
+  // the two laws, computed honestly
+  const eulerQ = (u: number) =>
+    qFromEulDeg([
+      lerp(EUL_A[0], eulB[0], u),
+      lerp(EUL_A[1], eulB[1], u),
+      lerp(EUL_A[2], eulB[2], u),
+    ]);
+  const slerpQ = (u: number) => quat.slerp(qA, qB, u);
 
-  // slerp: shortest arc, constant rate
-  const dShort = ((B - A + 540) % 360) - 180;
-  const slerpAng = A + dShort * tv;
-  // euler: naive linear over the "long/ugly" way + a wobble near lock
-  const eulerBase = lerp(A, nearLock ? B + 360 : B, tv);
-  const wobble = nearLock ? Math.sin(tv * Math.PI * 3) * 26 * (1 - Math.abs(tv - 0.5) * 1.4) : 0;
-  const eulerAng = eulerBase + wobble;
-
-  const drawObj = (cx: number, cy: number, ang: number, color: string, fill: string, label: string) => {
-    const r = rad(-ang);
-    const nose = { x: cx + 60 * Math.cos(r), y: cy + 60 * Math.sin(r) };
-    return (
-      <g>
-        <line x1={cx} y1={cy} x2={nose.x} y2={nose.y} stroke={color} strokeWidth={6} strokeLinecap="round" />
-        <polygon
-          points={`${nose.x},${nose.y} ${nose.x - 12 * Math.cos(r - 0.4)},${nose.y - 12 * Math.sin(r - 0.4)} ${nose.x - 12 * Math.cos(r + 0.4)},${nose.y - 12 * Math.sin(r + 0.4)}`}
-          fill={color}
-        />
-        <circle cx={cx} cy={cy} r={26} fill={fill} stroke={color} strokeWidth={2.5} />
-        <text x={cx} y={cy + 62} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={color}>
-          {label}
-        </text>
-      </g>
-    );
+  // arc lengths of the two nose paths (degrees swept), the honest scorecard
+  const pathLen = (f: (u: number) => Quat) => {
+    let acc = 0;
+    let prev = noseAt(f(0));
+    for (let i = 1; i <= 48; i++) {
+      const cur = noseAt(f(i / 48));
+      acc += Math.acos(clamp(v3.dot(prev, cur), -1, 1));
+      prev = cur;
+    }
+    return (acc * 180) / Math.PI;
   };
-
-  // traced arcs for each nose (sampled path)
-  const trace = (cx: number, cy: number, fn: (u: number) => number, color: string) => {
-    const pts = Array.from({ length: 41 }, (_, i) => {
-      const u = i / 40;
-      if (u > tv + 0.001) return null;
-      const r = rad(-fn(u));
-      return `${(cx + 60 * Math.cos(r)).toFixed(1)},${(cy + 60 * Math.sin(r)).toFixed(1)}`;
-    }).filter(Boolean);
-    return <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth={2} opacity={0.55} />;
-  };
-
-  const eFn = (u: number) => lerp(A, nearLock ? B + 360 : B, u) + (nearLock ? Math.sin(u * Math.PI * 3) * 26 * (1 - Math.abs(u - 0.5) * 1.4) : 0);
-  const sFn = (u: number) => A + dShort * u;
+  const lenE = pathLen(eulerQ);
+  const lenS = pathLen(slerpQ);
 
   const showE = mode === "both" || mode === "euler";
   const showS = mode === "both" || mode === "slerp";
-  const CL = { x: 200, y: 250 };
-  const CR = { x: 520, y: 250 };
 
-  // target B ghost markers
-  const targetGhost = (cx: number, cy: number) => {
-    const r = rad(-B);
-    const nx = cx + 60 * Math.cos(r);
-    const ny = cy + 60 * Math.sin(r);
-    return <line x1={cx} y1={cy} x2={nx} y2={ny} stroke={R.goal} strokeWidth={2.5} strokeDasharray="5 5" />;
-  };
+  const prims: Prim3D[] = [
+    // wireframe globe: equator + two meridians + a tilted ring, kept light
+    ...ring3([0, 0, 0], [0, 0, 1], 1, R.line, { width: 1 }),
+    ...ring3([0, 0, 0], [1, 0, 0], 1, R.line, { width: 1 }),
+    ...ring3([0, 0, 0], [0, 1, 0], 1, R.line, { width: 1 }),
+    // poles, because "pitch hits the pole" is the whole story
+    dot3([0, 0, 1], R.world, { r: 3.5 }),
+    label3([0, 0, 1], "pole (pitch 90°)", R.world, { dx: 8, dy: -6, size: 11.5 }),
+    dot3([0, 0, -1], R.world, { r: 3.5 }),
+    // start and end noses (green, ground truth)
+    dot3(noseAt(qA), R.goal, { r: 5.5 }),
+    label3(noseAt(qA), "A", R.goal, { dx: 8, dy: 12, size: 13 }),
+    dot3(noseAt(qB), R.goal, { r: 5.5 }),
+    label3(noseAt(qB), "B", R.goal, { dx: 8, dy: -8, size: 13 }),
+    ...(showE
+      ? [
+          ...curve3((u) => noseAt(eulerQ(u * tv)), R.plan, { n: 56, width: 2.5 }),
+          dot3(noseAt(eulerQ(tv)), R.plan, { r: 6 }),
+          seg3([0, 0, 0], noseAt(eulerQ(tv)), R.plan, { width: 2, opacity: 0.5 }),
+        ]
+      : []),
+    ...(showS
+      ? [
+          ...curve3((u) => noseAt(slerpQ(u * tv)), R.signal, { n: 56, width: 2.5 }),
+          dot3(noseAt(slerpQ(tv)), R.signal, { r: 6 }),
+          seg3([0, 0, 0], noseAt(slerpQ(tv)), R.signal, { width: 2, opacity: 0.5 }),
+        ]
+      : []),
+  ];
+
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 4.6, zoom: 150 };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 2.4 · Euler vs quaternion: which one takes the ugly path?"
-      ariaLabel={`Two objects blending from start A to end B; left uses Euler interpolation, right uses quaternion slerp, at blend ${tv.toFixed(2)}`}
+      ariaLabel={`A unit sphere with two traced nose paths from orientation A to B: Euler interpolation versus quaternion slerp, at blend ${tv.toFixed(2)}. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
           <Tabs
@@ -596,58 +563,42 @@ export function RbQuaternionSlerp() {
             value={mode}
             onChange={setMode}
           />
-          <Btn onClick={() => setPlaying((v) => !v)} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
-          <Slider label="t" min={0} max={1} step={0.01} value={t} onChange={setT} fmt={(v) => v.toFixed(2)} />
-          <Btn onClick={() => setNearLock((v) => !v)} active={nearLock}>
-            {nearLock ? "✓ near-lock B" : "choose near-lock B"}
-          </Btn>
-          <Btn
-            onClick={() => {
+          <Transport
+            playing={playing}
+            onPlay={() => setPlaying((v) => !v)}
+            onReset={() => {
               setT(0);
               setPlaying(false);
+              orbit.reset();
             }}
-          >
-            ↺ reset
+          />
+          <Slider label="t" min={0} max={1} step={0.01} value={t} onChange={setT} fmt={(v) => v.toFixed(2)} />
+          <Btn onClick={() => { setNearLock((v) => !v); setT(0.35); }} active={nearLock}>
+            {nearLock ? "✓ B near the pole" : "put B near the pole"}
           </Btn>
         </>
       }
     >
-      <line x1={360} y1={70} x2={360} y2={400} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-      <text x={200} y={54} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.plan}>
-        Euler interpolation
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "t", value: tv.toFixed(2), color: R.ink },
+          { label: "euler sweep", value: `${Math.round(lenE)}°`, color: R.plan },
+          { label: "slerp sweep", value: `${Math.round(lenS)}°`, color: R.signal },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.plan, label: "euler-angle lerp" },
+          { color: R.signal, label: "quaternion slerp" },
+          { color: R.goal, label: "A and B" },
+        ]}
+      />
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={nearLock ? R.error : R.world}>
+        {nearLock
+          ? `near the pole the Euler path sweeps ${Math.round(lenE)}° to slerp's ${Math.round(lenS)}° — same start, same end`
+          : "slerp takes the great-circle arc at constant speed · drag to orbit"}
       </text>
-      <text x={520} y={54} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.signal}>
-        quaternion slerp
-      </text>
-
-      {showE && (
-        <>
-          {targetGhost(CL.x, CL.y)}
-          {trace(CL.x, CL.y, eFn, R.plan)}
-          {drawObj(CL.x, CL.y, eulerAng, R.plan, R.fillAmber, nearLock ? "detours / flips" : "wobbles")}
-        </>
-      )}
-      {showS && (
-        <>
-          {targetGhost(CR.x, CR.y)}
-          {trace(CR.x, CR.y, sFn, R.signal)}
-          {drawObj(CR.x, CR.y, slerpAng, R.signal, R.fillBlue, "clean even arc")}
-        </>
-      )}
-
-      {/* fixed bottom lane */}
-      <text x={30} y={418} fontFamily={MONO} fontSize={13} fill={R.world}>
-        green dashed = target orientation B · t = {tv.toFixed(2)}
-        {nearLock ? " · near-lock: Euler side lurches" : ""}
-      </text>
-
-      {reduced && (
-        <text x={30} y={396} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: shown at t = 1; the scrub bar and presets still update both paths.
-        </text>
-      )}
     </Stage>
   );
 }
