@@ -283,41 +283,32 @@ export function RbRotationMatrix() {
         </text>
       )}
 
-      {/* live matrix panel, fixed right lane */}
-      <text x={470} y={130} fontFamily={MONO} fontSize={14} fill={R.world}>
+      {/* live matrix panel, fixed right lane, with real drawn brackets */}
+      <text x={470} y={128} fontFamily={MONO} fontSize={14} fill={R.world}>
         R(θ) =
       </text>
-      <text x={470} y={172} fontFamily={MONO} fontSize={26} fill={R.world}>
-        [
-      </text>
-      <text x={470} y={210} fontFamily={MONO} fontSize={26} fill={R.world}>
-        [
-      </text>
-      <text x={630} y={172} fontFamily={MONO} fontSize={26} fill={R.world}>
-        ]
-      </text>
-      <text x={630} y={210} fontFamily={MONO} fontSize={26} fill={R.world}>
-        ]
-      </text>
-      <text x={492} y={168} fontFamily={MONO} fontSize={17} fill={R.signal} fontWeight={600}>
+      {/* left + right bracket strokes */}
+      <path d="M 482 142 h -10 v 74 h 10" fill="none" stroke={R.world} strokeWidth={2} />
+      <path d="M 628 142 h 10 v 74 h -10" fill="none" stroke={R.world} strokeWidth={2} />
+      <text x={520} y={172} textAnchor="middle" fontFamily={MONO} fontSize={17} fill={R.signal} fontWeight={600}>
         {cells[0][0]}
       </text>
-      <text x={562} y={168} fontFamily={MONO} fontSize={17} fill={sin > 0.01 ? R.error : R.plan} fontWeight={600}>
+      <text x={592} y={172} textAnchor="middle" fontFamily={MONO} fontSize={17} fill={sin > 0.01 ? R.error : R.plan} fontWeight={600}>
         {cells[0][1]}
       </text>
-      <text x={492} y={206} fontFamily={MONO} fontSize={17} fill={R.signal} fontWeight={600}>
+      <text x={520} y={202} textAnchor="middle" fontFamily={MONO} fontSize={17} fill={R.signal} fontWeight={600}>
         {cells[1][0]}
       </text>
-      <text x={562} y={206} fontFamily={MONO} fontSize={17} fill={R.plan} fontWeight={600}>
+      <text x={592} y={202} textAnchor="middle" fontFamily={MONO} fontSize={17} fill={R.plan} fontWeight={600}>
         {cells[1][1]}
       </text>
-      <text x={470} y={252} fontFamily={MONO} fontSize={12} fill={R.signal}>
+      <text x={470} y={248} fontFamily={MONO} fontSize={12} fill={R.signal}>
         col 1 = rotated x̂
       </text>
-      <text x={470} y={272} fontFamily={MONO} fontSize={12} fill={R.plan}>
+      <text x={470} y={268} fontFamily={MONO} fontSize={12} fill={R.plan}>
         col 2 = rotated ŷ
       </text>
-      <text x={470} y={310} fontFamily={MONO} fontSize={13} fill={R.ink}>
+      <text x={470} y={306} fontFamily={MONO} fontSize={13} fill={R.ink}>
         θ = {Math.round(a)}°
       </text>
     </Stage>
