@@ -79,7 +79,7 @@ export const chapter11: Chapter = {
     {
       heading: "Why a robot wants one",
       paragraphs: [
-        "We've said a world model buys foresight, imagination, and data. Now let's cash those out into the four concrete jobs a world model does in a robotics stack, the survey's taxonomy of *uses*, and each one is a direct answer to a pain you've already met.",
+        "We've said a world model buys foresight, imagination, and data. Now let's cash those out into the four concrete jobs a world model does in a robotics stack — the survey's taxonomy of *uses* — and each one is a direct answer to a pain you've already met.",
         "**Use 1, model-based RL.** Chapter 7 trained policies by having them act, over and over, in an environment. If that environment is real hardware, you're wearing out motors and waiting for wall-clock time. The fix: learn a world model, then train the policy **inside the model**. The policy proposes actions, the model predicts what happens, the policy gets a reward signal, all without touching a real robot. This is what \"model-based\" means: a learned model of the dynamics stands in for the real dynamics. It's the direct sequel to Chapter 7, and it's why Ha & Schmidhuber's title became a rallying cry.",
         "**Use 2, planning.** Instead of training a reactive policy, sometimes you just want to *think ahead at decision time*. Imagine a handful of candidate action sequences, roll each one forward in the world model, and pick the sequence whose imagined outcome is best. If you re-plan every step (commit to the first action, then re-imagine from the new state) you've turned the world model into the dynamics for **Model Predictive Control (MPC)**, the same MPC that shows up in classical control, but with a *learned* model of the world instead of a hand-derived one.",
         "**Use 3, data generation and augmentation.** This is the one that pays Chapter 10's bill directly. A world model can **synthesize demonstrations**, dream up new trajectories the robot never actually performed, and if you can recover executable actions from those dreams, you've amplified a scarce dataset into a large one. We'll see a concrete data engine (DreamGen) doing exactly this later.",
@@ -108,7 +108,7 @@ export const chapter11: Chapter = {
       diagram: {
         id: "rb-11-2",
         caption:
-          "Predicting every pixel is expensive and drifts into mush; predicting a compact latent is cheap and stable, so you dream long rollouts and only render at the end: the core Dreamer idea.",
+          "Same latent space, two model qualities: the pixel-space model's large per-step error compounds until its rollout diverges from the truth, while the compact latent model stays trustworthy across the whole horizon — the core Dreamer bet, with the error measured, not asserted.",
       },
     },
     {
@@ -240,7 +240,7 @@ export const chapter11: Chapter = {
       diagram: {
         id: "rb-11-5",
         caption:
-          "Domain randomization doesn't aim at reality; it makes reality just one sample: vary textures, lighting, mass, and friction every episode so the policy can't overfit to any single world, and the real one becomes one more draw from the distribution.",
+          "Domain randomization doesn't aim at reality; it makes reality just one sample: vary geometry, mass, and friction across every training world so the policy can't overfit to any single one, and if the range is wide enough the real world (center) becomes just another draw the policy already handles.",
       },
     },
     {
@@ -290,7 +290,7 @@ export const chapter11: Chapter = {
     },
     {
       paragraphs: [
-        "Now, why a robotics chapter cares. **Fast photorealistic reconstruction from ordinary photos** means you can build a **digital twin** of a real workspace, from a *phone video*, in minutes. Three things follow. You can **convert the splats into collision geometry** and hand it to a physics engine, so the twin isn't just pretty, it's *physical*: the robot can push things in it. You can **train and plan in the twin**, then transfer to the real robot, with a much smaller reality gap because the twin was built *from* reality. And the recent systems make this concrete: **RoboGSim** uses splatting in a **Real2Sim2Real** loop (capture real → build a Gaussian sim → train → deploy), and **DreMa** combines 3DGS with a physics simulator to make a *manipulable* digital twin, one you can rearrange to **generate new demonstrations**, cashing out Use 3 again. Photograph the world, get a world model back.",
+        "Now, why a robotics chapter cares. **Fast photorealistic reconstruction from ordinary photos** means you can build a **digital twin** of a real workspace — a simulator whose geometry and appearance are copied from one specific real place instead of modeled by hand — from a *phone video*, in minutes. Three things follow. You can **convert the splats into collision geometry** and hand it to a physics engine, so the twin isn't just pretty, it's *physical*: the robot can push things in it. You can **train and plan in the twin**, then transfer to the real robot, with a much smaller reality gap because the twin was built *from* reality. And the recent systems make this concrete: **RoboGSim** uses splatting in a **Real2Sim2Real** loop (capture real → build a Gaussian sim → train → deploy), and **DreMa** combines 3DGS with a physics simulator to make a *manipulable* digital twin, one you can rearrange to **generate new demonstrations**, cashing out Use 3 again. Photograph the world, get a world model back.",
       ],
     },
     {
@@ -358,7 +358,7 @@ export const chapter11: Chapter = {
       diagram: {
         id: "rb-11-8",
         caption:
-          "A world model's job is reliability, not beauty: predictions start coherent and drift into hallucination over a long horizon, so the real question is how far you can trust the rollout, and grounding buys you a longer trustworthy horizon, not prettier frames.",
+          "A world model's job is reliability, not beauty: run the same actions under the model's dynamics and the real dynamics and the two futures part ways as small per-step errors compound, so the real question is how far you can trust the rollout — and grounding buys a longer trustworthy horizon, not prettier frames.",
       },
     },
     {

@@ -1,7 +1,6 @@
 "use client";
 
-import { useReducer, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useReducer, useState } from "react";
 import {
   R,
   MONO,
@@ -13,33 +12,46 @@ import {
   usePrefersReducedMotion,
   useStageVisibility,
   svgArrow,
-  svgPoint,
-  approach,
   clamp,
   lerp,
   mulberry32,
+  type V3,
+  type Prim3D,
+  type Camera3D,
+  v3,
+  quat,
+  seg3,
+  dot3,
+  label3,
+  ring3,
+  grid3,
+  box3,
+  Scene3D,
+  useOrbit,
+  Legend,
+  Readout,
+  Transport,
 } from "./shared";
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 // ===========================================================================
 // Fig 11.1 · The dreaming loop  (animated pipeline)
-// Two MDP loops share a policy. Toggle whether the policy trains in reality
-// (expensive, ~1 rollout/s) or in a learned world model (cheap, ~10000/s). A
-// token circulates the active loop; the inactive loop dims; a cost meter drops.
+// Two MDP loops share one policy. Toggle whether the policy trains in reality
+// (expensive, ~1 rollout/s) or inside a learned world model (~10,000/s). A
+// token circulates the active loop and the figure *counts* the loops actually
+// completed in each mode, so the cost asymmetry is tallied, not asserted.
 // ===========================================================================
 
-const POLICY = { x: 360, y: 220 };
-// Real loop (left): POLICY -> ACT -> REAL WORLD -> OBSERVE -> POLICY
+const POLICY_11 = { x: 360, y: 218 };
 const REAL_NODES = [
-  { id: "ACT", x: 195, y: 120, color: R.plan, sub: "command" },
-  { id: "REAL WORLD", x: 110, y: 300, color: R.world, sub: "reality" },
-  { id: "OBSERVE", x: 300, y: 330, color: R.signal, sub: "sense" },
+  { id: "ACT", x: 200, y: 128, color: R.plan, sub: "command" },
+  { id: "REAL WORLD", x: 112, y: 300, color: R.world, sub: "reality" },
+  { id: "OBSERVE", x: 300, y: 332, color: R.signal, sub: "sense" },
 ];
-// Imagined loop (right): POLICY -> WORLD MODEL -> POLICY
 const DREAM_NODES = [
-  { id: "WORLD MODEL", x: 560, y: 160, color: R.goal, sub: "dreamed dynamics" },
-  { id: "IMAGINED", x: 560, y: 320, color: R.signal, sub: "next state" },
+  { id: "WORLD MODEL", x: 566, y: 150, color: R.goal, sub: "dreamed dynamics" },
+  { id: "IMAGINED", x: 566, y: 322, color: R.signal, sub: "predicted state" },
 ];
 
 export function RbDreamingLoop() {
@@ -47,33 +59,34 @@ export function RbDreamingLoop() {
   const { ref, inView } = useStageVisibility();
   const [playing, toggle] = useReducer((p) => !p, true);
   const [dream, setDream] = useState(false);
-  // phase 0..1 around active loop; cost eases 0(dream)..1(real); flash on real step
-  const [st, setSt] = useState({ phase: 0, cost: 1, flash: 0 });
+  const [st, setSt] = useState({ phase: 0, flash: 0, real: 0, imag: 0 });
 
   useRafLoop(
     (dt) => {
       setSt((s) => {
-        const speed = dream ? 1.1 : 0.6;
+        const speed = dream ? 1.15 : 0.55;
         let p = s.phase + dt * speed;
         let flash = Math.max(0, s.flash - dt * 1.8);
+        let real = s.real;
+        let imag = s.imag;
         if (p >= 1) {
           p -= 1;
-          if (!dream) flash = 1; // each real loop costs a red step
+          if (dream) imag += 1;
+          else {
+            real += 1;
+            flash = 1;
+          }
         }
-        const cost = approach(s.cost, dream ? 0 : 1, 0.14, dt);
-        return { phase: p, cost, flash };
+        return { phase: p, flash, real, imag };
       });
     },
     { playing: playing && inView && !reduced },
   );
 
-  const rollouts = dream ? 10000 : 1;
   const phase = reduced ? 0.5 : st.phase;
-
-  // Token position along the active loop (piecewise around the ring waypoints).
-  const realRing = [POLICY, REAL_NODES[0], REAL_NODES[1], REAL_NODES[2], POLICY];
-  const dreamRing = [POLICY, DREAM_NODES[0], DREAM_NODES[1], POLICY];
-  const ring = dream ? dreamRing : realRing;
+  const ring = dream
+    ? [POLICY_11, DREAM_NODES[0], DREAM_NODES[1], POLICY_11]
+    : [POLICY_11, REAL_NODES[0], REAL_NODES[1], REAL_NODES[2], POLICY_11];
   const segCount = ring.length - 1;
   const fseg = phase * segCount;
   const si = Math.min(Math.floor(fseg), segCount - 1);
@@ -121,67 +134,69 @@ export function RbDreamingLoop() {
     <Stage
       innerRef={ref}
       title="Fig 11.1 · The dreaming loop"
-      ariaLabel={`Policy training in ${dream ? "imagination" : "reality"}, ${rollouts} rollouts per second`}
+      ariaLabel={`Policy training in ${dream ? "imagination" : "reality"}: ${st.real} real rollouts and ${st.imag} imagined rollouts completed so far`}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
+          <Transport
+            playing={playing}
+            onPlay={toggle}
+            onReset={() => setSt({ phase: 0, flash: 0, real: 0, imag: 0 })}
+          />
           <Btn
             onClick={() => setDream((d) => !d)}
             active={dream}
             title="route the policy into the real world or into its own imagination"
           >
-            {dream ? "train in imagination" : "train in reality"}
+            {dream ? "training in imagination" : "training in reality"}
           </Btn>
-          <Btn onClick={() => setSt({ phase: 0, cost: dream ? 0 : 1, flash: 0 })}>↺ reset</Btn>
         </>
       }
     >
-      {/* readout lane, top */}
-      <text x={30} y={40} fontFamily={MONO} fontSize={13} fill={R.world}>
-        rollouts / sec
-      </text>
-      <text x={150} y={40} fontFamily={MONO} fontSize={15} fill={dream ? R.goal : R.plan} fontWeight={600}>
-        ~{rollouts.toLocaleString()}
-      </text>
-      <text x={470} y={40} fontFamily={MONO} fontSize={13} fill={R.world}>
-        real-world cost
-      </text>
-      <rect x={590} y={30} width={100} height={12} rx={6} fill="#e7e7e4" />
-      <rect x={590} y={30} width={100 * (reduced ? 1 : st.cost)} height={12} rx={6} fill={R.error} />
+      <Readout
+        rows={[
+          { label: "rollouts/sec", value: dream ? "~10,000" : "~1", color: dream ? R.goal : R.plan },
+          { label: "real steps", value: String(st.real), color: st.real > 0 ? R.error : R.ink },
+          { label: "dreamed", value: st.imag.toLocaleString(), color: R.goal },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.plan, label: "policy / command" },
+          { color: R.signal, label: "state (sensed/dreamed)" },
+          { color: R.goal, label: "learned world model" },
+          { color: R.world, label: "the real world" },
+        ]}
+      />
 
       {/* edges: real loop (left) */}
       <g opacity={dream ? 0.28 : 1}>
-        {svgArrow(POLICY.x - NW, POLICY.y - 8, REAL_NODES[0].x + 40, REAL_NODES[0].y + 20, R.line, 3, 10)}
-        {svgArrow(REAL_NODES[0].x, REAL_NODES[0].y + NH, REAL_NODES[1].x, REAL_NODES[1].y - NH, R.line, 3, 10)}
-        {svgArrow(REAL_NODES[1].x + NW, REAL_NODES[1].y, REAL_NODES[2].x - NW, REAL_NODES[2].y, R.line, 3, 10)}
-        {svgArrow(REAL_NODES[2].x + NW - 6, REAL_NODES[2].y - NH, POLICY.x - 24, POLICY.y + NH, R.line, 3, 10)}
-        <text x={90} y={210} fontFamily={MONO} fontSize={12} fill={R.world}>
+        {svgArrow(POLICY_11.x - NW, POLICY_11.y - 8, REAL_NODES[0].x + 44, REAL_NODES[0].y + 22, R.line, 3, 10)}
+        {svgArrow(REAL_NODES[0].x - 20, REAL_NODES[0].y + NH, REAL_NODES[1].x + 10, REAL_NODES[1].y - NH, R.line, 3, 10)}
+        {svgArrow(REAL_NODES[1].x + NW, REAL_NODES[1].y + 14, REAL_NODES[2].x - NW, REAL_NODES[2].y + 4, R.line, 3, 10)}
+        {svgArrow(REAL_NODES[2].x + NW - 10, REAL_NODES[2].y - NH, POLICY_11.x - 26, POLICY_11.y + NH, R.line, 3, 10)}
+        <text x={86} y={212} fontFamily={MONO} fontSize={12} fill={R.world}>
           expensive, slow,
         </text>
-        <text x={90} y={226} fontFamily={MONO} fontSize={12} fill={R.world}>
+        <text x={86} y={228} fontFamily={MONO} fontSize={12} fill={R.world}>
           one robot
         </text>
       </g>
 
       {/* edges: dream loop (right) */}
       <g opacity={dream ? 1 : 0.28}>
-        {svgArrow(POLICY.x + NW, POLICY.y - 8, DREAM_NODES[0].x - NW, DREAM_NODES[0].y + 8, R.line, 3, 10)}
+        {svgArrow(POLICY_11.x + NW, POLICY_11.y - 8, DREAM_NODES[0].x - NW, DREAM_NODES[0].y + 8, R.line, 3, 10)}
         {svgArrow(DREAM_NODES[0].x, DREAM_NODES[0].y + NH, DREAM_NODES[1].x, DREAM_NODES[1].y - NH, R.line, 3, 10)}
-        {svgArrow(DREAM_NODES[1].x - NW, DREAM_NODES[1].y - 6, POLICY.x + NW + 4, POLICY.y + NH - 4, R.line, 3, 10)}
-        <text x={470} y={392} fontFamily={MONO} fontSize={12} fill={R.goal}>
-          cheap, fast, thousands of rollouts
+        {svgArrow(DREAM_NODES[1].x - NW, DREAM_NODES[1].y - 6, POLICY_11.x + NW + 4, POLICY_11.y + NH - 4, R.line, 3, 10)}
+        <text x={478} y={392} fontFamily={MONO} fontSize={12} fill={R.goal}>
+          cheap: thousands of dreamed rollouts
         </text>
       </g>
 
-      {/* shared policy box */}
-      {box({ id: "POLICY", x: POLICY.x, y: POLICY.y, color: R.plan, sub: "the learner" }, true)}
-
+      {box({ id: "POLICY", x: POLICY_11.x, y: POLICY_11.y, color: R.plan, sub: "the learner" }, true)}
       {REAL_NODES.map((n) => box(n, !dream))}
       {DREAM_NODES.map((n) => box(n, dream))}
 
-      {/* red flash on the real world when a real step is paid for */}
+      {/* red flash: another real-world step paid for */}
       {!dream && (st.flash > 0 || reduced) && (
         <rect
           x={REAL_NODES[1].x - NW}
@@ -204,203 +219,224 @@ export function RbDreamingLoop() {
         </g>
       )}
 
-      {reduced && (
-        <text x={30} y={418} fontFamily={MONO} fontSize={12} fill={R.world}>
-          Reduced motion: loop shown static. Toggle still swaps reality ↔ imagination.
-        </text>
-      )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {reduced
+          ? "reduced motion: loops shown static — the toggle still swaps reality ↔ imagination"
+          : dream
+            ? "same policy, same loop — but every lap is free"
+            : "every lap of the left loop costs hardware, supervision, and wall-clock time"}
+      </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 11.2 · Dreaming in latent space vs pixel space  (toggle-compare)
-// Two rollout tracks over a horizon. The pixel track degrades into noise and
-// carries a big per-step cost; the latent track stays crisp and cheap, decoded
-// only at the end. A horizon slider makes the pixel drift worse.
+// Fig 11.2 · Dreaming in latent space vs pixel space  (real toy dynamics)
+// A genuine 2-D latent space with a ground-truth vector field (a limit cycle).
+// Two "learned" models = the true field plus a smooth seeded error field: the
+// pixel-space model has large per-step error, the latent model small. Both
+// rollouts are integrated for real; the error-vs-horizon curves on the right
+// are MEASURED from those rollouts, not drawn.
 // ===========================================================================
+
+const H_MAX = 40;
+const Z0: [number, number] = [1.15, 0];
+
+function gtField(x: number, y: number): [number, number] {
+  const r2 = x * x + y * y;
+  return [-1.6 * y + 0.9 * (1 - r2) * x, 1.6 * x + 0.9 * (1 - r2) * y];
+}
+
+// smooth seeded error field: what the "learned" model got wrong about f.
+const EPS_COEF = (() => {
+  const rng = mulberry32(11);
+  return Array.from({ length: 4 }, () => ({
+    a: 1.5 + 2 * rng(),
+    b: 1.5 + 2 * rng(),
+    c: rng() * Math.PI * 2,
+  }));
+})();
+
+function learnedField(x: number, y: number, amp: number): [number, number] {
+  const [fx, fy] = gtField(x, y);
+  const ex =
+    Math.sin(EPS_COEF[0].a * x + EPS_COEF[0].b * y + EPS_COEF[0].c) +
+    0.5 * Math.sin(EPS_COEF[1].a * x - EPS_COEF[1].b * y + EPS_COEF[1].c);
+  const ey =
+    Math.sin(EPS_COEF[2].a * x + EPS_COEF[2].b * y + EPS_COEF[2].c) +
+    0.5 * Math.sin(EPS_COEF[3].a * x - EPS_COEF[3].b * y + EPS_COEF[3].c);
+  return [fx + amp * ex, fy + amp * ey];
+}
+
+// midpoint-method integration of a field, H_MAX macro steps of 5 substeps.
+function rollout11(field: (x: number, y: number) => [number, number]) {
+  const pts: [number, number][] = [Z0];
+  let x = Z0[0];
+  let y = Z0[1];
+  for (let k = 0; k < H_MAX; k++) {
+    for (let s = 0; s < 5; s++) {
+      const dt = 0.045;
+      const [fx, fy] = field(x, y);
+      const [mx, my] = field(x + (fx * dt) / 2, y + (fy * dt) / 2);
+      x += mx * dt;
+      y += my * dt;
+    }
+    pts.push([x, y]);
+  }
+  return pts;
+}
+
+const GT_ROLL = rollout11(gtField);
+const PIX_ROLL = rollout11((x, y) => learnedField(x, y, 0.5));
+const LAT_ROLL = rollout11((x, y) => learnedField(x, y, 0.12));
+const errAt = (roll: [number, number][], k: number) =>
+  Math.hypot(roll[k][0] - GT_ROLL[k][0], roll[k][1] - GT_ROLL[k][1]);
+const PIX_ERR = GT_ROLL.map((_, k) => errAt(PIX_ROLL, k));
+const LAT_ERR = GT_ROLL.map((_, k) => errAt(LAT_ROLL, k));
+const TRUST_EPS = 0.3;
+const trustHorizon = (err: number[]) => {
+  const i = err.findIndex((e) => e > TRUST_EPS);
+  return i < 0 ? H_MAX : i;
+};
+const PIX_TRUST = trustHorizon(PIX_ERR);
+const LAT_TRUST = trustHorizon(LAT_ERR);
+
+// phase-space panel mapping (clamped so nothing exits the panel)
+const zx = (x: number) => clamp(200 + x * 88, 46, 354);
+const zy = (y: number) => clamp(245 - y * 88, 106, 384);
+// error-chart mapping
+const ex11 = (k: number) => 430 + (k / H_MAX) * 260;
+const ey11 = (e: number) => 330 - (clamp(e, 0, 1.55) / 1.55) * 195;
+
+// faint glyphs of the true vector field (static, deterministic)
+const FIELD_GLYPHS = (() => {
+  const out: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  for (const gx of [-1.28, -0.64, 0, 0.64, 1.28]) {
+    for (const gy of [-1.28, -0.64, 0, 0.64, 1.28]) {
+      const [fx, fy] = gtField(gx, gy);
+      const l = Math.hypot(fx, fy) || 1;
+      out.push({ x1: zx(gx), y1: zy(gy), x2: zx(gx + (fx / l) * 0.16), y2: zy(gy + (fy / l) * 0.16) });
+    }
+  }
+  return out;
+})();
+
+const poly11 = (pts: [number, number][]) => pts.map(([x, y]) => `${zx(x)},${zy(y)}`).join(" ");
+const polyErr = (err: number[], upTo: number) =>
+  err.slice(0, upTo + 1).map((e, k) => `${ex11(k)},${ey11(e)}`).join(" ");
 
 export function RbLatentVsPixel() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
+  const [mode, setMode] = useState<"pixel" | "latent">("pixel");
   const [playing, toggle] = useReducer((p) => !p, true);
-  const [horizon, setHorizon] = useState(8);
-  const [decode, setDecode] = useState(false);
-  const [t, setT] = useState(0); // 0..horizon, animated fill
+  const [horizon, setHorizon] = useState(24);
+  const [t, setT] = useState(0);
 
   useRafLoop(
-    (dt) => {
-      setT((v) => {
-        const nv = v + dt * 2.4;
-        return nv > horizon + 1.2 ? 0 : nv;
-      });
-    },
+    (dt) => setT((v) => (v + dt * 6 > horizon + 6 ? 0 : v + dt * 6)),
     { playing: playing && inView && !reduced },
   );
 
-  const filled = reduced ? horizon : Math.min(t, horizon);
-  const x0 = 70;
-  const x1 = 690;
-  const cell = (x1 - x0) / 16;
-  const rng = mulberry32(9);
-  const noiseSeed = Array.from({ length: 20 }, () => rng());
-
-  const pixelY = 150;
-  const latentY = 320;
-  const size = 40;
+  const k = reduced ? horizon : clamp(Math.floor(t), 0, horizon);
+  const roll = mode === "pixel" ? PIX_ROLL : LAT_ROLL;
+  const err = mode === "pixel" ? PIX_ERR : LAT_ERR;
+  const col = mode === "pixel" ? R.error : R.signal;
+  const trust = mode === "pixel" ? PIX_TRUST : LAT_TRUST;
+  const mk = roll[k];
+  const gk = GT_ROLL[k];
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 11.2 · Dreaming in latent space vs pixel space"
-      ariaLabel={`Pixel rollout degrades over ${horizon} steps while the latent rollout stays stable`}
+      ariaLabel={`A 2D latent space where a ${mode}-quality learned model's rollout diverges from ground truth; measured error ${err[k].toFixed(2)} at step ${k} of ${horizon}`}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
-          <Slider label="horizon" min={1} max={16} value={horizon} onChange={setHorizon} fmt={(v) => `${v} steps`} />
-          <Btn onClick={() => setDecode((d) => !d)} active={decode}>
-            {decode ? "✓ decode to pixels" : "decode to pixels"}
-          </Btn>
-          <Btn onClick={() => setT(0)}>↺ reset</Btn>
+          <Tabs
+            options={[
+              { id: "pixel", label: "pixel-space model" },
+              { id: "latent", label: "latent model" },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+          <Transport
+            playing={playing}
+            onPlay={toggle}
+            onStep={() => setT((v) => (Math.floor(v) + 1 > horizon ? 0 : Math.floor(v) + 1))}
+            onReset={() => setT(0)}
+          />
+          <Slider label="horizon" min={5} max={H_MAX} value={horizon} onChange={setHorizon} fmt={(v) => `${v} steps`} />
         </>
       }
     >
-      {/* track labels + cost bars */}
-      <text x={30} y={90} fontFamily={MONO} fontSize={14} fill={R.error} fontWeight={600}>
-        predict pixels
-      </text>
-      <text x={30} y={108} fontFamily={MONO} fontSize={12} fill={R.world}>
-        cost/step:
-      </text>
-      <rect x={110} y={99} width={90} height={10} rx={5} fill="#e7e7e4" />
-      <rect x={110} y={99} width={90} height={10} rx={5} fill={R.error} />
+      <Readout
+        rows={[
+          { label: "model", value: mode === "pixel" ? "pixel (noisy)" : "latent (clean)", color: col },
+          { label: "step", value: `${k}/${horizon}`, color: R.ink },
+          { label: "error ‖ẑ−z‖", value: err[k].toFixed(2), color: err[k] > TRUST_EPS ? R.error : R.goal },
+          { label: "trust horizon", value: trust >= H_MAX ? `>${H_MAX}` : `${trust} steps`, color: R.ink },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.goal, label: "ground truth" },
+          { color: R.error, label: "pixel-model rollout" },
+          { color: R.signal, label: "latent rollout" },
+        ]}
+      />
 
-      <text x={30} y={262} fontFamily={MONO} fontSize={14} fill={R.goal} fontWeight={600}>
-        predict latents
-      </text>
-      <text x={30} y={280} fontFamily={MONO} fontSize={12} fill={R.world}>
-        cost/step:
-      </text>
-      <rect x={110} y={271} width={90} height={10} rx={5} fill="#e7e7e4" />
-      <rect x={110} y={271} width={12} height={10} rx={5} fill={R.goal} />
-
-      {Array.from({ length: horizon }).map((_, i) => {
-        const on = i < filled;
-        const drift = clamp((i + 1) / horizon, 0, 1); // 0..1 across horizon
-        const cx = x0 + i * cell + cell / 2;
-        // pixel cell: crisp -> smeary -> noise as drift grows
-        const jitter = drift * 10;
-        const opacity = on ? 1 : 0.12;
-        return (
-          <g key={i}>
-            {/* pixel track */}
-            <rect
-              x={cx - size / 2}
-              y={pixelY - size / 2}
-              width={size}
-              height={size}
-              rx={5}
-              fill={R.fillBlue}
-              stroke={lerp(0, 1, drift) > 0.5 ? R.error : R.signal}
-              strokeWidth={2}
-              opacity={opacity}
-            />
-            {on &&
-              Array.from({ length: 6 }).map((__, k) => {
-                const s = noiseSeed[(i * 6 + k) % noiseSeed.length];
-                return (
-                  <circle
-                    key={k}
-                    cx={cx - size / 2 + 6 + s * (size - 12)}
-                    cy={pixelY - size / 2 + 6 + noiseSeed[(i + k) % noiseSeed.length] * (size - 12)}
-                    r={2.2}
-                    fill={R.error}
-                    opacity={drift * 0.9}
-                  />
-                );
-              })}
-            {on && drift > 0.55 && (
-              <line
-                x1={cx - size / 2 + 3}
-                y1={pixelY - size / 2 + jitter * 0.4}
-                x2={cx + size / 2 - 3}
-                y2={pixelY + size / 2 - jitter * 0.4}
-                stroke={R.error}
-                strokeWidth={1.4}
-                opacity={drift}
-              />
-            )}
-
-            {/* latent track: small tidy vector-blob, stays crisp */}
-            <rect
-              x={cx - 13}
-              y={latentY - 13}
-              width={26}
-              height={26}
-              rx={13}
-              fill={R.fillGreen}
-              stroke={R.signal}
-              strokeWidth={2}
-              opacity={opacity}
-            />
-            {on &&
-              Array.from({ length: 3 }).map((__, k) => (
-                <rect
-                  key={k}
-                  x={cx - 8 + k * 5}
-                  y={latentY - 6 + (k % 2) * 4}
-                  width={3}
-                  height={12 - (k % 2) * 4}
-                  fill={R.signal}
-                  opacity={0.8}
-                />
-              ))}
-            <text x={cx} y={pixelY + size / 2 + 16} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
-              {i + 1}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* the decoded clean thumbnail at the end of the latent track */}
-      {(decode || reduced) && filled >= horizon && (
-        <g>
-          <rect
-            x={x0 + horizon * cell + 6}
-            y={latentY - size / 2}
-            width={size}
-            height={size}
-            rx={5}
-            fill={R.fillGreen}
-            stroke={R.goal}
-            strokeWidth={2.5}
-          />
-          <text
-            x={x0 + horizon * cell + 6 + size / 2}
-            y={latentY + size / 2 + 16}
-            textAnchor="middle"
-            fontFamily={MONO}
-            fontSize={12}
-            fill={R.goal}
-          >
-            decode
-          </text>
+      {/* latent phase-space panel */}
+      <rect x={40} y={100} width={320} height={290} rx={8} fill="none" stroke={R.line} strokeWidth={1.5} />
+      {FIELD_GLYPHS.map((g, i) => (
+        <g key={i} opacity={0.45}>
+          <line x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke={R.world} strokeWidth={1.2} />
+          <circle cx={g.x2} cy={g.y2} r={1.4} fill={R.world} />
         </g>
-      )}
+      ))}
+      <polyline points={poly11(GT_ROLL.slice(0, horizon + 1))} fill="none" stroke={R.goal} strokeWidth={2.2} opacity={0.9} />
+      <polyline points={poly11(roll.slice(0, k + 1))} fill="none" stroke={col} strokeWidth={2.4} />
+      {/* the measured gap at step k */}
+      <line x1={zx(gk[0])} y1={zy(gk[1])} x2={zx(mk[0])} y2={zy(mk[1])} stroke={R.error} strokeWidth={1.5} strokeDasharray="3 3" />
+      <circle cx={zx(gk[0])} cy={zy(gk[1])} r={5} fill={R.goal} />
+      <circle cx={zx(mk[0])} cy={zy(mk[1])} r={5.5} fill={col} />
+      <text x={48} y={382} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+        latent space z ∈ R² · arrows = true dynamics
+      </text>
 
-      <text x={30} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
-        the pixel track dissolves into drift (red); the latent track holds and renders only at the end
+      {/* measured error chart */}
+      <text x={430} y={120} fontFamily={MONO} fontSize={12.5} fill={R.world}>
+        measured error vs horizon
+      </text>
+      <line x1={430} y1={330} x2={690} y2={330} stroke={R.line} strokeWidth={1.5} />
+      <line x1={430} y1={130} x2={430} y2={330} stroke={R.line} strokeWidth={1.5} />
+      <line x1={430} y1={ey11(TRUST_EPS)} x2={690} y2={ey11(TRUST_EPS)} stroke={R.world} strokeWidth={1} strokeDasharray="4 4" />
+      <text x={434} y={ey11(TRUST_EPS) - 5} fontFamily={MONO} fontSize={10.5} fill={R.world}>
+        trust threshold {TRUST_EPS}
+      </text>
+      <polyline points={polyErr(PIX_ERR, horizon)} fill="none" stroke={R.error} strokeWidth={2} opacity={mode === "pixel" ? 1 : 0.3} />
+      <polyline points={polyErr(LAT_ERR, horizon)} fill="none" stroke={R.signal} strokeWidth={2} opacity={mode === "latent" ? 1 : 0.3} />
+      <line x1={ex11(k)} y1={132} x2={ex11(k)} y2={330} stroke={R.world} strokeWidth={1} opacity={0.5} />
+      <circle cx={ex11(k)} cy={ey11(err[k])} r={4.5} fill={col} />
+      <text x={560} y={352} textAnchor="middle" fontFamily={MONO} fontSize={11.5} fill={R.world}>
+        imagination steps →
+      </text>
+
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {mode === "pixel"
+          ? `big per-step error compounds: off by ${PIX_ERR[horizon].toFixed(2)} after ${horizon} steps, trustworthy for ${PIX_TRUST}`
+          : `small per-step error compounds slowly: off by ${LAT_ERR[horizon].toFixed(2)} after ${horizon} steps, trustworthy for ${LAT_TRUST >= H_MAX ? `all ${H_MAX}` : LAT_TRUST}`}
       </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 11.3 · Action-conditioned video rollout  (slider-driven diagram)
-// One current frame, an action selector, and a strip of generated future frames
-// that differ by action: push left slides the block left, lift raises it, etc.
+// Fig 11.3 · Action-conditioned video rollout  (real toy physics)
+// One current frame, four candidate actions, and a strip of generated future
+// frames. The block's position in every frame comes from integrating actual
+// toy dynamics (force, drag, gravity) — change the action, change the future.
 // ===========================================================================
 
 type Act11 = "left" | "lift" | "right" | "none";
@@ -410,105 +446,161 @@ const ACTS: { id: Act11; label: string }[] = [
   { id: "right", label: "push right" },
   { id: "none", label: "do nothing" },
 ];
+const GOAL_X = -1.0; // metres: "move the block left of the line"
+
+// integrate m·v̇ = F − c·v (− g up), 6 frames of 0.5 s each.
+function simAction(act: Act11) {
+  const frames: { x: number; z: number }[] = [{ x: 0, z: 0 }];
+  let x = 0;
+  let z = 0;
+  let vx = 0;
+  let vz = 0;
+  for (let f = 1; f < 6; f++) {
+    for (let s = 0; s < 10; s++) {
+      const dt = 0.05;
+      const Fx = act === "left" ? -1.1 : act === "right" ? 1.1 : 0;
+      const Fz = act === "lift" ? 3.4 : 0;
+      vx += (Fx - 1.5 * vx) * dt;
+      vz += (Fz - 2.2 - 1.5 * vz) * dt;
+      x += vx * dt;
+      z += vz * dt;
+      if (z <= 0) {
+        z = 0;
+        vz = 0;
+      }
+    }
+    frames.push({ x, z });
+  }
+  return frames;
+}
+const ACT_ROLLOUTS: Record<Act11, { x: number; z: number }[]> = {
+  left: simAction("left"),
+  lift: simAction("lift"),
+  right: simAction("right"),
+  none: simAction("none"),
+};
 
 export function RbActionVideo() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
   const [act, setAct] = useState<Act11>("left");
-  const [steps, setSteps] = useState(4);
+  const [steps, setSteps] = useState(5);
   const [playing, toggle] = useReducer((p) => !p, true);
-  const [t, setT] = useState(steps); // eased fill count
+  const [t, setT] = useState(0);
 
   useRafLoop(
-    (dt) => {
-      setT((v) => {
-        const nv = v + dt * 2.6;
-        return nv > steps + 1.5 ? 0 : nv;
-      });
-    },
+    (dt) => setT((v) => (v + dt * 2.4 > steps + 1.5 ? 0 : v + dt * 2.4)),
     { playing: playing && inView && !reduced },
   );
 
   const shown = reduced ? steps : clamp(Math.floor(t), 0, steps);
+  const roll = ACT_ROLLOUTS[act];
+  const last = roll[steps - 1];
+  const reached = act !== "lift" && last.x <= GOAL_X;
 
-  const curX = 70;
-  const curY = 200;
-  const stripX0 = 300;
-  const stripW = 92;
-  const goalX = stripX0 + (steps - 1) * (stripW + 4) + stripW / 2;
+  const curX = 64;
+  const cellY = 190;
+  const stripX0 = 286;
+  const cellW = 60;
+  const cellH = 70;
+  const gap = 8;
+  const SC = 16; // px per metre inside a frame
 
-  // block offset per frame given the action
-  const blockPos = (frame: number) => {
-    const f = frame / Math.max(1, steps - 1);
-    if (act === "left") return { dx: -f * 26, dy: 0 };
-    if (act === "right") return { dx: f * 26, dy: 0 };
-    if (act === "lift") return { dx: 0, dy: -f * 26 };
-    return { dx: 0, dy: 0 };
+  const frameCell = (fx: number, wx: number, wz: number, on: boolean, isCur: boolean) => {
+    const c = fx + cellW / 2;
+    const dx = clamp(wx * SC, -24, 24);
+    const dz = clamp(wz * SC, 0, 34);
+    return (
+      <g opacity={on ? 1 : 0.14}>
+        <rect x={fx} y={cellY} width={cellW} height={cellH} rx={6} fill="#f3f3f0" stroke={R.line} strokeWidth={2} />
+        <line x1={fx + 4} y1={cellY + 58} x2={fx + cellW - 4} y2={cellY + 58} stroke={R.world} strokeWidth={2} />
+        {/* goal line at world x = GOAL_X */}
+        <line
+          x1={c + GOAL_X * SC}
+          y1={cellY + 6}
+          x2={c + GOAL_X * SC}
+          y2={cellY + 58}
+          stroke={R.goal}
+          strokeWidth={1.5}
+          strokeDasharray="3 3"
+          opacity={0.8}
+        />
+        {/* gripper */}
+        <rect x={c - 10} y={cellY + 8} width={20} height={11} rx={3} fill="#dcdcd8" stroke={R.world} strokeWidth={1.5} />
+        {/* block, at its simulated position */}
+        <rect
+          x={c - 8 + dx}
+          y={cellY + 42 - dz}
+          width={16}
+          height={15}
+          rx={3}
+          fill={isCur ? "#eeeeec" : R.fillBlue}
+          stroke={isCur ? R.world : R.signal}
+          strokeWidth={2}
+        />
+      </g>
+    );
   };
-
-  const frameCell = (fx: number, fy: number, dx: number, dy: number, on: boolean, isCur: boolean) => (
-    <g opacity={on ? 1 : 0.14}>
-      <rect x={fx} y={fy} width={stripW - 8} height={70} rx={6} fill="#f3f3f0" stroke={R.line} strokeWidth={2} />
-      <line x1={fx + 4} y1={fy + 58} x2={fx + stripW - 12} y2={fy + 58} stroke={R.world} strokeWidth={2} />
-      {/* gripper (fixed) */}
-      <rect x={fx + (stripW - 8) / 2 - 10} y={fy + 8} width={20} height={12} rx={3} fill="#dcdcd8" stroke={R.world} strokeWidth={1.5} />
-      {/* red block */}
-      <rect
-        x={fx + (stripW - 8) / 2 - 9 + dx}
-        y={fy + 40 + dy}
-        width={18}
-        height={16}
-        rx={3}
-        fill={isCur ? "#eeeeec" : R.fillBlue}
-        stroke={isCur ? R.world : R.signal}
-        strokeWidth={2}
-      />
-    </g>
-  );
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 11.3 · Action-conditioned video rollout"
-      ariaLabel={`Future frames generated for action ${act}`}
+      ariaLabel={`Future frames generated by integrating toy dynamics for action ${act}; final block position ${last.x.toFixed(2)} metres`}
       controls={
         <>
           <Tabs options={ACTS} value={act} onChange={setAct} />
           <Slider label="steps" min={2} max={6} value={steps} onChange={setSteps} fmt={(v) => `${v}`} />
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
-          <Btn onClick={() => setT(0)}>↺ reset</Btn>
+          <Transport playing={playing} onPlay={toggle} onReset={() => setT(0)} />
         </>
       }
     >
-      <text x={70} y={140} fontFamily={MONO} fontSize={13} fill={R.world}>
+      <Readout
+        rows={[
+          { label: "action", value: ACTS.find((a) => a.id === act)!.label, color: R.plan },
+          { label: "block x, z", value: `${last.x.toFixed(2)}, ${last.z.toFixed(2)} m`, color: R.signal },
+          { label: "goal x ≤ −1.0", value: reached ? "reached ✓" : "not reached", color: reached ? R.goal : R.error },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "predicted block" },
+          { color: R.goal, label: "goal line", dash: true },
+          { color: R.world, label: "gripper (fixed)" },
+        ]}
+      />
+
+      <text x={curX} y={cellY - 18} fontFamily={MONO} fontSize={13} fill={R.world}>
         current frame
       </text>
-      {frameCell(curX, curY, 0, 0, true, true)}
+      {frameCell(curX, 0, 0, true, true)}
 
-      {svgArrow(curX + stripW + 12, curY + 35, stripX0 - 14, curY + 35, R.plan, 3, 10)}
-      <text x={curX + stripW + 40} y={curY + 24} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.plan} fontWeight={600}>
-        {ACTS.find((a) => a.id === act)!.label}
+      {svgArrow(curX + cellW + 14, cellY + 34, stripX0 - 16, cellY + 34, R.plan, 3, 10)}
+      <text x={(curX + cellW + stripX0) / 2} y={cellY + 22} textAnchor="middle" fontFamily={MONO} fontSize={12.5} fill={R.plan} fontWeight={600}>
+        a = {act}
       </text>
 
-      <text x={300} y={140} fontFamily={MONO} fontSize={13} fill={R.signal} fontWeight={600}>
+      <text x={stripX0} y={cellY - 18} fontFamily={MONO} fontSize={13} fill={R.signal} fontWeight={600}>
         generated future: p(o&apos; | o, a)
       </text>
       {Array.from({ length: steps }).map((_, i) => {
-        const { dx, dy } = blockPos(i);
-        const fx = stripX0 + i * (stripW + 4);
-        return frameCell(fx, curY, dx, dy, i < shown, false);
+        const fx = stripX0 + i * (cellW + gap);
+        return (
+          <g key={i}>
+            {frameCell(fx, roll[i].x, roll[i].z, i < shown, false)}
+            <text x={fx + cellW / 2} y={cellY + cellH + 16} textAnchor="middle" fontFamily={MONO} fontSize={11.5} fill={R.world}>
+              {i + 1}
+            </text>
+          </g>
+        );
       })}
 
-      {/* goal marker the reader can try to reach */}
-      <circle cx={goalX} cy={curY - 14} r={8} fill="none" stroke={R.goal} strokeWidth={2.5} />
-      <text x={goalX} y={curY - 24} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
-        goal
-      </text>
-
-      <text x={70} y={330} fontFamily={MONO} fontSize={13} fill={R.world}>
-        change the action and the future changes; that is what makes it a world model, not a fixed movie
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {act === "left"
+          ? reached
+            ? "push left long enough and the block crosses the goal line — the action chose this future"
+            : "push left is on its way: extend the horizon and it crosses the goal line"
+          : "same current frame, different action, different future — that conditioning is what makes it a world model"}
       </text>
     </Stage>
   );
@@ -516,10 +608,13 @@ export function RbActionVideo() {
 
 // ===========================================================================
 // Fig 11.4 · Reconstruct pixels vs align embeddings  (toggle-compare)
-// Two pipelines for the same frame. "reconstruct" must guess every pixel and
-// wastes effort (red) on texture/lighting that grows with a clutter slider;
-// "align" predicts a small embedding and its cost barely moves.
+// Two pipelines for the same frame. "reconstruct" must commit to all 196,608
+// pixel values and wastes effort (red) on texture that grows with clutter;
+// "align" predicts a 256-number embedding and its cost barely moves.
 // ===========================================================================
+
+const PIXELS_PER_FRAME = 256 * 256 * 3; // 196,608
+const EMBED_DIM = 256;
 
 export function RbReconstructVsAlign() {
   const reduced = usePrefersReducedMotion();
@@ -533,20 +628,14 @@ export function RbReconstructVsAlign() {
   });
 
   const cl = clutter / 100;
-  const reconCost = 0.2 + cl * 0.75; // balloons with clutter
-  const alignCost = 0.14; // ~flat
+  const reconCost = 0.2 + cl * 0.75;
+  const alignCost = 0.14;
+  const wasted = Math.round(PIXELS_PER_FRAME * cl);
   const wasteOpacity = reduced ? cl : 0.4 + 0.6 * cl * (0.6 + 0.4 * Math.sin(pulse * Math.PI));
   const rng = mulberry32(21);
   const speck = Array.from({ length: 40 }, () => [rng(), rng()] as const);
 
-  const active = mode;
-
-  const pipeline = (
-    yPos: number,
-    label: string,
-    isRecon: boolean,
-    on: boolean,
-  ) => {
+  const pipeline = (yPos: number, label: string, isRecon: boolean, on: boolean) => {
     const boxColor = isRecon ? R.error : R.goal;
     const cost = isRecon ? reconCost : alignCost;
     return (
@@ -554,7 +643,6 @@ export function RbReconstructVsAlign() {
         <text x={30} y={yPos - 52} fontFamily={MONO} fontSize={14} fill={boxColor} fontWeight={600}>
           {label}
         </text>
-        {/* current frame */}
         <rect x={60} y={yPos - 34} width={70} height={68} rx={6} fill="#f3f3f0" stroke={R.line} strokeWidth={2} />
         <text x={95} y={yPos + 52} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
           current
@@ -566,24 +654,23 @@ export function RbReconstructVsAlign() {
 
         {isRecon ? (
           <>
-            {/* full future frame, guessing every pixel */}
             <rect x={210} y={yPos - 34} width={70} height={68} rx={6} fill={R.fillBlue} stroke={R.signal} strokeWidth={2} />
             {on &&
-              speck
-                .slice(0, Math.round(6 + cl * 30))
-                .map(([a, b], k) => (
-                  <circle key={k} cx={210 + 6 + a * 58} cy={yPos - 28 + b * 56} r={2} fill={R.error} opacity={wasteOpacity} />
-                ))}
+              speck.slice(0, Math.round(6 + cl * 30)).map(([a, b], k) => (
+                <circle key={k} cx={210 + 6 + a * 58} cy={yPos - 28 + b * 56} r={2} fill={R.error} opacity={wasteOpacity} />
+              ))}
             <text x={245} y={yPos + 52} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
               full future frame
             </text>
-            <text x={330} y={yPos - 10} fontFamily={MONO} fontSize={12} fill={R.error}>
-              must guess every pixel
+            <text x={310} y={yPos - 22} fontFamily={MONO} fontSize={12} fill={R.error}>
+              must commit to all
+            </text>
+            <text x={310} y={yPos - 5} fontFamily={MONO} fontSize={12} fill={R.error}>
+              {PIXELS_PER_FRAME.toLocaleString()} values
             </text>
           </>
         ) : (
           <>
-            {/* small embedding vector */}
             <rect x={210} y={yPos - 16} width={54} height={32} rx={6} fill={R.fillGreen} stroke={R.goal} strokeWidth={2} />
             {on &&
               Array.from({ length: 5 }).map((_, k) => (
@@ -597,13 +684,15 @@ export function RbReconstructVsAlign() {
             <text x={357} y={yPos + 40} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
               true target
             </text>
-            <text x={400} y={yPos - 10} fontFamily={MONO} fontSize={12} fill={R.goal}>
-              only decision-relevant structure
+            <text x={402} y={yPos - 8} fontFamily={MONO} fontSize={12} fill={R.goal}>
+              {EMBED_DIM} numbers,
+            </text>
+            <text x={402} y={yPos + 9} fontFamily={MONO} fontSize={12} fill={R.goal}>
+              only what decides
             </text>
           </>
         )}
 
-        {/* cost tag (fixed right lane) */}
         <text x={560} y={yPos - 20} fontFamily={MONO} fontSize={12} fill={R.world}>
           cost
         </text>
@@ -617,7 +706,7 @@ export function RbReconstructVsAlign() {
     <Stage
       innerRef={ref}
       title="Fig 11.4 · Reconstruct pixels vs align embeddings"
-      ariaLabel={`${mode} pipeline with scene clutter ${clutter}`}
+      ariaLabel={`${mode} pipeline at scene clutter ${clutter} percent; a pixel frame is ${PIXELS_PER_FRAME.toLocaleString()} values versus a ${EMBED_DIM}-number embedding`}
       controls={
         <>
           <Tabs
@@ -632,205 +721,300 @@ export function RbReconstructVsAlign() {
         </>
       }
     >
-      {pipeline(130, "reconstruct: predict a full future frame", true, active === "reconstruct")}
-      {pipeline(300, "align: predict a compact future embedding", false, active === "align")}
+      <Readout
+        rows={[
+          {
+            label: "values/step",
+            value: mode === "reconstruct" ? PIXELS_PER_FRAME.toLocaleString() : String(EMBED_DIM),
+            color: mode === "reconstruct" ? R.error : R.goal,
+          },
+          {
+            label: "nuisance share",
+            value: mode === "reconstruct" ? `${clutter}% (~${wasted.toLocaleString()})` : "excluded by design",
+            color: mode === "reconstruct" ? R.error : R.goal,
+          },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.error, label: "wasted capacity" },
+          { color: R.signal, label: "predicted content" },
+          { color: R.goal, label: "decision-relevant" },
+        ]}
+      />
 
-      <text x={30} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
-        {active === "reconstruct"
+      {pipeline(160, "reconstruct: predict a full future frame", true, mode === "reconstruct")}
+      {pipeline(330, "align: predict a compact future embedding", false, mode === "align")}
+
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {mode === "reconstruct"
           ? "adding clutter balloons the pixel model's wasted effort (red) on detail it will discard"
-          : "the embedding model's cost barely moves as clutter rises; it never had to render the detail"}
+          : "the embedding never contained the clutter, so its cost barely moves as the scene gets busier"}
       </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 11.5 · Domain randomization  (stepper)
-// Cycle through randomized episodes: table, light, mass, friction all sampled
-// from ranges set by a strength slider. A "real world" frame slots in as just
-// one more sample when the range is wide.
+// Fig 11.5 · Domain randomization  (true 3D, orbitable)
+// Nine mini-worlds on one floor: eight sampled from a seeded distribution over
+// block size, mass, and friction (width set by the slider), plus the one REAL
+// world in the centre. One fixed grasp policy (aperture + grip force, fit to
+// the training distribution) is evaluated in every world with real statics:
+// fits if aperture ≥ width, holds if F·μ ≥ m·g. Success is computed, not drawn.
 // ===========================================================================
 
-const DR_EPISODES = [
-  { table: "wood", tint: "#d9c3a0", light: "warm", lightC: "#f2e2c0", mass: 0.2, fric: "med" },
-  { table: "metal", tint: "#c7ccd2", light: "cool", lightC: "#cfe0f2", mass: 0.4, fric: "low" },
-  { table: "tiled", tint: "#cfd6c8", light: "harsh", lightC: "#ffffff", mass: 0.6, fric: "high" },
-  { table: "dark", tint: "#9aa0a8", light: "dim", lightC: "#c8ccd2", mass: 0.3, fric: "med" },
-  { table: "matte", tint: "#e0d2c0", light: "soft", lightC: "#efe6d4", mass: 0.5, fric: "high" },
-];
+const G = 9.81;
+const F_CRUSH = 18; // the gripper's force ceiling, N
+const REAL_W = { W: 0.26, m: 0.59, mu: 0.4 };
+
+type World5 = { gx: number; gy: number; W: number; m: number; mu: number; real: boolean };
+
+function buildWorlds(seed: number, s: number): World5[] {
+  const rng = mulberry32(seed * 991 + 17);
+  const out: World5[] = [];
+  for (let i = 0; i < 9; i++) {
+    const gx = ((i % 3) - 1) * 1.18;
+    const gy = (Math.floor(i / 3) - 1) * 1.18;
+    if (i === 4) {
+      out.push({ gx, gy, ...REAL_W, real: true });
+      continue;
+    }
+    out.push({
+      gx,
+      gy,
+      W: 0.2 * (1 + 0.8 * s * (2 * rng() - 1)),
+      m: 0.4 * (1 + 0.9 * s * (2 * rng() - 1)),
+      mu: 0.5 * (1 + 0.8 * s * (2 * rng() - 1)),
+      real: false,
+    });
+  }
+  return out;
+}
 
 export function RbDomainRandomization() {
-  const reduced = usePrefersReducedMotion();
-  const { ref, inView } = useStageVisibility();
-  const [playing, toggle] = useReducer((p) => !p, true);
-  const [strength, setStrength] = useState(80);
-  const [revealReal, setRevealReal] = useState(false);
-  const [, setT] = useState(0); // seconds accumulator (write-only)
-  const [idx, setIdx] = useState(0);
+  const { ref } = useStageVisibility();
+  const orbit = useOrbit(-32, 27);
+  const [strength, setStrength] = useState(70);
+  const [seed, setSeed] = useState(1);
+  const s = strength / 100;
 
-  useRafLoop(
-    (dt) => {
-      setT((v) => {
-        const nv = v + dt;
-        if (nv > 1.4) {
-          setIdx((i) => (i + 1) % DR_EPISODES.length);
-          return 0;
-        }
-        return nv;
-      });
-    },
-    { playing: playing && inView && !reduced },
-  );
+  const { worlds, A, F, simOk, realOk } = useMemo(() => {
+    const ws = buildWorlds(seed, s);
+    const sims = ws.filter((w) => !w.real);
+    const ap = 1.04 * Math.max(...sims.map((w) => w.W));
+    const need = Math.max(...sims.map((w) => (w.m * G) / w.mu));
+    const force = Math.min(1.1 * need, F_CRUSH);
+    const ok = (w: World5) => ap >= w.W && force * w.mu >= w.m * G;
+    return {
+      worlds: ws,
+      A: ap,
+      F: force,
+      simOk: sims.filter(ok).length,
+      realOk: ok(ws[4]),
+    };
+  }, [seed, s]);
 
-  const s = strength / 100; // 0 -> all identical, 1 -> wide
-  const ep = DR_EPISODES[idx];
-  // interpolate every visual toward the base (idx 0) as strength -> 0
-  const base = DR_EPISODES[0];
-  const tint = s > 0.02 ? ep.tint : base.tint;
-  const lightC = s > 0.02 ? ep.lightC : base.lightC;
-  const mass = lerp(base.mass, ep.mass, s);
-  const fric = s > 0.5 ? ep.fric : base.fric;
+  const prims = useMemo(() => {
+    const out: Prim3D[] = [];
+    for (const w of worlds) {
+      const ok = A >= w.W && F * w.mu >= w.m * G;
+      const c = ok ? R.goal : R.error;
+      const h = 0.44;
+      // floor tile, coloured by measured grasp outcome
+      out.push(
+        seg3([w.gx - h, w.gy - h, 0], [w.gx + h, w.gy - h, 0], c, { width: 2 }),
+        seg3([w.gx + h, w.gy - h, 0], [w.gx + h, w.gy + h, 0], c, { width: 2 }),
+        seg3([w.gx + h, w.gy + h, 0], [w.gx - h, w.gy + h, 0], c, { width: 2 }),
+        seg3([w.gx - h, w.gy + h, 0], [w.gx - h, w.gy - h, 0], c, { width: 2 }),
+      );
+      // the sampled block (real world's block in amber)
+      const bh = w.W * 1.15;
+      out.push(...box3([w.gx, w.gy, bh / 2], quat.id, w.W, w.W, bh, w.real ? R.plan : R.signal));
+      // the one shared policy: two fingers spaced by the trained aperture
+      out.push(
+        seg3([w.gx - A / 2, w.gy, 0.36], [w.gx - A / 2, w.gy, 0.62], R.ink, { width: 3 }),
+        seg3([w.gx + A / 2, w.gy, 0.36], [w.gx + A / 2, w.gy, 0.62], R.ink, { width: 3 }),
+        seg3([w.gx - A / 2, w.gy, 0.62], [w.gx + A / 2, w.gy, 0.62], R.ink, { width: 3 }),
+        dot3([w.gx, w.gy, 0.8], c, { r: 4 }),
+      );
+      if (w.real) out.push(label3([w.gx, w.gy, 1.0], "REAL", R.plan, { anchor: "middle", dy: -2 }));
+    }
+    return out;
+  }, [worlds, A, F]);
 
-  const sceneX = 60;
-  const sceneY = 90;
-  const sceneW = 380;
-  const sceneH = 230;
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 6.5, zoom: 118 };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 11.5 · Domain randomization"
-      ariaLabel={`Randomized episode ${idx + 1} at strength ${strength}%`}
+      ariaLabel={`Nine 3D mini-worlds sampled at randomization ${strength} percent; the shared grasp policy succeeds in ${simOk} of 8 simulated worlds and ${realOk ? "succeeds" : "fails"} in the real one. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
-          <Btn onClick={() => setIdx((i) => (i + 1) % DR_EPISODES.length)}>⏭ step</Btn>
           <Slider label="randomization" min={0} max={100} value={strength} onChange={setStrength} fmt={(v) => `${v}%`} />
-          <Btn onClick={() => setRevealReal((v) => !v)} active={revealReal}>
-            {revealReal ? "✓ real frame" : "reveal the real frame"}
+          <Btn onClick={() => setSeed((v) => v + 1)} title="draw a fresh batch of training worlds">
+            ⏭ resample
           </Btn>
+          <Btn
+            onClick={() => {
+              setSeed(1);
+              setStrength(70);
+              orbit.reset();
+            }}
+          >
+            ↺ reset
+          </Btn>
+          <span className="font-mono text-[13px] text-[var(--muted)]">drag to orbit</span>
         </>
       }
     >
-      <text x={60} y={64} fontFamily={MONO} fontSize={14} fill={R.world}>
-        episode {idx + 1}: a fresh sample every time
-      </text>
-
-      {/* lighting wash */}
-      <rect x={sceneX} y={sceneY} width={sceneW} height={sceneH} rx={8} fill={lightC} opacity={0.5} />
-      <rect x={sceneX} y={sceneY} width={sceneW} height={sceneH} rx={8} fill="none" stroke={R.line} strokeWidth={2} />
-      {/* table surface */}
-      <rect x={sceneX + 30} y={sceneY + 150} width={sceneW - 60} height={40} rx={6} fill={tint} stroke={R.world} strokeWidth={2} />
-      {/* gripper */}
-      <rect x={sceneX + sceneW / 2 - 16} y={sceneY + 40} width={32} height={18} rx={4} fill="#dcdcd8" stroke={R.world} strokeWidth={2} />
-      {/* block, size hints at mass */}
-      <rect
-        x={sceneX + sceneW / 2 - 14 * (0.7 + mass)}
-        y={sceneY + 150 - 34 * (0.7 + mass)}
-        width={28 * (0.7 + mass)}
-        height={34 * (0.7 + mass)}
-        rx={4}
-        fill={R.fillBlue}
-        stroke={R.signal}
-        strokeWidth={2.5}
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "sim success", value: `${simOk}/8 worlds`, color: simOk >= 7 ? R.goal : R.plan },
+          { label: "real world", value: realOk ? "succeeds ✓" : "fails ✗", color: realOk ? R.goal : R.error },
+          { label: "aperture", value: `${(A * 100).toFixed(1)} cm`, color: R.ink },
+          { label: "grip force", value: `${F.toFixed(1)} N${F >= F_CRUSH - 0.01 ? " (max)" : ""}`, color: R.ink },
+        ]}
       />
-      {/* consistent policy behavior marker */}
-      <text x={sceneX + sceneW / 2} y={sceneY + 210} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
-        same policy, every world
+      <Legend
+        items={[
+          { color: R.signal, label: "sampled sim world" },
+          { color: R.plan, label: "the real world" },
+          { color: R.goal, label: "grasp succeeds" },
+          { color: R.error, label: "grasp fails" },
+        ]}
+      />
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={realOk ? R.world : R.error}>
+        {realOk
+          ? "wide range: the real world is just one more sample the policy already covers"
+          : "range too narrow — every sim world is easy, and the real one sticks out and fails"}
       </text>
-
-      {/* parameter panel (fixed right lane) */}
-      <line x1={470} y1={90} x2={470} y2={330} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-      <text x={500} y={116} fontFamily={MONO} fontSize={14} fill={R.ink} fontWeight={600}>
-        sampled params
-      </text>
-      <text x={500} y={150} fontFamily={MONO} fontSize={13} fill={R.world}>
-        table
-      </text>
-      <text x={640} y={150} fontFamily={MONO} fontSize={13} fill={R.plan} fontWeight={600}>
-        {s > 0.02 ? ep.table : base.table}
-      </text>
-      <text x={500} y={182} fontFamily={MONO} fontSize={13} fill={R.world}>
-        light
-      </text>
-      <text x={640} y={182} fontFamily={MONO} fontSize={13} fill={R.plan} fontWeight={600}>
-        {s > 0.02 ? ep.light : base.light}
-      </text>
-      <text x={500} y={214} fontFamily={MONO} fontSize={13} fill={R.world}>
-        mass
-      </text>
-      <text x={640} y={214} fontFamily={MONO} fontSize={13} fill={R.plan} fontWeight={600}>
-        {mass.toFixed(2)} kg
-      </text>
-      <text x={500} y={246} fontFamily={MONO} fontSize={13} fill={R.world}>
-        friction
-      </text>
-      <text x={640} y={246} fontFamily={MONO} fontSize={13} fill={R.plan} fontWeight={600}>
-        {fric}
-      </text>
-      <text x={500} y={290} fontFamily={MONO} fontSize={12} fill={R.world}>
-        {s < 0.05 ? "range→0: every episode identical" : "wide range: reality is one more draw"}
-      </text>
-
-      {/* the real-world frame revealed as just another sample */}
-      {(revealReal || reduced) && (
-        <g>
-          <rect x={sceneX} y={sceneY + sceneH + 14} width={sceneW} height={8} rx={4} fill={R.fillGreen} stroke={R.goal} strokeWidth={2} />
-          <text x={sceneX} y={sceneY + sceneH + 46} fontFamily={MONO} fontSize={13} fill={R.goal}>
-            {s > 0.4 ? "✓ the real frame slots in, just another sample" : "real frame sticks out; range too narrow"}
-          </text>
-        </g>
-      )}
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 11.6 · NeRF ray-marching vs 3DGS splatting  (toggle-compare)
-// Left NeRF: a ray with many labeled MLP-query dots and a ~1 fps meter. Right
-// 3DGS: anisotropic Gaussian ellipses projected as 2D splats, ~60 fps. Orbit
-// the camera; a Gaussian-count slider sharpens the 3DGS reconstruction.
+// Fig 11.6 · NeRF ray-marching vs 3DGS splatting  (true 3D, orbitable)
+// One real 3D scene (a crate and a ball). NeRF tab: a camera fires rays and
+// pays many MLP queries per ray. 3DGS tab: a seeded cloud of surface-tangent
+// elliptical splats reconstructs the scene; the count slider adds splats and
+// a coverage metric — fraction of held-out surface points within a splat
+// radius — is measured from the cloud, not asserted.
 // ===========================================================================
+
+const CRATE_C: V3 = [-0.6, 0.1, 0.25];
+const CRATE_H: V3 = [0.4, 0.4, 0.25];
+const BALL_C: V3 = [0.55, -0.1, 0.4];
+const BALL_R = 0.4;
+const SPLAT_MAX = 200;
+
+function sampleScenePoint(rng: () => number): { p: V3; n: V3; crate: boolean } {
+  if (rng() < 0.55) {
+    const face = Math.floor(rng() * 5);
+    const u = 2 * rng() - 1;
+    const w = 2 * rng() - 1;
+    const [hx, hy, hz] = CRATE_H;
+    const [cx, cy, cz] = CRATE_C;
+    if (face === 0) return { p: [cx + u * hx, cy + w * hy, cz + hz], n: [0, 0, 1], crate: true };
+    if (face === 1) return { p: [cx + hx, cy + u * hy, cz + w * hz], n: [1, 0, 0], crate: true };
+    if (face === 2) return { p: [cx - hx, cy + u * hy, cz + w * hz], n: [-1, 0, 0], crate: true };
+    if (face === 3) return { p: [cx + u * hx, cy + hy, cz + w * hz], n: [0, 1, 0], crate: true };
+    return { p: [cx + u * hx, cy - hy, cz + w * hz], n: [0, -1, 0], crate: true };
+  }
+  const z = 2 * rng() - 1;
+  const phi = rng() * Math.PI * 2;
+  const st = Math.sqrt(Math.max(0, 1 - z * z));
+  const n: V3 = [st * Math.cos(phi), st * Math.sin(phi), z];
+  return { p: v3.add(BALL_C, v3.scale(n, BALL_R)), n, crate: false };
+}
+
+const SPLAT_BASE = (() => {
+  const rng = mulberry32(53);
+  return Array.from({ length: SPLAT_MAX }, () => ({ ...sampleScenePoint(rng), u: rng() }));
+})();
+const TEST_PTS = (() => {
+  const rng = mulberry32(87);
+  return Array.from({ length: 150 }, () => sampleScenePoint(rng).p);
+})();
+
+const trueSceneWire = (color: string, width: number): Prim3D[] => [
+  ...box3(CRATE_C, quat.id, CRATE_H[0] * 2, CRATE_H[1] * 2, CRATE_H[2] * 2, color).map((sg) => ({ ...sg, width })),
+  ...ring3(BALL_C, [0, 0, 1], BALL_R, color, { n: 40, width }),
+  ...ring3(BALL_C, [1, 0, 0], BALL_R, color, { n: 40, width }),
+  ...ring3(BALL_C, [0, 1, 0], BALL_R, color, { n: 40, width }),
+];
+
+const CAM_PT: V3 = [1.75, -1.55, 1.05];
+const RAY_TARGETS: V3[] = [
+  [-0.6, 0.1, 0.5],
+  [0.55, -0.1, 0.4],
+  [-0.1, 0.6, 0.02],
+];
 
 export function RbNerfVsSplat() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
+  const orbit = useOrbit(-26, 22);
   const [mode, setMode] = useState<"nerf" | "3dgs">("3dgs");
-  const [orbit, setOrbit] = useState(20); // degrees
-  const [count, setCount] = useState(60); // Gaussian count %
-  const [ray, setRay] = useState(0); // 0..1 nerf sample sweep
+  const [playing, toggle] = useReducer((p) => !p, true);
+  const [count, setCount] = useState(96);
+  const [sweep, setSweep] = useState(0);
 
-  useRafLoop(
-    (dt) => {
-      setRay((v) => (v + dt * 0.35) % 1); // slow: NeRF chugs
-    },
-    { playing: inView && !reduced && mode === "nerf" },
-  );
-
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const cx = 200;
-  const cy = 230;
-  const nGauss = Math.round(8 + (count / 100) * 44);
-  const rng = mulberry32(7);
-  const blobs = Array.from({ length: nGauss }, () => {
-    const a = rng() * Math.PI * 2;
-    const r = rng() * 60;
-    return { bx: cx + Math.cos(a) * r, by: cy + Math.sin(a) * r * 0.9, rot: rng() * 180, w: 10 + rng() * 12, h: 5 + rng() * 6, hue: rng() };
+  useRafLoop((dt) => setSweep((v) => (v + dt * 0.3) % 1), {
+    playing: playing && inView && !reduced && mode === "nerf",
   });
-  const fps = mode === "nerf" ? 1 : Math.round(58 + (count / 100) * 6);
-  const realtime = fps >= 30;
 
-  // camera position (orbits object)
-  const camX = cx - Math.cos(rad(orbit)) * 150;
-  const camY = cy - Math.sin(rad(orbit)) * 90;
+  const rSplat = clamp(1.15 / Math.sqrt(count), 0.06, 0.26);
+
+  const coverage = useMemo(() => {
+    const splats = SPLAT_BASE.slice(0, count);
+    const reach = rSplat * 1.35;
+    const hit = TEST_PTS.filter((tp) =>
+      splats.some((sp) => v3.len(v3.sub(tp, sp.p)) <= reach),
+    ).length;
+    return hit / TEST_PTS.length;
+  }, [count, rSplat]);
+
+  const prims = useMemo(() => {
+    const out: Prim3D[] = [...grid3(1.3, 0.65)];
+    if (mode === "3dgs") {
+      out.push(...trueSceneWire(R.line, 1));
+      for (const sp of SPLAT_BASE.slice(0, count)) {
+        const c = sp.crate ? R.plan : R.signal;
+        out.push(...ring3(sp.p, sp.n, rSplat * (0.75 + 0.5 * sp.u), c, { n: 8, width: 1.7, opacity: 0.85 }));
+        out.push(dot3(sp.p, c, { r: 2 }));
+      }
+    } else {
+      out.push(...trueSceneWire(R.world, 1.6));
+      out.push(dot3(CAM_PT, R.ink, { r: 5 }));
+      out.push(label3(CAM_PT, "camera", R.ink, { dx: 8, dy: -8, size: 12 }));
+      for (const tgt of RAY_TARGETS) {
+        out.push(seg3(CAM_PT, tgt, R.world, { width: 1, dash: "3 4", opacity: 0.8 }));
+        for (let i = 0; i < 12; i++) {
+          const f = 0.12 + (0.88 * i) / 11;
+          const lit = reduced ? true : f <= sweep;
+          out.push(dot3(v3.lerp(CAM_PT, tgt, f), lit ? R.plan : R.line, { r: lit ? 2.8 : 2 }));
+        }
+      }
+    }
+    return out;
+  }, [mode, count, rSplat, sweep, reduced]);
+
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 5.4, zoom: 138 };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 11.6 · NeRF ray-marching vs 3DGS splatting"
-      ariaLabel={`${mode === "nerf" ? "NeRF ray marching" : "3D Gaussian splatting"} at ${fps} fps`}
+      ariaLabel={
+        mode === "nerf"
+          ? "A 3D scene rendered NeRF-style: rays from a camera carry many MLP sample points each. Drag to orbit."
+          : `A 3D scene reconstructed by ${count} elliptical splats covering ${Math.round(coverage * 100)} percent of held-out surface points. Drag to orbit.`
+      }
+      svgProps={orbit.svgProps}
       controls={
         <>
           <Tabs
@@ -841,116 +1025,57 @@ export function RbNerfVsSplat() {
             value={mode}
             onChange={setMode}
           />
-          <Slider label="orbit" min={0} max={90} value={orbit} onChange={setOrbit} fmt={(v) => `${v}°`} />
-          {mode === "3dgs" && (
-            <Slider label="Gaussians" min={0} max={100} value={count} onChange={setCount} fmt={(v) => `${v}%`} />
+          {mode === "3dgs" ? (
+            <Slider label="splats" min={12} max={SPLAT_MAX} step={4} value={count} onChange={setCount} fmt={(v) => `${v}`} />
+          ) : (
+            <Transport
+              playing={playing}
+              onPlay={toggle}
+              onReset={() => {
+                setSweep(0);
+                orbit.reset();
+              }}
+            />
           )}
+          <span className="font-mono text-[13px] text-[var(--muted)]">drag to orbit</span>
         </>
       }
     >
-      {/* fps readout (fixed top-left lane) */}
-      <text x={30} y={44} fontFamily={MONO} fontSize={13} fill={R.world}>
-        render
-      </text>
-      <text x={100} y={44} fontFamily={MONO} fontSize={15} fill={realtime ? R.goal : R.error} fontWeight={600}>
-        ~{fps} fps {realtime ? "(real-time)" : "(too slow)"}
-      </text>
-
-      {/* the object being reconstructed */}
-      {mode === "nerf" ? (
-        <g>
-          {/* implicit object as a soft grey shape */}
-          <ellipse cx={cx} cy={cy} rx={62} ry={54} fill="#e6e6e3" stroke={R.world} strokeWidth={2} />
-          {/* camera */}
-          <polygon
-            points={`${camX},${camY} ${camX - 14},${camY - 9} ${camX - 14},${camY + 9}`}
-            fill={R.plan}
-            stroke={R.plan}
-          />
-          {/* one ray with many MLP-query samples */}
-          {(() => {
-            const ex = cx + Math.cos(rad(orbit)) * 60;
-            const ey = cy + Math.sin(rad(orbit)) * 40;
-            const n = 12;
-            return (
-              <>
-                <line x1={camX} y1={camY} x2={ex} y2={ey} stroke={R.plan} strokeWidth={2} />
-                {Array.from({ length: n }).map((_, i) => {
-                  const f = i / (n - 1);
-                  const px = lerp(camX, ex, f);
-                  const py = lerp(camY, ey, f);
-                  const lit = reduced ? true : f <= ray;
-                  return <circle key={i} cx={px} cy={py} r={3.5} fill={lit ? R.plan : "#dcdcd8"} />;
-                })}
-                <text x={cx + 90} y={cy - 40} fontFamily={MONO} fontSize={12} fill={R.plan}>
-                  each dot = one MLP query
-                </text>
-                <text x={cx + 90} y={cy - 22} fontFamily={MONO} fontSize={12} fill={R.error}>
-                  dozens per pixel → slow
-                </text>
-              </>
-            );
-          })()}
-          <text x={cx} y={cy + 90} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>
-            implicit MLP, ray-marched
-          </text>
-        </g>
-      ) : (
-        <g>
-          {blobs.map((b, i) => (
-            <ellipse
-              key={i}
-              cx={b.bx}
-              cy={b.by}
-              rx={b.w}
-              ry={b.h}
-              transform={`rotate(${b.rot + orbit * 0.4} ${b.bx} ${b.by})`}
-              fill={b.hue > 0.5 ? R.fillBlue : R.fillGreen}
-              stroke={R.signal}
-              strokeWidth={1.2}
-              opacity={0.72}
-            />
-          ))}
-          <text x={cx} y={cy + 96} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.signal}>
-            {nGauss} explicit Gaussians, projected &amp; blended
-          </text>
-          <text x={cx + 92} y={cy - 40} fontFamily={MONO} fontSize={12} fill={R.goal}>
-            no per-ray queries
-          </text>
-          <text x={cx + 92} y={cy - 22} fontFamily={MONO} fontSize={12} fill={R.goal}>
-            just project + blend → fast
-          </text>
-        </g>
-      )}
-
-      {/* comparison lane (right) */}
-      <line x1={470} y1={70} x2={470} y2={370} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-      <text x={500} y={110} fontFamily={MONO} fontSize={14} fill={R.ink} fontWeight={600}>
-        {mode === "nerf" ? "NeRF" : "3D Gaussian Splatting"}
-      </text>
-      <text x={500} y={148} fontFamily={MONO} fontSize={13} fill={R.world}>
-        representation
-      </text>
-      <text x={500} y={168} fontFamily={MONO} fontSize={13} fill={mode === "nerf" ? R.plan : R.signal} fontWeight={600}>
-        {mode === "nerf" ? "implicit MLP field" : "explicit 3D Gaussians"}
-      </text>
-      <text x={500} y={204} fontFamily={MONO} fontSize={13} fill={R.world}>
-        render
-      </text>
-      <text x={500} y={224} fontFamily={MONO} fontSize={13} fill={mode === "nerf" ? R.error : R.goal} fontWeight={600}>
-        {mode === "nerf" ? "march + sample MLP" : "splat + blend"}
-      </text>
-      <text x={500} y={260} fontFamily={MONO} fontSize={13} fill={R.world}>
-        training
-      </text>
-      <text x={500} y={280} fontFamily={MONO} fontSize={13} fill={R.ink} fontWeight={600}>
-        {mode === "nerf" ? "hours" : "minutes"}
-      </text>
-      <text x={500} y={316} fontFamily={MONO} fontSize={13} fill={R.world}>
-        edit scene
-      </text>
-      <text x={500} y={336} fontFamily={MONO} fontSize={13} fill={R.ink} fontWeight={600}>
-        {mode === "nerf" ? "hard (baked in weights)" : "move/delete blobs"}
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={
+          mode === "nerf"
+            ? [
+                { label: "scene", value: "implicit MLP field", color: R.ink },
+                { label: "queries/px", value: "~dozens of MLP calls", color: R.error },
+                { label: "render", value: "ray-march · ~1 fps", color: R.error },
+              ]
+            : [
+                { label: "splats", value: String(count), color: R.ink },
+                { label: "coverage", value: `${Math.round(coverage * 100)}% (measured)`, color: coverage > 0.85 ? R.goal : R.plan },
+                { label: "render", value: "project+blend · fast", color: R.goal },
+              ]
+        }
+      />
+      <Legend
+        items={
+          mode === "nerf"
+            ? [
+                { color: R.world, label: "scene (in weights)" },
+                { color: R.plan, label: "MLP sample point" },
+                { color: R.ink, label: "camera" },
+              ]
+            : [
+                { color: R.line, label: "true surface" },
+                { color: R.plan, label: "crate splats" },
+                { color: R.signal, label: "ball splats" },
+              ]
+        }
+      />
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {mode === "nerf"
+          ? "every pixel means marching a ray and querying the network at each dot — gorgeous, but slow"
+          : "explicit blobs hug the true surface: more splats, higher measured coverage, and no per-ray queries"}
       </text>
     </Stage>
   );
@@ -958,9 +1083,10 @@ export function RbNerfVsSplat() {
 
 // ===========================================================================
 // Fig 11.7 · The Real2Sim2Real loop, physics-grounded  (animated pipeline)
-// A five-stage ring. A token circulates. Stage 3 (IDENTIFY PHYSICS) is the
-// hero: a VLM prior (broad amber band) that real interaction narrows to a tight
-// estimate. Toggle blind vs grounded; measurement quality tightens the band.
+// The five-stage ring, with stage 3 (IDENTIFY PHYSICS) computed for real: a
+// Gaussian prior over the object's centre of mass (wide when blind, tight from
+// a VLM) fused with n seeded noisy interaction measurements by exact Bayesian
+// updating. The belief band, the estimate, and the error are all computed.
 // ===========================================================================
 
 const RING_STAGES = [
@@ -971,58 +1097,94 @@ const RING_STAGES = [
   { id: "DEPLOY", angle: 198 },
 ];
 
+const THETA_TRUE = 0.14; // true centre-of-mass offset, m
+const SIGMA_MEAS = 0.1;
+// seeded standard-normal draws (Box–Muller) for the interaction measurements
+const MEAS_EPS = (() => {
+  const rng = mulberry32(29);
+  return Array.from({ length: 12 }, () => {
+    const u1 = Math.max(rng(), 1e-6);
+    const u2 = rng();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  });
+})();
+
 export function RbReal2Sim2Real() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
   const [playing, toggle] = useReducer((p) => !p, true);
   const [grounded, setGrounded] = useState(true);
-  const [quality, setQuality] = useState(70);
-  const [phase, setPhase] = useState(0); // 0..5 around ring
-  const [band, setBand] = useState(0.5); // eased current band width
+  const [nMeas, setNMeas] = useState(6);
+  const [phase, setPhase] = useState(0);
 
-  const targetBand = grounded ? clamp(1 - quality / 100, 0.08, 0.9) : 0.9;
+  useRafLoop((dt) => setPhase((p) => (p + dt * 0.7) % 5), {
+    playing: playing && inView && !reduced,
+  });
 
-  useRafLoop(
-    (dt) => {
-      setPhase((p) => (p + dt * 0.7) % 5);
-      setBand((b) => approach(b, targetBand, 0.12, dt));
-    },
-    { playing: playing && inView && !reduced },
-  );
+  // exact Gaussian posterior: prior (μ0, σ0) fused with n noisy measurements
+  const { mu, sigma, success } = useMemo(() => {
+    const mu0 = grounded ? 0.1 : 0;
+    const s0 = grounded ? 0.15 : 0.45;
+    const prec = 1 / (s0 * s0) + nMeas / (SIGMA_MEAS * SIGMA_MEAS);
+    const ySum = MEAS_EPS.slice(0, nMeas).reduce((acc, e) => acc + (THETA_TRUE + SIGMA_MEAS * e), 0);
+    const m = (mu0 / (s0 * s0) + ySum / (SIGMA_MEAS * SIGMA_MEAS)) / prec;
+    const sd = Math.sqrt(1 / prec);
+    return {
+      mu: m,
+      sigma: sd,
+      success: clamp(0.96 - 1.3 * Math.abs(m - THETA_TRUE) - 0.9 * sd, 0.22, 0.96),
+    };
+  }, [grounded, nMeas]);
 
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const cx = 260;
-  const cy = 220;
-  const rr = 150;
-  const stagePos = (a: number) => ({ x: cx + Math.cos(rad(a)) * rr, y: cy + Math.sin(rad(a)) * rr });
+  const drad = (d: number) => (d * Math.PI) / 180;
+  const cx = 250;
+  const cy = 252;
+  const rr = 130;
+  const stagePos = (a: number) => ({ x: cx + Math.cos(drad(a)) * rr, y: cy + Math.sin(drad(a)) * rr });
 
   const activeStage = reduced ? 2 : Math.floor(phase);
-  const tokA = reduced ? RING_STAGES[2].angle : lerp(RING_STAGES[Math.floor(phase)].angle, RING_STAGES[Math.floor(phase)].angle + 72, phase - Math.floor(phase));
+  const tokA = reduced
+    ? RING_STAGES[2].angle
+    : lerp(RING_STAGES[Math.floor(phase)].angle, RING_STAGES[Math.floor(phase)].angle + 72, phase - Math.floor(phase));
   const tok = stagePos(tokA);
 
-  const bandW = reduced ? targetBand : band;
-  const success = Math.round(clamp((grounded ? 0.62 + (quality / 100) * 0.33 : 0.5) * 100, 0, 99));
+  // parameter axis: θ ∈ [−0.55, 0.65] m → x ∈ [500, 690]
+  const px7 = (th: number) => clamp(500 + ((th + 0.55) / 1.2) * 190, 500, 690);
+  const bandL = px7(mu - 2 * sigma);
+  const bandR = px7(mu + 2 * sigma);
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 11.7 · The Real2Sim2Real loop, physics-grounded"
-      ariaLabel={`Real2Sim2Real ring, ${grounded ? "physics-grounded" : "blind randomization"} mode`}
+      ariaLabel={`Real2Sim2Real ring with ${grounded ? "a VLM prior" : "a blind prior"} and ${nMeas} interaction measurements; centre-of-mass estimate ${mu.toFixed(2)} ± ${(2 * sigma).toFixed(2)} metres against a true value of ${THETA_TRUE}`}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
+          <Transport playing={playing} onPlay={toggle} onReset={() => setPhase(0)} />
           <Btn onClick={() => setGrounded((g) => !g)} active={grounded}>
-            {grounded ? "physics-grounded" : "blind randomization"}
+            {grounded ? "VLM prior" : "blind prior"}
           </Btn>
-          <Slider label="measurement" min={0} max={100} value={quality} onChange={setQuality} fmt={(v) => `${v}%`} />
+          <Slider label="interactions" min={0} max={12} value={nMeas} onChange={setNMeas} fmt={(v) => `${v}`} />
         </>
       }
     >
+      <Readout
+        rows={[
+          { label: "estimate", value: `${mu.toFixed(2)} ± ${(2 * sigma).toFixed(2)} m`, color: R.plan },
+          { label: "true CoM", value: `${THETA_TRUE.toFixed(2)} m`, color: R.goal },
+          { label: "param error", value: `${Math.abs(mu - THETA_TRUE).toFixed(3)} m`, color: Math.abs(mu - THETA_TRUE) < 0.05 ? R.goal : R.error },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.plan, label: "belief over CoM" },
+          { color: R.goal, label: "true parameter" },
+          { color: R.signal, label: "active stage" },
+        ]}
+      />
+
       {/* ring backbone */}
       <circle cx={cx} cy={cy} r={rr} fill="none" stroke={R.line} strokeWidth={2} strokeDasharray="4 7" />
-
       {RING_STAGES.map((sg, i) => {
         const p = stagePos(sg.angle);
         const hero = i === 2;
@@ -1030,248 +1192,277 @@ export function RbReal2Sim2Real() {
         return (
           <g key={sg.id}>
             <rect
-              x={p.x - 56}
-              y={p.y - 24}
-              width={112}
-              height={48}
+              x={p.x - 54}
+              y={p.y - 23}
+              width={108}
+              height={46}
               rx={9}
               fill={hero ? R.fillGreen : on ? R.fillBlue : "#eeeeec"}
               stroke={hero ? R.goal : on ? R.signal : R.world}
               strokeWidth={hero ? 3 : 2}
             />
             {sg.id.split("\n").map((ln, k) => (
-              <text
-                key={k}
-                x={p.x}
-                y={p.y - 3 + k * 15}
-                textAnchor="middle"
-                fontFamily={MONO}
-                fontSize={12}
-                fontWeight={600}
-                fill={R.ink}
-              >
+              <text key={k} x={p.x} y={p.y - 3 + k * 15} textAnchor="middle" fontFamily={MONO} fontSize={12} fontWeight={600} fill={R.ink}>
                 {ln}
               </text>
             ))}
           </g>
         );
       })}
-
-      {/* circulating token */}
       {!reduced && (
         <>
-          <circle cx={tok.x} cy={tok.y} r={11} fill={R.plan} opacity={0.25} />
-          <circle cx={tok.x} cy={tok.y} r={6} fill={R.plan} />
+          <circle cx={tok.x} cy={tok.y} r={11} fill={R.signal} opacity={0.25} />
+          <circle cx={tok.x} cy={tok.y} r={6} fill={R.signal} />
         </>
       )}
 
-      {/* hero stage 3 detail: parameter band (right lane) */}
-      <line x1={470} y1={70} x2={470} y2={380} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-      <text x={500} y={104} fontFamily={MONO} fontSize={13} fill={R.goal} fontWeight={600}>
+      {/* stage-3 detail lane, right */}
+      <line x1={470} y1={96} x2={470} y2={396} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
+      <text x={500} y={122} fontFamily={MONO} fontSize={13} fill={R.goal} fontWeight={600}>
         identify physics
       </text>
-      <text x={500} y={128} fontFamily={MONO} fontSize={12} fill={R.world}>
-        center-of-mass estimate
+      <text x={500} y={142} fontFamily={MONO} fontSize={12} fill={R.world}>
+        centre-of-mass belief (±2σ)
       </text>
-      {/* band: broad amber (guessed) shrinking to tight measured */}
-      {(() => {
-        const bx0 = 500;
-        const bx1 = 690;
-        const mid = (bx0 + bx1) / 2;
-        const half = (bandW * (bx1 - bx0)) / 2;
-        return (
-          <>
-            <line x1={bx0} y1={160} x2={bx1} y2={160} stroke={R.line} strokeWidth={2} />
-            <rect x={mid - half} y={150} width={half * 2} height={20} rx={4} fill={R.fillAmber} stroke={R.plan} strokeWidth={2} />
-            <line x1={mid} y1={144} x2={mid} y2={176} stroke={R.goal} strokeWidth={3} />
-            <text x={500} y={200} fontFamily={MONO} fontSize={12} fill={R.plan}>
-              {grounded ? "VLM prior → narrowed by interaction" : "wide guessed cloud (blind)"}
-            </text>
-            <text x={500} y={222} fontFamily={MONO} fontSize={12} fill={R.world}>
-              uncertainty: {Math.round(bandW * 100)}%
-            </text>
-          </>
-        );
-      })()}
+      <line x1={500} y1={180} x2={690} y2={180} stroke={R.line} strokeWidth={2} />
+      <rect x={bandL} y={169} width={Math.max(bandR - bandL, 2)} height={22} rx={4} fill={R.fillAmber} stroke={R.plan} strokeWidth={2} />
+      <line x1={px7(mu)} y1={163} x2={px7(mu)} y2={197} stroke={R.plan} strokeWidth={2.5} />
+      <line x1={px7(THETA_TRUE)} y1={158} x2={px7(THETA_TRUE)} y2={202} stroke={R.goal} strokeWidth={3} />
+      <text x={px7(THETA_TRUE)} y={152} textAnchor="middle" fontFamily={MONO} fontSize={11} fill={R.goal}>
+        true
+      </text>
+      <text x={500} y={224} fontFamily={MONO} fontSize={12} fill={R.plan}>
+        {grounded ? "VLM prior, narrowed by interaction" : "blind guess, narrowed by interaction"}
+      </text>
 
-      {/* deploy success readout */}
       <text x={500} y={280} fontFamily={MONO} fontSize={13} fill={R.world}>
-        real-world success
+        expected transfer success
       </text>
       <rect x={500} y={292} width={190} height={16} rx={8} fill="#e7e7e4" />
-      <rect x={500} y={292} width={190 * (success / 100)} height={16} rx={8} fill={R.goal} />
+      <rect x={500} y={292} width={190 * success} height={16} rx={8} fill={R.goal} />
       <text x={500} y={334} fontFamily={MONO} fontSize={15} fill={R.goal} fontWeight={600}>
-        {success}%
+        {Math.round(success * 100)}%
       </text>
       <text x={500} y={362} fontFamily={MONO} fontSize={12} fill={R.error}>
-        reality gap shrinks as physics grounding improves
+        tighter, truer physics → smaller gap
+      </text>
+
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {nMeas === 0
+          ? "no interaction yet: the belief is all prior — grounded starts close, blind starts wide"
+          : "each poke is a measurement; the Bayesian update tightens the band around the truth"}
       </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 11.8 · Reliability, not realism: the drift demo  (stepper)
-// Scrub a 20-step rollout. Early steps coherent (green), middle degrading
-// (amber), late hallucinated (red). A draggable trust marker; toggling to the
-// grounded model pushes the coherent band much further right.
+// Fig 11.8 · Reliability, not realism: the drift demo  (paired simulations)
+// One action tape, two worlds. A PD controller tracks a planned path under the
+// SIM dynamics and its commands are recorded; the identical tape then runs
+// open-loop under perturbed "real" dynamics (mass, drag, motor gain, plus an
+// unmodelled bias). Both trajectories are integrated for real, and the gap
+// between them is measured per step — drift is computed, never drawn.
 // ===========================================================================
 
-const N_STEPS = 20;
+const K8 = 140;
+const DT8 = 0.05;
+const GAP_TRUST = 0.3;
+const START8: [number, number] = [-2.1, -0.95];
+const GOAL8: [number, number] = [2.05, 0.95];
+const OBST8 = { x: 0, y: 0.1, r: 0.5 };
+
+// reference path: cubic Bézier from start to goal, dipping under the obstacle
+function refPath(u: number): [number, number] {
+  const t = clamp(u, 0, 1);
+  const s = 1 - t;
+  const P = [START8, [-0.4, -1.2], [1.4, -0.4], GOAL8] as const;
+  return [
+    s * s * s * P[0][0] + 3 * s * s * t * P[1][0] + 3 * s * t * t * P[2][0] + t * t * t * P[3][0],
+    s * s * s * P[0][1] + 3 * s * s * t * P[1][1] + 3 * s * t * t * P[2][1] + t * t * t * P[3][1],
+  ];
+}
+
+function runPair(delta: number) {
+  // sim dynamics: m=1, drag c=0.7, motor gain 1.  PD-track the path, record u.
+  const kp = 8;
+  const kd = 4;
+  const uMax = 6;
+  const tape: [number, number][] = [];
+  const sim: [number, number][] = [START8];
+  const simState = { x: START8[0], y: START8[1], vx: 0, vy: 0 };
+  for (let k = 0; k < K8; k++) {
+    const tn = Math.min((k * DT8) / 6, 1);
+    const tn2 = Math.min(((k + 1) * DT8) / 6, 1);
+    const p = refPath(tn);
+    const p2 = refPath(tn2);
+    const dpx = (p2[0] - p[0]) / DT8;
+    const dpy = (p2[1] - p[1]) / DT8;
+    let ux = kp * (p[0] - simState.x) + kd * (dpx - simState.vx);
+    let uy = kp * (p[1] - simState.y) + kd * (dpy - simState.vy);
+    const ul = Math.hypot(ux, uy);
+    if (ul > uMax) {
+      ux = (ux / ul) * uMax;
+      uy = (uy / ul) * uMax;
+    }
+    tape.push([ux, uy]);
+    simState.vx += (ux - 0.7 * simState.vx) * DT8;
+    simState.vy += (uy - 0.7 * simState.vy) * DT8;
+    simState.x += simState.vx * DT8;
+    simState.y += simState.vy * DT8;
+    sim.push([simState.x, simState.y]);
+  }
+  // "real" dynamics: perturbed parameters + an unmodelled constant bias force.
+  const mR = 1 + 0.8 * delta;
+  const cR = 0.7 * (1 - 0.6 * delta);
+  const kMotor = 1 - 0.55 * delta;
+  const real: [number, number][] = [START8];
+  const realState = { x: START8[0], y: START8[1], vx: 0, vy: 0 };
+  for (let k = 0; k < K8; k++) {
+    const [ux, uy] = tape[k];
+    realState.vx += ((kMotor * ux + 0.5 * delta - cR * realState.vx) / mR) * DT8;
+    realState.vy += ((kMotor * uy - 0.35 * delta - cR * realState.vy) / mR) * DT8;
+    realState.x += realState.vx * DT8;
+    realState.y += realState.vy * DT8;
+    real.push([realState.x, realState.y]);
+  }
+  const gap = sim.map(([sx, sy], k) => Math.hypot(sx - real[k][0], sy - real[k][1]));
+  const over = gap.findIndex((g) => g > GAP_TRUST);
+  return { sim, real, gap, trust: over < 0 ? K8 : over };
+}
+
+// world → stage mapping (uniform 80 px/unit), clamped to the panel
+const wx8 = (x: number) => clamp(260 + x * 80, 60, 460);
+const wy8 = (y: number) => clamp(200 - y * 80, 92, 306);
+const poly8 = (pts: [number, number][], upTo: number) =>
+  pts.slice(0, upTo + 1).map(([x, y]) => `${wx8(x)},${wy8(y)}`).join(" ");
+// gap-chart mapping
+const gx8 = (k: number) => 500 + (k / K8) * 190;
+const gy8 = (g: number) => 330 - (clamp(g, 0, 1) / 1) * 195;
 
 export function RbDriftDemo() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
   const [playing, toggle] = useReducer((p) => !p, true);
+  const [mismatch, setMismatch] = useState(25);
   const [grounded, setGrounded] = useState(false);
-  const [step, setStep] = useState(6);
-  const [trust, setTrust] = useState(10);
-  const [drag, setDrag] = useState(false);
-  const [t, setT] = useState(6);
+  const [t, setT] = useState(0);
+
+  const delta = (mismatch / 100) * (grounded ? 0.2 : 1);
+  const { sim, real, gap, trust } = useMemo(() => runPair(delta), [delta]);
 
   useRafLoop(
-    (dt) => {
-      setT((v) => {
-        const nv = v + dt * 3;
-        return nv > N_STEPS + 2 ? 1 : nv;
-      });
-    },
+    (dt) => setT((v) => (v + dt * 30 > K8 + 20 ? 0 : v + dt * 30)),
     { playing: playing && inView && !reduced },
   );
-
-  const cur = reduced ? step : clamp(Math.round(t), 1, N_STEPS);
-  // trust horizon: where reliability crosses the line (later when grounded)
-  const horizon = grounded ? 15 : 8;
-
-  const x0 = 60;
-  const x1 = 690;
-  const cellW = (x1 - x0) / N_STEPS;
-  const rowY = 150;
-
-  const bandColor = (i: number) => {
-    const frac = i / horizon;
-    if (frac < 0.6) return R.goal;
-    if (frac < 1.0) return R.plan;
-    return R.error;
-  };
-
-  const trustX = x0 + (clamp(trust, 1, N_STEPS) - 0.5) * cellW;
-  const inHallucination = trust > horizon;
-
-  const onMove = (e: ReactPointerEvent<SVGElement>) => {
-    if (!drag) return;
-    const [x] = svgPoint(e);
-    const idx = clamp(Math.round((x - x0) / cellW + 0.5), 1, N_STEPS);
-    setTrust(idx);
-  };
+  const k = reduced ? K8 : clamp(Math.floor(t), 0, K8);
+  const past = k >= trust && trust < K8;
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 11.8 · Reliability, not realism: the drift demo"
-      ariaLabel={`World-model rollout at step ${cur} of ${N_STEPS}; trust horizon ${horizon}`}
-      svgProps={{
-        onPointerMove: onMove,
-        onPointerUp: () => setDrag(false),
-        onPointerLeave: () => setDrag(false),
-      }}
+      ariaLabel={`The same action tape executed under sim and perturbed real dynamics: measured gap ${gap[k].toFixed(2)} metres at step ${k} of ${K8}, trustworthy for ${trust} steps`}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
-          </Btn>
-          <Slider label="step" min={1} max={N_STEPS} value={step} onChange={(v) => { setStep(v); setT(v); }} fmt={(v) => `${v}/${N_STEPS}`} />
+          <Transport
+            playing={playing}
+            onPlay={toggle}
+            onStep={() => setT((v) => clamp(Math.floor(v) + 4, 0, K8))}
+            onReset={() => setT(0)}
+          />
+          <Slider label="dynamics mismatch" min={5} max={40} value={mismatch} onChange={setMismatch} fmt={(v) => `${v}%`} />
           <Btn onClick={() => setGrounded((g) => !g)} active={grounded}>
-            {grounded ? "grounded model" : "naive model"}
+            {grounded ? "grounded (identified)" : "naive model"}
           </Btn>
         </>
       }
     >
-      <text x={30} y={44} fontFamily={MONO} fontSize={13} fill={R.world}>
-        world-model rollout: {grounded ? "grounded" : "naive"}
+      <Readout
+        rows={[
+          { label: "step", value: `${k}/${K8}`, color: R.ink },
+          { label: "gap now", value: `${gap[k].toFixed(2)} m`, color: gap[k] > GAP_TRUST ? R.error : R.goal },
+          { label: "trust horizon", value: trust >= K8 ? `>${K8} steps` : `${trust} steps`, color: trust >= K8 ? R.goal : R.plan },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "sim rollout (model)" },
+          { color: R.goal, label: "real execution" },
+          { color: R.error, label: "the gap", dash: true },
+          { color: R.plan, label: "planned path", dash: true },
+        ]}
+      />
+
+      {/* world panel */}
+      <rect x={56} y={88} width={408} height={222} rx={8} fill="none" stroke={R.line} strokeWidth={1.5} />
+      <circle cx={wx8(OBST8.x)} cy={wy8(OBST8.y)} r={OBST8.r * 80} fill="#ececea" stroke={R.world} strokeWidth={2} />
+      <text x={wx8(OBST8.x)} y={wy8(OBST8.y) + 4} textAnchor="middle" fontFamily={MONO} fontSize={11.5} fill={R.world}>
+        obstacle
+      </text>
+      <circle cx={wx8(GOAL8[0])} cy={wy8(GOAL8[1])} r={9} fill="none" stroke={R.goal} strokeWidth={2.5} />
+      <text x={wx8(GOAL8[0]) - 14} y={wy8(GOAL8[1]) + 4} textAnchor="end" fontFamily={MONO} fontSize={11.5} fill={R.goal}>
+        goal
+      </text>
+      <circle cx={wx8(START8[0])} cy={wy8(START8[1])} r={5} fill={R.ink} />
+      <polyline
+        points={Array.from({ length: 41 }, (_, i) => {
+          const [px, py] = refPath(i / 40);
+          return `${wx8(px)},${wy8(py)}`;
+        }).join(" ")}
+        fill="none"
+        stroke={R.plan}
+        strokeWidth={1.5}
+        strokeDasharray="4 4"
+        opacity={0.7}
+      />
+      <polyline points={poly8(sim, k)} fill="none" stroke={R.signal} strokeWidth={2.4} />
+      <polyline points={poly8(real, k)} fill="none" stroke={R.goal} strokeWidth={2.4} />
+      <line
+        x1={wx8(sim[k][0])}
+        y1={wy8(sim[k][1])}
+        x2={wx8(real[k][0])}
+        y2={wy8(real[k][1])}
+        stroke={R.error}
+        strokeWidth={1.8}
+        strokeDasharray="3 3"
+      />
+      <circle cx={wx8(sim[k][0])} cy={wy8(sim[k][1])} r={5.5} fill={R.signal} />
+      <circle cx={wx8(real[k][0])} cy={wy8(real[k][1])} r={5.5} fill={R.goal} />
+      <text x={64} y={330} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+        one action tape, two worlds: sim promise vs real outcome
       </text>
 
-      {/* coherence band legend (fixed top-right lane) */}
-      <g>
-        <circle cx={470} cy={40} r={6} fill={R.goal} />
-        <text x={482} y={45} fontFamily={MONO} fontSize={12} fill={R.world}>coherent</text>
-        <circle cx={560} cy={40} r={6} fill={R.plan} />
-        <text x={572} y={45} fontFamily={MONO} fontSize={12} fill={R.world}>drifting</text>
-        <circle cx={648} cy={40} r={6} fill={R.error} />
-        <text x={660} y={45} fontFamily={MONO} fontSize={12} fill={R.world}>hallucinated</text>
-      </g>
+      {/* measured gap chart */}
+      <text x={500} y={120} fontFamily={MONO} fontSize={12.5} fill={R.world}>
+        measured gap (m)
+      </text>
+      <line x1={500} y1={330} x2={690} y2={330} stroke={R.line} strokeWidth={1.5} />
+      <line x1={500} y1={130} x2={500} y2={330} stroke={R.line} strokeWidth={1.5} />
+      <line x1={500} y1={gy8(GAP_TRUST)} x2={690} y2={gy8(GAP_TRUST)} stroke={R.error} strokeWidth={1} strokeDasharray="4 4" />
+      <text x={504} y={gy8(GAP_TRUST) - 5} fontFamily={MONO} fontSize={10.5} fill={R.error}>
+        trust line {GAP_TRUST} m
+      </text>
+      <polyline
+        points={gap.slice(0, k + 1).map((g, i) => `${gx8(i)},${gy8(g)}`).join(" ")}
+        fill="none"
+        stroke={R.error}
+        strokeWidth={2}
+      />
+      <circle cx={gx8(k)} cy={gy8(gap[k])} r={4.5} fill={R.error} />
+      {trust < K8 && (
+        <line x1={gx8(trust)} y1={132} x2={gx8(trust)} y2={330} stroke={R.world} strokeWidth={1} strokeDasharray="2 4" />
+      )}
+      <text x={595} y={352} textAnchor="middle" fontFamily={MONO} fontSize={11.5} fill={R.world}>
+        time →
+      </text>
 
-      {/* rollout cells */}
-      {Array.from({ length: N_STEPS }).map((_, i) => {
-        const idx = i + 1;
-        const on = idx <= cur;
-        const c = bandColor(idx);
-        const cxx = x0 + i * cellW + cellW / 2;
-        const degrade = clamp(idx / horizon, 0, 1.4);
-        return (
-          <g key={i} opacity={on ? 1 : 0.12}>
-            <rect
-              x={x0 + i * cellW + 2}
-              y={rowY - 30}
-              width={cellW - 4}
-              height={60}
-              rx={4}
-              fill={c === R.goal ? R.fillGreen : c === R.plan ? R.fillAmber : R.fillRed}
-              stroke={c}
-              strokeWidth={2}
-            />
-            {/* object dot: teleports/melts as degrade rises */}
-            {on && (
-              <circle
-                cx={cxx + (degrade > 1 ? (((i * 37) % 11) - 5) * 2.4 : 0)}
-                cy={rowY + (degrade > 0.6 ? Math.sin(i * 1.7) * degrade * 8 : 0)}
-                r={clamp(6 - (degrade > 1 ? (degrade - 1) * 5 : 0), 1.5, 6)}
-                fill={c}
-              />
-            )}
-          </g>
-        );
-      })}
-
-      {/* step ticks */}
-      <text x={x0} y={rowY + 52} fontFamily={MONO} fontSize={11} fill={R.world}>1</text>
-      <text x={x0 + (N_STEPS - 1) * cellW} y={rowY + 52} fontFamily={MONO} fontSize={11} fill={R.world}>{N_STEPS}</text>
-
-      {/* the (model's) trust horizon boundary */}
-      {(() => {
-        const hx = x0 + horizon * cellW;
-        return (
-          <g>
-            <line x1={hx} y1={rowY - 48} x2={hx} y2={rowY + 40} stroke={R.error} strokeWidth={2} strokeDasharray="5 4" />
-            <text x={hx} y={rowY - 54} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>
-              reliability line
-            </text>
-          </g>
-        );
-      })()}
-
-      {/* draggable "horizon you trust" marker */}
-      <g>
-        <line x1={trustX} y1={rowY + 62} x2={trustX} y2={rowY - 44} stroke={R.signal} strokeWidth={2.5} />
-        <polygon
-          points={`${trustX - 9},${rowY + 78} ${trustX + 9},${rowY + 78} ${trustX},${rowY + 62}`}
-          fill={R.signal}
-          style={{ cursor: "grab" }}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-        />
-        <text x={trustX} y={rowY + 100} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
-          horizon you trust: {trust}
-        </text>
-      </g>
-
-      {/* warning when trust extends past reliability */}
-      <text x={30} y={410} fontFamily={MONO} fontSize={13} fill={inHallucination ? R.error : R.goal} fontWeight={600}>
-        {inHallucination
-          ? "⚠ past the line; a policy would learn garbage from these hallucinated steps"
-          : "within the trustworthy horizon; predictions are coherent and executable here"}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12.5} fill={past ? R.error : R.world} fontWeight={past ? 600 : 400}>
+        {past
+          ? `⚠ past step ${trust} the model's promise is off by >${GAP_TRUST} m — plans made here are fiction`
+          : trust >= K8
+            ? "identified dynamics keep the gap under the trust line for the whole horizon"
+            : "small per-step dynamics errors compound: watch the gap curve bend upward"}
       </text>
     </Stage>
   );
