@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState } from "react";
+import { useMemo, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   R,
@@ -16,152 +16,156 @@ import {
   svgPoint,
   approach,
   clamp,
+  mulberry32,
+  type V3,
+  type Prim3D,
+  type Camera3D,
+  v3,
+  quat,
+  seg3,
+  dot3,
+  label3,
+  ring3,
+  grid3,
+  box3,
+  curve3,
+  Scene3D,
+  useOrbit,
+  Legend,
+  Readout,
+  Transport,
 } from "./shared";
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
-// Ease an angle (degrees) toward a target along the shortest arc.
-const approachAngle = (cur: number, target: number, rate: number, dt: number) => {
-  const d = ((target - cur + 540) % 360) - 180;
-  const k = 1 - Math.pow(1 - rate, dt * 60);
-  return (cur + k * d + 360) % 360;
-};
 
 // ===========================================================================
-// Fig 1.1 · The sense–plan–act loop  (animated pipeline)
-// A glowing token travels SENSE -> PLAN -> ACT -> WORLD -> SENSE. Injecting a
-// disturbance spikes the tracking error; each pass of the loop halves it, so
-// the reader watches feedback correct the world.
+// Fig 1.1 · The sense–plan–act loop  (animated pipeline + live error chart)
+// A token circulates SENSE -> PLAN -> ACT -> WORLD. The tracking error is a
+// real discrete-time feedback system: every time the token passes ACT the
+// error is multiplied by (1 - gain), so the chart on the right records an
+// honest geometric decay — inject a disturbance and watch feedback eat it.
 // ===========================================================================
 
 type LoopNode = { id: string; x: number; y: number; color: string; sub: string };
-const HW = 78;
-const HH = 34;
-const NODES: LoopNode[] = [
-  { id: "SENSE", x: 205, y: 140, color: R.signal, sub: "read the world" },
-  { id: "PLAN", x: 515, y: 140, color: R.plan, sub: "decide" },
-  { id: "ACT", x: 515, y: 320, color: R.plan, sub: "move" },
-  { id: "WORLD", x: 205, y: 320, color: R.world, sub: "reality" },
+const SP_HW = 66;
+const SP_HH = 30;
+const SP_NODES: LoopNode[] = [
+  { id: "SENSE", x: 150, y: 152, color: R.signal, sub: "read the world" },
+  { id: "PLAN", x: 356, y: 152, color: R.plan, sub: "decide" },
+  { id: "ACT", x: 356, y: 318, color: R.plan, sub: "move" },
+  { id: "WORLD", x: 150, y: 318, color: R.world, sub: "reality" },
 ];
-// Arrow segments (box-edge to box-edge), traversed in order.
-const SEGS: [number, number, number, number][] = [
-  [205 + HW, 140, 515 - HW, 140], // SENSE -> PLAN
-  [515, 140 + HH, 515, 320 - HH], // PLAN -> ACT
-  [515 - HW, 320, 205 + HW, 320], // ACT -> WORLD
-  [205, 320 - HH, 205, 140 + HH], // WORLD -> SENSE
+const SP_SEGS: [number, number, number, number][] = [
+  [150 + SP_HW, 152, 356 - SP_HW, 152], // SENSE -> PLAN
+  [356, 152 + SP_HH, 356, 318 - SP_HH], // PLAN -> ACT
+  [356 - SP_HW, 318, 150 + SP_HW, 318], // ACT -> WORLD
+  [150, 318 - SP_HH, 150, 152 + SP_HH], // WORLD -> SENSE
 ];
-const smooth = (t: number) => t * t * (3 - 2 * t);
+const SP_CHART = { x0: 468, x1: 692, y0: 118, y1: 352 };
+const spSmooth = (t: number) => t * t * (3 - 2 * t);
 
 export function RbSensePlanAct() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [playing, toggle] = useReducer((p) => !p, true);
-  const [speed, setSpeed] = useState(0.7);
-  // phase 0..4 around the loop; err 0..1 tracking error; flash 0..1 world glow.
-  const [st, setSt] = useState({ phase: 0, err: 0, flash: 0 });
+  const [playing, setPlaying] = useState(true);
+  const [gain, setGain] = useState(0.5);
+  const [speed, setSpeed] = useState(0.9); // loop passes per second (×4 phase)
+  const [st, setSt] = useState({
+    phase: 0,
+    err: 0,
+    loops: 0,
+    hist: [0] as number[],
+    acc: 0,
+  });
 
   useRafLoop(
     (dt) => {
       setSt((s) => {
-        let p = s.phase + dt * speed;
+        let phase = s.phase + dt * speed * 2;
         let err = s.err;
-        if (p >= 4) {
-          p -= 4;
-          err *= 0.5; // one full loop of feedback halves the error
-          if (err < 0.02) err = 0;
+        let loops = s.loops;
+        // the correction lands as the token leaves ACT: e <- (1 - k) e
+        if (s.phase < 2 && phase >= 2) {
+          err = err * (1 - gain);
+          if (err < 0.004) err = 0;
         }
-        return { phase: p, err, flash: Math.max(0, s.flash - dt * 1.6) };
+        if (phase >= 4) {
+          phase -= 4;
+          loops += 1;
+        }
+        let hist = s.hist;
+        let acc = s.acc + dt;
+        if (acc >= 0.06) {
+          acc = 0;
+          hist = [...s.hist.slice(-139), err];
+        }
+        return { phase, err, loops, hist, acc };
       });
     },
     { playing: playing && inView && !reduced },
   );
 
-  const inject = () => setSt((s) => ({ ...s, err: 1, flash: 1 }));
-  const reset = () => setSt({ phase: 0, err: 0, flash: 0 });
+  const inject = () => setSt((s) => ({ ...s, err: 1 }));
+  const reset = () => setSt({ phase: 0, err: 0, loops: 0, hist: [0], acc: 0 });
 
   const seg = Math.floor(st.phase) % 4;
-  const f = smooth(st.phase - Math.floor(st.phase));
-  const [sx, sy, ex, ey] = SEGS[seg];
-  const tokenX = reduced ? SEGS[0][0] : sx + (ex - sx) * f;
-  const tokenY = reduced ? SEGS[0][1] : sy + (ey - sy) * f;
-
-  const activation = (n: LoopNode) => {
-    if (reduced) return 0.7;
-    const d = Math.hypot(n.x - tokenX, n.y - tokenY);
-    return clamp(1 - d / 150, 0, 1);
-  };
-
+  const f = spSmooth(st.phase - Math.floor(st.phase));
+  const [sx, sy, ex, ey] = SP_SEGS[seg];
+  const tokenX = reduced ? SP_SEGS[0][0] : sx + (ex - sx) * f;
+  const tokenY = reduced ? SP_SEGS[0][1] : sy + (ey - sy) * f;
   const errPct = Math.round(st.err * 100);
+
+  const chartH = SP_CHART.y1 - SP_CHART.y0;
+  const chartW = SP_CHART.x1 - SP_CHART.x0;
+  // live history polyline (animated) or the analytic staircase (reduced)
+  const histPts = st.hist
+    .map((e, i) => `${SP_CHART.x0 + (chartW * i) / 139},${SP_CHART.y1 - e * chartH}`)
+    .join(" ");
+  const stairPts = Array.from({ length: 24 }, (_, j) => {
+    const k = Math.floor(j / 2);
+    const kk = j % 2 === 0 ? k : k + 1;
+    const e = (st.err || 1) * Math.pow(1 - gain, k);
+    return `${SP_CHART.x0 + (chartW * Math.min(kk, 11)) / 11},${SP_CHART.y1 - e * chartH}`;
+  }).join(" ");
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 1.1 · The sense–plan–act loop"
-      ariaLabel={`Sense, plan, act loop with a data token circulating; tracking error ${errPct} percent`}
+      ariaLabel={`Sense, plan, act loop with a circulating data token; tracking error ${errPct} percent after ${st.loops} loops. A chart records the error decaying geometrically.`}
       controls={
         <>
-          <Btn onClick={toggle} active={playing}>
-            {playing ? "⏸ pause" : "▶ play"}
+          <Transport playing={playing} onPlay={() => setPlaying((v) => !v)} onReset={reset} />
+          <Btn onClick={inject} title="knock the world and watch feedback correct it">
+            ⚡ disturb
           </Btn>
-          <Btn onClick={inject} title="nudge the world and watch feedback correct it">
-            ⚡ inject disturbance
-          </Btn>
-          <Btn onClick={reset}>↺ reset</Btn>
-          <Slider
-            label="speed"
-            min={0.25}
-            max={2}
-            step={0.05}
-            value={speed}
-            onChange={setSpeed}
-            fmt={(v) => `${v.toFixed(2)}×`}
-          />
+          <Slider label="gain" min={0.1} max={0.9} step={0.05} value={gain} onChange={setGain} fmt={(v) => v.toFixed(2)} />
+          <Slider label="rate" min={0.25} max={2} step={0.05} value={speed} onChange={setSpeed} fmt={(v) => `${v.toFixed(2)}×`} />
         </>
       }
     >
-      {SEGS.map(([x1, y1, x2, y2], i) => (
+      {SP_SEGS.map(([x1, y1, x2, y2], i) => (
         <g key={i} opacity={0.9}>
           {svgArrow(x1, y1, x2, y2, R.line, 3, 11)}
         </g>
       ))}
 
-      {NODES.map((n) => {
-        const a = activation(n);
-        const scale = 1 + 0.04 * a;
+      {SP_NODES.map((n) => {
+        const d = Math.hypot(n.x - tokenX, n.y - tokenY);
+        const a = reduced ? 0.6 : clamp(1 - d / 140, 0, 1);
         const isWorld = n.id === "WORLD";
-        const fill =
-          n.color === R.signal ? R.fillBlue : n.color === R.plan ? R.fillAmber : "#eeeeec";
+        const fill = n.color === R.signal ? R.fillBlue : n.color === R.plan ? R.fillAmber : "#eeeeec";
         return (
-          <g
-            key={n.id}
-            transform={`translate(${n.x} ${n.y}) scale(${scale}) translate(${-n.x} ${-n.y})`}
-          >
+          <g key={n.id}>
             {isWorld ? (
-              <ellipse cx={n.x} cy={n.y} rx={HW} ry={HH} fill={fill} stroke={n.color} strokeWidth={2 + 2 * a} />
+              <ellipse cx={n.x} cy={n.y} rx={SP_HW} ry={SP_HH} fill={fill} stroke={n.color} strokeWidth={2 + 2 * a} />
             ) : (
-              <rect
-                x={n.x - HW}
-                y={n.y - HH}
-                width={HW * 2}
-                height={HH * 2}
-                rx={12}
-                fill={fill}
-                stroke={n.color}
-                strokeWidth={2 + 2 * a}
-              />
+              <rect x={n.x - SP_HW} y={n.y - SP_HH} width={SP_HW * 2} height={SP_HH * 2} rx={12} fill={fill} stroke={n.color} strokeWidth={2 + 2 * a} />
             )}
-            {isWorld && (st.flash > 0 || st.err > 0) && (
-              <ellipse
-                cx={n.x}
-                cy={n.y}
-                rx={HW}
-                ry={HH}
-                fill="none"
-                stroke={R.error}
-                strokeWidth={3}
-                opacity={Math.max(st.flash, st.err * 0.7)}
-              />
+            {isWorld && st.err > 0.02 && (
+              <ellipse cx={n.x} cy={n.y} rx={SP_HW} ry={SP_HH} fill="none" stroke={R.error} strokeWidth={3} opacity={clamp(st.err, 0.15, 1)} />
             )}
-            <text x={n.x} y={n.y - 3} textAnchor="middle" fontFamily={MONO} fontSize={19} fontWeight={600} fill={R.ink}>
+            <text x={n.x} y={n.y - 3} textAnchor="middle" fontFamily={MONO} fontSize={18} fontWeight={600} fill={R.ink}>
               {n.id}
             </text>
             <text x={n.x} y={n.y + 17} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
@@ -173,80 +177,123 @@ export function RbSensePlanAct() {
 
       {!reduced && (
         <g>
-          <circle cx={tokenX} cy={tokenY} r={13} fill={NODES[seg].color} opacity={0.25} />
-          <circle cx={tokenX} cy={tokenY} r={7} fill={NODES[seg].color} />
+          <circle cx={tokenX} cy={tokenY} r={13} fill={SP_NODES[seg].color} opacity={0.25} />
+          <circle cx={tokenX} cy={tokenY} r={7} fill={SP_NODES[seg].color} />
         </g>
       )}
 
-      {/* fixed readout lane, top-left; never overlaps the loop */}
-      <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
-        tracking error
+      {/* error chart, fixed right lane */}
+      <text x={SP_CHART.x0} y={106} fontFamily={MONO} fontSize={12} fill={R.world}>
+        tracking error → time
       </text>
-      <rect x={40} y={54} width={180} height={12} rx={6} fill="#e7e7e4" />
-      <rect x={40} y={54} width={180 * st.err} height={12} rx={6} fill={R.error} />
-      <text x={230} y={64} fontFamily={MONO} fontSize={14} fill={R.ink}>
-        {errPct}%
+      <rect x={SP_CHART.x0} y={SP_CHART.y0} width={chartW} height={chartH} fill="none" stroke={R.line} strokeWidth={1.5} rx={4} />
+      {[0.25, 0.5, 0.75].map((g) => (
+        <line key={g} x1={SP_CHART.x0} y1={SP_CHART.y1 - g * chartH} x2={SP_CHART.x1} y2={SP_CHART.y1 - g * chartH} stroke={R.line} strokeWidth={0.8} opacity={0.5} />
+      ))}
+      <polyline points={reduced ? stairPts : histPts} fill="none" stroke={R.error} strokeWidth={2.5} strokeLinejoin="round" />
+      <text x={SP_CHART.x0 + 5} y={SP_CHART.y0 + 15} fontFamily={MONO} fontSize={11} fill={R.world}>
+        100%
       </text>
 
+      <Readout
+        rows={[
+          { label: "error", value: `${errPct}%`, color: st.err > 0.02 ? R.error : R.goal },
+          { label: "gain", value: gain.toFixed(2) },
+          { label: "loops run", value: String(st.loops) },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "data token" },
+          { color: R.error, label: "tracking error" },
+        ]}
+      />
       {reduced && (
-        <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
-          Reduced motion: the loop is shown static. Inject still updates the error.
+        <text x={24} y={404} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: static loop; disturb + gain still drive the decay curve.
         </text>
       )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        each pass multiplies the error by (1 − gain) — feedback shrinks mistakes geometrically
+      </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 1.2 · Revolute vs prismatic joints  (slider-driven diagram)
-// Two mechanisms, one state number each. The link eases to the slider value.
+// Fig 1.2 · Revolute vs prismatic joints  (true 3D, orbitable)
+// Both primitive joints in one 3D scene: a revolute link swinging about its
+// dashed axis (its state: one angle) and a prismatic carriage sliding on a
+// rail (its state: one distance). Amber marks the single number each owns.
 // ===========================================================================
 
 export function RbJointTypes() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [theta, setTheta] = useState(35); // deg, target
-  const [dist, setDist] = useState(35); // cm, target (0..60)
-  const [disp, setDisp] = useState({ a: 35, d: 35 });
+  const orbit = useOrbit(-32, 24);
+  const [theta, setTheta] = useState(60); // deg
+  const [dist, setDist] = useState(35); // cm
+  const [disp, setDisp] = useState({ a: 60, d: 35 });
 
   useRafLoop(
-    (dt) => {
+    (dt) =>
       setDisp((s) => ({
-        a: approach(s.a, theta, 0.22, dt),
-        d: approach(s.d, dist, 0.22, dt),
-      }));
-    },
+        a: approach(s.a, theta, 0.2, dt),
+        d: approach(s.d, dist, 0.2, dt),
+      })),
     { playing: inView && !reduced },
   );
-
   const a = reduced ? theta : disp.a;
   const d = reduced ? dist : disp.d;
+  const ang = rad(a);
 
-  const px = 195;
-  const py = 288;
-  const L = 128;
-  const tipX = px + L * Math.cos(rad(-a));
-  const tipY = py + L * Math.sin(rad(-a));
-  const arc = `M ${px + 40} ${py} A 40 40 0 0 ${a > 180 ? 1 : 0} ${px + 40 * Math.cos(rad(-a))} ${py + 40 * Math.sin(rad(-a))}`;
+  const hub: V3 = [-0.72, 0, 0.3];
+  const tip: V3 = [-0.72 + 0.55 * Math.cos(ang), 0.55 * Math.sin(ang), 0.3];
+  const yd = -0.45 + (d / 60) * 0.9;
 
-  const railX0 = 440;
-  const railX1 = 660;
-  const travel = railX1 - railX0 - 56;
-  const blockX = railX0 + 6 + (d / 60) * travel;
+  const prims: Prim3D[] = [
+    ...grid3(1.2, 0.4),
+    // --- revolute ---
+    ...box3([-0.72, 0, 0.12], quat.id, 0.26, 0.26, 0.24, R.world),
+    seg3([-0.72, 0, 0], [-0.72, 0, 0.82], R.plan, { width: 2, dash: "4 4" }),
+    label3([-0.72, 0, 0.9], "axis", R.plan, { anchor: "middle", dy: -4, size: 12 }),
+    // zero reference + swept arc: the angle θ made visible
+    seg3(hub, [-0.72 + 0.55, 0, 0.3], R.world, { width: 1.5, dash: "2 5", opacity: 0.7 }),
+    ...curve3((u) => [-0.72 + 0.5 * Math.cos(u * ang), 0.5 * Math.sin(u * ang), 0.3], R.plan, { n: 26, width: 2.5 }),
+    seg3(hub, tip, R.signal, { width: 7 }),
+    dot3(tip, R.signal, { r: 6 }),
+    dot3(hub, R.ink, { r: 4.5 }),
+    label3([-0.72, 0, 1.08], "revolute — one angle", R.ink, { anchor: "middle", size: 12.5 }),
+    // --- prismatic ---
+    seg3([0.58, -0.55, 0.08], [0.58, 0.55, 0.08], R.world, { width: 2.5 }),
+    seg3([0.86, -0.55, 0.08], [0.86, 0.55, 0.08], R.world, { width: 2.5 }),
+    seg3([0.58, -0.55, 0.08], [0.86, -0.55, 0.08], R.world, { width: 2.5 }),
+    seg3([0.58, 0.55, 0.08], [0.86, 0.55, 0.08], R.world, { width: 2.5 }),
+    ...box3([0.72, yd, 0.18], quat.id, 0.3, 0.24, 0.2, R.signal),
+    // the travelled distance d, made visible
+    dot3([0.72, -0.45, 0.34], R.plan, { r: 3 }),
+    seg3([0.72, -0.45, 0.34], [0.72, yd, 0.34], R.plan, { width: 2.5 }),
+    dot3([0.72, yd, 0.34], R.plan, { r: 4 }),
+    label3([0.72, 0, 0.78], "prismatic — one distance", R.ink, { anchor: "middle", size: 12.5 }),
+  ];
+
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 5, zoom: 145, cy: 245 };
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 1.2 · Revolute vs prismatic joints"
-      ariaLabel={`A revolute joint at ${Math.round(a)} degrees and a prismatic joint at ${Math.round(d)} centimetres`}
+      ariaLabel={`A 3D revolute joint at ${Math.round(a)} degrees beside a prismatic joint at ${Math.round(d)} centimetres. Drag to orbit.`}
+      svgProps={orbit.svgProps}
       controls={
         <>
           <Slider label="θ" min={0} max={170} value={theta} onChange={setTheta} fmt={(v) => `${v}°`} />
           <Slider label="d" min={0} max={60} value={dist} onChange={setDist} fmt={(v) => `${v} cm`} />
           <Btn
             onClick={() => {
-              setTheta(35);
+              setTheta(60);
               setDist(35);
+              orbit.reset();
             }}
           >
             ↺ reset
@@ -254,368 +301,999 @@ export function RbJointTypes() {
         </>
       }
     >
-      <line x1={370} y1={40} x2={370} y2={400} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-      <text x={195} y={54} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.world}>
-        revolute: rotates
-      </text>
-      <text x={545} y={54} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.world}>
-        prismatic: slides
-      </text>
-
-      <rect x={px - 34} y={py} width={68} height={40} rx={6} fill="#eeeeec" stroke={R.line} strokeWidth={2} />
-      <path d={arc} fill="none" stroke={R.plan} strokeWidth={2.5} />
-      <line x1={px} y1={py} x2={tipX} y2={tipY} stroke={R.signal} strokeWidth={10} strokeLinecap="round" />
-      <circle cx={px} cy={py} r={9} fill={R.ink} />
-      <circle cx={tipX} cy={tipY} r={8} fill={R.signal} />
-      <text x={px} y={100} textAnchor="middle" fontFamily={MONO} fontSize={17} fill={R.plan} fontWeight={600}>
-        θ = {Math.round(a)}°
-      </text>
-
-      <rect x={railX0} y={294} width={railX1 - railX0} height={14} rx={4} fill="#eeeeec" stroke={R.line} strokeWidth={2} />
-      <line x1={railX0} y1={288} x2={railX0} y2={314} stroke={R.world} strokeWidth={3} />
-      <line x1={railX1} y1={288} x2={railX1} y2={314} stroke={R.world} strokeWidth={3} />
-      <rect x={blockX} y={276} width={50} height={50} rx={7} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
-      <text x={545} y={100} textAnchor="middle" fontFamily={MONO} fontSize={17} fill={R.plan} fontWeight={600}>
-        d = {Math.round(d)} cm
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "θ (revolute)", value: `${Math.round(a)}°`, color: R.plan },
+          { label: "d (prismatic)", value: `${Math.round(d)} cm`, color: R.plan },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "moving part" },
+          { color: R.plan, label: "its one number" },
+          { color: R.world, label: "structure" },
+        ]}
+      />
+      {reduced && (
+        <text x={24} y={404} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: joints jump to the slider values instead of easing.
+        </text>
+      )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        each joint contributes exactly one number to the state — a six-joint arm is six numbers
       </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 1.4 · The speed–torque trade of a gearbox  (slider-driven diagram)
-// A fast motor drives a slow, high-torque output that lifts a load. Raising the
-// ratio slows the output but lets it lift more; too much load stalls it (red).
+// Fig 1.3 · Configuration space of a 3-joint arm  (dual true-3D, orbitable)
+// Left: a yaw-pitch-pitch arm posed by real forward kinematics. Right: the
+// 3D box of joint angles (θ1, θ2, θ3) where the whole arm is ONE point.
+// Playing runs a scripted joint trajectory; the hand traces a complicated
+// curl in the workspace while the config point draws one smooth curve.
 // ===========================================================================
+
+const C3 = 0.55; // cube half-extent in world units
+// joint limits: θ1 ∈ ±180, θ2 ∈ [0, 90], θ3 ∈ [−105, 5]
+function scripted3(tau: number): [number, number, number] {
+  return [
+    130 * Math.sin(0.45 * tau),
+    45 + 35 * Math.sin(0.8 * tau + 1.2),
+    -50 + 55 * Math.sin(0.6 * tau + 2.1),
+  ];
+}
+function armFk(t: [number, number, number]) {
+  const q1 = quat.fromAxisAngle([0, 0, 1], rad(t[0]));
+  const q2 = quat.mul(q1, quat.fromAxisAngle([0, 1, 0], -rad(t[1])));
+  const q3 = quat.mul(q2, quat.fromAxisAngle([0, 1, 0], -rad(t[2])));
+  const S: V3 = [0, 0, 0.42];
+  const E = v3.add(S, v3.scale(quat.rotate(q2, [1, 0, 0]), 0.45));
+  const T = v3.add(E, v3.scale(quat.rotate(q3, [1, 0, 0]), 0.38));
+  return { S, E, T };
+}
+const cubePt = (t: [number, number, number]): V3 => [
+  (t[0] / 180) * C3,
+  ((t[1] - 45) / 45) * C3,
+  ((t[2] + 50) / 55) * C3,
+];
+const trailSegs = (pts: V3[], color: string): Prim3D[] =>
+  pts.slice(1).map((p, i) => seg3(pts[i], p, color, { width: 2, opacity: 0.85 }));
+
+export function RbConfigSpace() {
+  const reduced = usePrefersReducedMotion();
+  const { ref, inView } = useStageVisibility();
+  const orbit = useOrbit(-30, 22);
+  const [playing, setPlaying] = useState(true);
+  const [st, setSt] = useState({
+    tau: 0,
+    t: scripted3(0),
+    trailW: [] as V3[],
+    trailC: [] as V3[],
+    acc: 0,
+  });
+
+  useRafLoop(
+    (dt) => {
+      setSt((s) => {
+        const tau = s.tau + dt * 0.7;
+        const t = scripted3(tau);
+        const acc = s.acc + dt;
+        if (acc < 0.07) return { ...s, tau, t, acc };
+        return {
+          tau,
+          t,
+          acc: 0,
+          trailW: [...s.trailW.slice(-95), armFk(t).T],
+          trailC: [...s.trailC.slice(-95), cubePt(t)],
+        };
+      });
+    },
+    { playing: playing && inView && !reduced },
+  );
+
+  // reduced motion: draw the entire scripted path statically, still orbitable
+  const staticTrail = useMemo(() => {
+    if (!reduced) return null;
+    return Array.from({ length: 110 }, (_, i) => {
+      const t = scripted3(i * 0.13);
+      return { w: armFk(t).T, c: cubePt(t) };
+    });
+  }, [reduced]);
+  const trailW = staticTrail ? staticTrail.map((p) => p.w) : st.trailW;
+  const trailC = staticTrail ? staticTrail.map((p) => p.c) : st.trailC;
+
+  const t = st.t;
+  const { S, E, T } = armFk(t);
+  const cp = cubePt(t);
+
+  const setJoint = (i: number) => (v: number) => {
+    setPlaying(false);
+    setSt((s) => {
+      const nt = [...s.t] as [number, number, number];
+      nt[i] = v;
+      return { ...s, t: nt };
+    });
+  };
+
+  const primsL: Prim3D[] = [
+    ...grid3(0.8, 0.4),
+    seg3([0, 0, 0], S, R.world, { width: 5 }),
+    dot3([0, 0, 0], R.ink, { r: 4 }),
+    ...trailSegs(trailW, R.plan),
+    seg3(S, E, R.signal, { width: 7 }),
+    seg3(E, T, R.signal, { width: 6 }),
+    dot3(S, R.ink, { r: 4.5 }),
+    dot3(E, R.ink, { r: 4 }),
+    dot3(T, R.plan, { r: 6 }),
+    label3(v3.add(T, [0, 0, 0.13]), "hand", R.plan, { anchor: "middle", dy: -2, size: 12 }),
+  ];
+
+  const primsR: Prim3D[] = [
+    ...box3([0, 0, 0], quat.id, 2 * C3, 2 * C3, 2 * C3, R.line),
+    seg3([-C3, -C3, -C3], [C3, -C3, -C3], R.world, { width: 2.5 }),
+    seg3([-C3, -C3, -C3], [-C3, C3, -C3], R.world, { width: 2.5 }),
+    seg3([-C3, -C3, -C3], [-C3, -C3, C3], R.world, { width: 2.5 }),
+    label3([C3 + 0.18, -C3, -C3], "θ1", R.world, { anchor: "middle", size: 12 }),
+    label3([-C3, C3 + 0.18, -C3], "θ2", R.world, { anchor: "middle", size: 12 }),
+    label3([-C3, -C3, C3 + 0.15], "θ3", R.world, { anchor: "middle", dy: -4, size: 12 }),
+    ...trailSegs(trailC, R.goal),
+    dot3(cp, R.goal, { r: 6.5 }),
+  ];
+
+  const camL: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 5.4, zoom: 118, cx: 186, cy: 252 };
+  const camR: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 5.4, zoom: 126, cx: 542, cy: 240 };
+
+  return (
+    <Stage
+      innerRef={ref}
+      title="Fig 1.3 · Configuration space: the whole arm is one point"
+      ariaLabel={`A 3-joint arm at angles ${Math.round(t[0])}, ${Math.round(t[1])}, ${Math.round(t[2])} degrees beside its configuration-space box, where the whole pose is a single point. Drag to orbit both views.`}
+      svgProps={orbit.svgProps}
+      controls={
+        <>
+          <Transport
+            playing={playing}
+            onPlay={() => setPlaying((v) => !v)}
+            onReset={() => {
+              setSt({ tau: 0, t: scripted3(0), trailW: [], trailC: [], acc: 0 });
+              setPlaying(true);
+              orbit.reset();
+            }}
+          />
+          <Slider label="θ1" min={-180} max={180} value={Math.round(t[0])} onChange={setJoint(0)} fmt={(v) => `${v}°`} />
+          <Slider label="θ2" min={0} max={90} value={Math.round(t[1])} onChange={setJoint(1)} fmt={(v) => `${v}°`} />
+          <Slider label="θ3" min={-105} max={5} value={Math.round(t[2])} onChange={setJoint(2)} fmt={(v) => `${v}°`} />
+        </>
+      }
+    >
+      <line x1={368} y1={48} x2={368} y2={392} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
+      <Scene3D cam={camL} prims={primsL} />
+      <Scene3D cam={camR} prims={primsR} />
+      <text x={186} y={404} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        workspace — what the body does
+      </text>
+      <text x={542} y={404} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        joint space (θ1, θ2, θ3) — one point
+      </text>
+      <Readout
+        rows={[
+          { label: "θ1 θ2 θ3", value: `${Math.round(t[0])}° ${Math.round(t[1])}° ${Math.round(t[2])}°` },
+          { label: "hand (x,y,z)", value: `(${T[0].toFixed(2)}, ${T[1].toFixed(2)}, ${T[2].toFixed(2)})` },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "the arm" },
+          { color: R.plan, label: "hand path" },
+          { color: R.goal, label: "config point" },
+        ]}
+      />
+      {reduced && (
+        <text x={24} y={382} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: the scripted path is drawn statically; sliders still pose the arm.
+        </text>
+      )}
+      <text x={360} y={426} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        a complicated hand path in the world is one smooth curve through the θ-box
+      </text>
+    </Stage>
+  );
+}
+
+// ===========================================================================
+// Fig 1.4 · The speed–torque trade of a gearbox  (slider-driven, real physics)
+// A DC motor's linear torque–speed curve, reflected through a gear ratio N:
+// τ_out = ηNτ_m, ω_out = ω_m/N. The operating point is the intersection of
+// the reflected curve with the load line τ_L = mgr. No intersection = stall.
+// ===========================================================================
+
+const GB = { tauS: 0.5, w0: 50, eta: 0.85, r: 0.05, g: 9.81 }; // N·m, rev/s, -, m
+const GB_PLOT = { x0: 64, x1: 336, y0: 96, y1: 352 };
+
+function gbGear(cx: number, cy: number, r: number, angDeg: number, color: string, teeth: number) {
+  return (
+    <g transform={`rotate(${angDeg} ${cx} ${cy})`}>
+      <circle cx={cx} cy={cy} r={r} fill="#efefec" stroke={color} strokeWidth={3} />
+      {Array.from({ length: teeth }).map((_, i) => (
+        <rect key={i} x={cx - 3.5} y={cy - r - 7} width={7} height={9} fill={color} transform={`rotate(${(i / teeth) * 360} ${cx} ${cy})`} />
+      ))}
+      <line x1={cx} y1={cy} x2={cx} y2={cy - r + 5} stroke={color} strokeWidth={3} />
+    </g>
+  );
+}
 
 export function RbGearbox() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
   const [ratio, setRatio] = useState(20);
-  const [load, setLoad] = useState(30);
-  const [anim, setAnim] = useState({ motor: 0, out: 0, lift: 0 });
+  const [mass, setMass] = useState(8);
+  const [anim, setAnim] = useState({ ma: 0, oa: 0, lift: 0 });
 
-  const stalled = load > ratio + 4;
-  const motorRPS = 1.4;
-  const outRPS = motorRPS / ratio;
+  const tauL = mass * GB.g * GB.r; // load torque, N·m
+  const tauMax = GB.eta * ratio * GB.tauS; // stall torque at the output
+  const stalled = tauL >= tauMax;
+  const wm = stalled ? 0 : GB.w0 * (1 - tauL / tauMax); // motor speed, rev/s
+  const wout = wm / ratio; // output speed, rev/s
+  const vLift = wout * 2 * Math.PI * GB.r; // m/s
 
   useRafLoop(
     (dt) => {
-      setAnim((s) => {
-        if (stalled) return s;
-        return {
-          motor: s.motor + dt * motorRPS * 360,
-          out: s.out + dt * outRPS * 360,
-          lift: clamp(s.lift + dt * outRPS * 2.2, 0, 1),
-        };
-      });
+      // gears spin at the true computed speeds, scaled by one shared factor
+      setAnim((s) => ({
+        ma: (s.ma + dt * wm * 360 * 0.08) % 360,
+        oa: (s.oa - dt * wout * 360 * 0.08) % 360,
+        lift: clamp(s.lift + (dt * vLift) / 0.5, 0, 1),
+      }));
     },
     { playing: inView && !reduced && !stalled && anim.lift < 1 },
   );
+  const lift = reduced ? (stalled ? 0 : 0.5) : anim.lift;
 
-  const lift = reduced ? 0.5 : anim.lift;
-  const mA = reduced ? 0 : anim.motor;
-  const oA = reduced ? 0 : anim.out;
+  const X = (w: number) => GB_PLOT.x0 + (w / 50) * (GB_PLOT.x1 - GB_PLOT.x0);
+  const Y = (tq: number) => GB_PLOT.y1 - (clamp(tq, 0, 45) / 45) * (GB_PLOT.y1 - GB_PLOT.y0);
+  const wNoLoad = GB.w0 / ratio;
+  const curveStr = Array.from({ length: 41 }, (_, i) => {
+    const w = wNoLoad * (i / 40);
+    return { w, tq: tauMax * (1 - w / wNoLoad) };
+  })
+    .filter((p) => p.tq <= 45.2)
+    .map((p) => `${X(p.w)},${Y(p.tq)}`)
+    .join(" ");
 
-  const motorC = { x: 175, y: 250, r: 42 };
-  const outC = { x: 340, y: 250, r: 74 };
-  const trackX = 560;
-  const topY = 90;
-  const botY = 360;
-  const weightY = botY - lift * (botY - topY) - 30;
-
-  const gear = (c: { x: number; y: number; r: number }, ang: number, color: string, n: number) => (
-    <g transform={`rotate(${ang} ${c.x} ${c.y})`}>
-      <circle cx={c.x} cy={c.y} r={c.r} fill="#efefec" stroke={color} strokeWidth={3} />
-      {Array.from({ length: n }).map((_, i) => (
-        <rect
-          key={i}
-          x={c.x - 4}
-          y={c.y - c.r - 8}
-          width={8}
-          height={10}
-          fill={color}
-          transform={`rotate(${(i / n) * 360} ${c.x} ${c.y})`}
-        />
-      ))}
-      <line x1={c.x} y1={c.y} x2={c.x} y2={c.y - c.r + 6} stroke={color} strokeWidth={3} />
-    </g>
-  );
+  const weightTop = 336 - lift * 140;
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 1.4 · The speed–torque trade of a gearbox"
-      ariaLabel={`Gearbox at ${ratio} to 1 lifting a load of ${load}; ${stalled ? "stalled" : "lifting"}`}
+      ariaLabel={`Gearbox at ${ratio} to 1 driving a ${mass} kilogram winch load; output ${wout.toFixed(2)} revolutions per second, ${stalled ? "stalled" : "lifting"}. A torque-speed plot shows the operating point.`}
       controls={
         <>
           <Slider label="gear ratio" min={1} max={100} value={ratio} onChange={setRatio} fmt={(v) => `${v}:1`} />
-          <Slider label="load" min={1} max={100} value={load} onChange={setLoad} fmt={(v) => `${v}`} />
-          <Btn onClick={() => setAnim({ motor: 0, out: 0, lift: 0 })}>↺ reset</Btn>
+          <Slider
+            label="load"
+            min={0.5}
+            max={40}
+            step={0.5}
+            value={mass}
+            onChange={(v) => {
+              setMass(v);
+              setAnim((s) => ({ ...s, lift: 0 }));
+            }}
+            fmt={(v) => `${v} kg`}
+          />
+          <Btn onClick={() => setAnim({ ma: 0, oa: 0, lift: 0 })}>↺ reset</Btn>
         </>
       }
     >
-      <text x={40} y={44} fontFamily={MONO} fontSize={14} fill={R.world}>
-        output speed
+      {/* torque–speed plot, fixed left lane */}
+      <line x1={GB_PLOT.x0} y1={GB_PLOT.y0} x2={GB_PLOT.x0} y2={GB_PLOT.y1} stroke={R.line} strokeWidth={1.5} />
+      <line x1={GB_PLOT.x0} y1={GB_PLOT.y1} x2={GB_PLOT.x1} y2={GB_PLOT.y1} stroke={R.line} strokeWidth={1.5} />
+      <text x={(GB_PLOT.x0 + GB_PLOT.x1) / 2} y={376} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        output speed (rev/s) →
       </text>
-      <text x={175} y={44} fontFamily={MONO} fontSize={14} fill={R.plan} fontWeight={600}>
-        {outRPS.toFixed(3)} rev/s
+      <text x={40} y={224} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world} transform="rotate(-90 40 224)">
+        output torque (N·m) →
       </text>
-      <text x={330} y={44} fontFamily={MONO} fontSize={14} fill={stalled ? R.error : R.goal} fontWeight={600}>
-        {stalled ? "STALLED: load too heavy for this ratio" : "lifting"}
+      <text x={GB_PLOT.x0 - 6} y={GB_PLOT.y0 + 4} textAnchor="end" fontFamily={MONO} fontSize={11} fill={R.world}>
+        45
       </text>
+      <text x={GB_PLOT.x1} y={GB_PLOT.y1 + 16} textAnchor="middle" fontFamily={MONO} fontSize={11} fill={R.world}>
+        50
+      </text>
+      <polyline points={curveStr} fill="none" stroke={R.signal} strokeWidth={3} strokeLinecap="round" />
+      <line x1={GB_PLOT.x0} y1={Y(tauL)} x2={GB_PLOT.x1} y2={Y(tauL)} stroke={R.plan} strokeWidth={2.5} strokeDasharray="6 5" />
+      <text x={GB_PLOT.x1 - 4} y={Y(tauL) - 7} textAnchor="end" fontFamily={MONO} fontSize={11.5} fill={R.plan}>
+        load τ = mgr
+      </text>
+      {stalled ? (
+        <>
+          <circle cx={X(0)} cy={Y(tauL)} r={7} fill="none" stroke={R.error} strokeWidth={3} />
+          <text x={X(0) + 14} y={Y(tauL) + 4} fontFamily={MONO} fontSize={12.5} fill={R.error} fontWeight={600}>
+            no intersection: stall
+          </text>
+        </>
+      ) : (
+        <>
+          <circle cx={X(wout)} cy={Y(tauL)} r={7} fill={R.fillGreen} stroke={R.goal} strokeWidth={3} />
+          <text x={X(wout) + 12} y={Y(tauL) - 10} fontFamily={MONO} fontSize={12} fill={R.goal} fontWeight={600}>
+            operating point
+          </text>
+        </>
+      )}
 
-      {gear(motorC, mA, R.signal, 10)}
-      <text x={motorC.x} y={motorC.y + motorC.r + 26} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.signal}>
-        motor (fast)
+      {/* motor -> gearbox -> winch -> weight, fixed right lane */}
+      {gbGear(412, 196, 24, reduced ? 0 : anim.ma, R.signal, 8)}
+      <text x={412} y={250} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
+        motor
       </text>
-      {gear(outC, -oA, R.plan, 18)}
-      <text x={outC.x} y={outC.y + outC.r + 22} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.plan}>
-        output (slow, strong)
+      <line x1={436} y1={196} x2={448} y2={196} stroke={R.world} strokeWidth={4} />
+      <rect x={448} y={168} width={64} height={56} rx={8} fill="#eeeeec" stroke={R.world} strokeWidth={2.5} />
+      <text x={480} y={201} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.ink} fontWeight={600}>
+        {ratio}:1
       </text>
-
-      <line x1={trackX} y1={topY} x2={trackX} y2={botY} stroke={R.line} strokeWidth={2} strokeDasharray="3 6" />
-      <line x1={outC.x + outC.r} y1={outC.y} x2={trackX} y2={outC.y} stroke={R.world} strokeWidth={2} />
-      <line x1={trackX} y1={outC.y} x2={trackX} y2={weightY} stroke={R.world} strokeWidth={2} />
+      <text x={480} y={250} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        gearbox
+      </text>
+      <line x1={512} y1={196} x2={538} y2={196} stroke={R.world} strokeWidth={4} />
+      {gbGear(560, 196, 20, reduced ? 0 : anim.oa, R.plan, 10)}
+      <text x={560} y={250} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.plan}>
+        winch
+      </text>
+      <line x1={560} y1={176} x2={645} y2={176} stroke={R.world} strokeWidth={2} />
+      <line x1={645} y1={176} x2={645} y2={weightTop} stroke={R.world} strokeWidth={2} />
       <rect
-        x={trackX - 30}
-        y={weightY}
-        width={60}
-        height={54}
+        x={623}
+        y={weightTop}
+        width={44}
+        height={40}
         rx={6}
         fill={stalled ? R.fillRed : lift >= 1 ? R.fillGreen : "#eeeeec"}
         stroke={stalled ? R.error : lift >= 1 ? R.goal : R.world}
         strokeWidth={3}
       />
-      <text x={trackX} y={weightY + 33} textAnchor="middle" fontFamily={MONO} fontSize={16} fill={R.ink}>
-        {load}
+      <text x={645} y={weightTop + 25} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.ink}>
+        {mass}
       </text>
+      <line x1={600} y1={377} x2={692} y2={377} stroke={R.line} strokeWidth={2} />
 
+      <Readout
+        rows={[
+          { label: "torque avail", value: `${tauMax.toFixed(1)} N·m`, color: R.signal },
+          { label: "load needs", value: `${tauL.toFixed(1)} N·m`, color: stalled ? R.error : R.plan },
+          { label: "lift speed", value: stalled ? "0 — stalled" : `${(vLift * 100).toFixed(1)} cm/s`, color: stalled ? R.error : R.goal },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "motor curve (geared)" },
+          { color: R.plan, label: "load line", dash: true },
+          { color: R.goal, label: "operating point" },
+          { color: R.error, label: "stall" },
+        ]}
+      />
       {reduced && (
-        <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
-          Reduced motion: gears shown at rest; the sliders still set speed, capacity, and stall.
+        <text x={24} y={404} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: gears at rest; the plot and readout still track the sliders.
         </text>
       )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={stalled ? R.error : R.world}>
+        {stalled
+          ? "the load line sits above the whole motor curve — no intersection, no motion"
+          : "raise the ratio and the curve pivots: more torque, less speed — same power, different shape"}
+      </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 1.3 · Configuration space of a 2-joint arm  (draggable field)
-// Drag the arm's hand OR the dot in (θ1, θ2) space; the two panels stay in
-// sync, making "a whole arm pose = one point in joint space" concrete.
+// Fig 1.5 · Every sensor is blind to something  (toggle-compare, real models)
+// Encoder: integrated wheel counts diverge from ground truth across an oil
+// patch. IMU: a seeded accelerometer error double-integrated into drift.
+// Camera: two balls with equal angular size project to the SAME image.
+// LiDAR: real ray casting against a wall and an unlabeled shape.
 // ===========================================================================
 
-const S13 = { x: 175, y: 250 };
-const L1 = 96;
-const L2 = 78;
-const REACH_OUT = L1 + L2;
-const REACH_IN = Math.abs(L1 - L2);
-// config-space box (θ1 across, θ2 up)
-const BX0 = 452;
-const BX1 = 686;
-const BY0 = 70;
-const BY1 = 350;
+type SensorTab = "encoder" | "imu" | "camera" | "lidar" | "fuse";
+const SENSOR_TABS: { id: SensorTab; label: string }[] = [
+  { id: "encoder", label: "Encoder" },
+  { id: "imu", label: "IMU" },
+  { id: "camera", label: "Camera" },
+  { id: "lidar", label: "LiDAR" },
+  { id: "fuse", label: "Fuse all" },
+];
+const BLIND: Record<SensorTab, string> = {
+  encoder: "blind to slip: it counts wheel turns, not the world",
+  imu: "drift: integrating noisy acceleration twice grows error like t²",
+  camera: "no depth: two different worlds land on identical pixels",
+  lidar: "no meaning: crisp geometry, zero idea what the shape is",
+  fuse: "each sensor covers another's blind spot",
+};
 
-export function RbConfigSpace() {
+// deterministic IMU drift: bias + seeded noise, double-integrated at 20 Hz
+const IMU_N = 240; // 12 s
+const IMU_DRIFT: number[] = (() => {
+  const rng = mulberry32(2024);
+  let vel = 0;
+  let pos = 0;
+  const out = [0];
+  for (let i = 1; i <= IMU_N; i++) {
+    const acc = 0.02 + 0.1 * (rng() - 0.5); // m/s²: bias + noise
+    vel += acc * 0.05;
+    pos += vel * 0.05;
+    out.push(pos);
+  }
+  return out;
+})();
+const IMU_MAX = Math.max(...IMU_DRIFT);
+
+// encoder scenario: constant commanded speed, 50% slip across the oil patch
+const ENC = (() => {
+  const v = 90; // commanded px/s (1 px = 1 cm)
+  const x0 = 70;
+  const o0 = 280;
+  const o1 = 370;
+  const slip = 0.5;
+  const xEnd = 580;
+  const t1 = (o0 - x0) / v;
+  const t2 = t1 + (o1 - o0) / (v * slip);
+  const T = t2 + (xEnd - o1) / v;
+  return { v, x0, o0, o1, slip, xEnd, t1, t2, T };
+})();
+const encTrue = (u: number) =>
+  u < ENC.t1
+    ? ENC.x0 + ENC.v * u
+    : u < ENC.t2
+      ? ENC.o0 + ENC.v * ENC.slip * (u - ENC.t1)
+      : ENC.o1 + ENC.v * (u - ENC.t2);
+
+// lidar ray cast against a vertical wall segment and a circle
+function castRay(ox: number, oy: number, angRad: number, wallX: number, c: { x: number; y: number; r: number }) {
+  const dx = Math.cos(angRad);
+  const dy = Math.sin(angRad);
+  const hits: number[] = [];
+  if (dx > 1e-6) {
+    const tw = (wallX - ox) / dx;
+    const yw = oy + tw * dy;
+    if (yw >= 130 && yw <= 370) hits.push(tw);
+  }
+  const fx = ox - c.x;
+  const fy = oy - c.y;
+  const b = fx * dx + fy * dy;
+  const disc = b * b - (fx * fx + fy * fy - c.r * c.r);
+  if (disc >= 0) {
+    const tc = -b - Math.sqrt(disc);
+    if (tc > 0) hits.push(tc);
+  }
+  return hits.length ? Math.min(...hits) : null;
+}
+
+export function RbSensors() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
-  const [showReach, setShowReach] = useState(false);
-  const [tgt, setTgt] = useState({ t1: 40, t2: 60 }); // degrees
-  const [disp, setDisp] = useState({ t1: 40, t2: 60 });
-  const [drag, setDrag] = useState<null | "arm" | "cfg">(null);
+  const [tab, setTab] = useState<SensorTab>("encoder");
+  const [t, setT] = useState(0);
 
   useRafLoop(
-    (dt) => {
-      setDisp((s) => ({
-        t1: approachAngle(s.t1, tgt.t1, 0.25, dt),
-        t2: approachAngle(s.t2, tgt.t2, 0.25, dt),
-      }));
-    },
-    { playing: inView && !reduced },
+    (dt) => setT((x) => (x + dt) % (tab === "encoder" ? ENC.T : 12)),
+    { playing: inView && !reduced && (tab === "encoder" || tab === "imu") },
   );
 
-  const cur = reduced ? tgt : disp;
-  const th1 = rad(cur.t1);
-  const th2 = rad(cur.t2);
-  const Ex = S13.x + L1 * Math.cos(th1);
-  const Ey = S13.y - L1 * Math.sin(th1);
-  const Tx = Ex + L2 * Math.cos(th1 + th2);
-  const Ty = Ey - L2 * Math.sin(th1 + th2);
-
-  const cfgX = BX0 + (cur.t1 / 360) * (BX1 - BX0);
-  const cfgY = BY1 - (cur.t2 / 360) * (BY1 - BY0);
-
-  const setFromArm = (mx: number, my: number) => {
-    const rx = mx - S13.x;
-    const ry = -(my - S13.y);
-    let r = Math.hypot(rx, ry);
-    r = clamp(r, REACH_IN + 3, REACH_OUT - 3);
-    const c2 = clamp((r * r - L1 * L1 - L2 * L2) / (2 * L1 * L2), -1, 1);
-    const a2 = Math.acos(c2);
-    const a1 = Math.atan2(ry, rx) - Math.atan2(L2 * Math.sin(a2), L1 + L2 * Math.cos(a2));
-    setTgt({ t1: ((a1 * 180) / Math.PI + 360) % 360, t2: ((a2 * 180) / Math.PI + 360) % 360 });
+  // ---- encoder ----
+  const uEnc = reduced ? 5.4 : t;
+  const xTrue = encTrue(uEnc);
+  const xBel = ENC.x0 + ENC.v * uEnc;
+  // ---- imu ----
+  const uImu = reduced ? 9 : t;
+  const imuIdx = Math.min(Math.floor(uImu / 0.05), IMU_N);
+  const drift = IMU_DRIFT[imuIdx];
+  const imuCurve = IMU_DRIFT.slice(0, imuIdx + 1)
+    .map((p, i) => `${360 + (i / IMU_N) * 330},${320 - (p / IMU_MAX) * 190}`)
+    .join(" ");
+  // ---- camera ----
+  const pin = { x: 170, y: 226 };
+  const focal = 52;
+  const planeX = pin.x - focal;
+  const near = { x: 350, r: 30 }; // z = 180 px
+  const far = { x: 620, r: 75 }; // z = 450 px, same r/z ratio
+  const imgR = (focal * near.r) / (near.x - pin.x);
+  const rayTo = (ox: number, oy: number) => {
+    // ray object -> pinhole, extended to the image plane (inverted image)
+    const s = focal / (ox - pin.x);
+    return pin.y + (pin.y - oy) * s;
   };
-  const setFromCfg = (mx: number, my: number) => {
-    const t1 = clamp((mx - BX0) / (BX1 - BX0), 0, 1) * 360;
-    const t2 = clamp((BY1 - my) / (BY1 - BY0), 0, 1) * 360;
-    setTgt({ t1, t2 });
-  };
-  const onMove = (e: ReactPointerEvent<SVGElement>) => {
-    if (!drag) return;
-    const [x, y] = svgPoint(e);
-    if (drag === "arm") setFromArm(x, y);
-    else setFromCfg(x, y);
+  // ---- lidar ----
+  const bot = { x: 170, y: 250 };
+  const wallX = 600;
+  const person = { x: 420, y: 250, r: 30 };
+  const rays = Array.from({ length: 17 }, (_, i) => {
+    const a = rad(-20 + i * 2.5);
+    const hit = castRay(bot.x, bot.y, a, wallX, person);
+    const tr = hit === null ? 470 : Math.min(hit, 470);
+    return { x: bot.x + tr * Math.cos(a), y: bot.y + tr * Math.sin(a), hit: hit !== null };
+  });
+  const returns = rays.filter((r) => r.hit).length;
+
+  const readouts: Record<SensorTab, { label: string; value: string; color?: string }[]> = {
+    encoder: [
+      { label: "odometry says", value: `${Math.round(xBel - ENC.x0)} cm` },
+      { label: "actually moved", value: `${Math.round(xTrue - ENC.x0)} cm`, color: R.goal },
+      { label: "error", value: `${Math.round(xBel - xTrue)} cm`, color: xBel - xTrue > 2 ? R.error : R.ink },
+    ],
+    imu: [
+      { label: "time", value: `${uImu.toFixed(1)} s` },
+      { label: "drift", value: `${drift.toFixed(2)} m`, color: drift > 0.3 ? R.error : R.ink },
+      { label: "growth", value: "∝ t²", color: R.error },
+    ],
+    camera: [
+      { label: "near ball h/z", value: (near.r / (near.x - pin.x)).toFixed(3) },
+      { label: "far ball h/z", value: (far.r / (far.x - pin.x)).toFixed(3) },
+      { label: "image size", value: `${(2 * imgR).toFixed(1)} px both`, color: R.error },
+    ],
+    lidar: [
+      { label: "beams fired", value: "17" },
+      { label: "returns", value: String(returns) },
+      { label: "labels", value: "none", color: R.error },
+    ],
+    fuse: [
+      { label: "position", value: "pinned ✓", color: R.goal },
+      { label: "person", value: "2.5 m ✓", color: R.goal },
+      { label: "drift", value: "corrected ✓", color: R.goal },
+    ],
   };
 
   return (
     <Stage
       innerRef={ref}
-      title="Fig 1.3 · Configuration space of a 2-joint arm"
-      ariaLabel={`Two link arm at joint angles ${Math.round(cur.t1)} and ${Math.round(cur.t2)} degrees, shown as one point in configuration space`}
-      svgProps={{
-        onPointerMove: onMove,
-        onPointerUp: () => setDrag(null),
-        onPointerLeave: () => setDrag(null),
-      }}
+      title="Fig 1.5 · Every sensor is blind to something"
+      ariaLabel={`The same scene through the ${tab} sensor, with its blind spot called out: ${BLIND[tab]}`}
       controls={
-        <>
-          <Btn onClick={() => setShowReach((v) => !v)} active={showReach}>
-            {showReach ? "✓ workspace" : "show workspace"}
-          </Btn>
-          <Btn onClick={() => setTgt({ t1: 40, t2: 60 })}>↺ reset</Btn>
-          <span className="font-mono text-[13px] text-[var(--muted)]">
-            drag the hand or the dot
-          </span>
-        </>
+        <Tabs
+          options={SENSOR_TABS}
+          value={tab}
+          onChange={(v) => {
+            setTab(v);
+            setT(0);
+          }}
+        />
       }
     >
-      {/* panel labels */}
-      <text x={175} y={40} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.world}>
-        the arm
-      </text>
-      <text x={569} y={40} textAnchor="middle" fontFamily={MONO} fontSize={14} fill={R.world}>
-        configuration space
-      </text>
-      <line x1={400} y1={30} x2={400} y2={410} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-
-      {/* reachable workspace overlay */}
-      {showReach && (
+      {tab === "encoder" && (
         <>
-          <circle cx={S13.x} cy={S13.y} r={REACH_OUT} fill={R.fillGreen} opacity={0.35} />
-          <circle cx={S13.x} cy={S13.y} r={REACH_IN} fill="var(--background)" />
-          <circle cx={S13.x} cy={S13.y} r={REACH_OUT} fill="none" stroke={R.goal} strokeWidth={2} strokeDasharray="5 5" />
-          <text x={S13.x} y={S13.y + REACH_OUT + 18} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
-            reachable ring; outside is unreachable
+          <line x1={30} y1={340} x2={690} y2={340} stroke={R.line} strokeWidth={2} />
+          <rect x={ENC.o0} y={333} width={ENC.o1 - ENC.o0} height={13} rx={6} fill="#dfe4ec" stroke={R.line} strokeWidth={1.5} />
+          <text x={(ENC.o0 + ENC.o1) / 2} y={366} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+            oil (wheels slip)
+          </text>
+          <circle cx={clamp(xBel, 40, 690)} cy={312} r={20} fill="none" stroke={R.error} strokeWidth={3} strokeDasharray="5 5" />
+          <text x={clamp(xBel, 70, 660)} y={266} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>
+            where odometry says
+          </text>
+          <circle cx={xTrue} cy={312} r={20} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
+          <circle cx={xTrue - 10} cy={336} r={7} fill="#eeeeec" stroke={R.signal} strokeWidth={2.5} />
+          <circle cx={xTrue + 10} cy={336} r={7} fill="#eeeeec" stroke={R.signal} strokeWidth={2.5} />
+          <text x={xTrue} y={386} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
+            true robot
+          </text>
+          {xBel - xTrue > 30 && svgArrow(xTrue + 26, 312, clamp(xBel, 40, 690) - 26, 312, R.error, 2.5, 8)}
+        </>
+      )}
+      {tab === "imu" && (
+        <>
+          <line x1={30} y1={340} x2={330} y2={340} stroke={R.line} strokeWidth={2} />
+          <circle cx={150} cy={312} r={20} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
+          <text x={150} y={386} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>
+            true (still)
+          </text>
+          <circle cx={150 + drift * 90} cy={312 - drift * 20} r={20} fill="none" stroke={R.error} strokeWidth={3} strokeDasharray="5 5" />
+          <text x={150 + drift * 90} y={266 - drift * 20} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>
+            where the IMU thinks it is
+          </text>
+          <text x={360} y={106} fontFamily={MONO} fontSize={12} fill={R.world}>
+            position error vs time — noise integrated twice
+          </text>
+          <rect x={360} y={118} width={330} height={204} fill="none" stroke={R.line} strokeWidth={1.5} rx={4} />
+          <polyline points={imuCurve} fill="none" stroke={R.error} strokeWidth={2.5} />
+          <text x={366} y={134} fontFamily={MONO} fontSize={11} fill={R.world}>
+            {IMU_MAX.toFixed(1)} m
+          </text>
+          <text x={676} y={336} textAnchor="end" fontFamily={MONO} fontSize={11} fill={R.world}>
+            12 s
+          </text>
+        </>
+      )}
+      {tab === "camera" && (
+        <>
+          <rect x={pin.x - 4} y={196} width={26} height={60} rx={5} fill="#eeeeec" stroke={R.world} strokeWidth={2} />
+          <circle cx={pin.x} cy={pin.y} r={4} fill={R.ink} />
+          <line x1={planeX} y1={166} x2={planeX} y2={286} stroke={R.world} strokeWidth={2} />
+          <text x={planeX} y={156} textAnchor="middle" fontFamily={MONO} fontSize={11.5} fill={R.world}>
+            image plane
+          </text>
+          {/* rays: ball silhouette edges through the pinhole onto the plane */}
+          {[near, far].map((b, i) => (
+            <g key={i} opacity={0.75}>
+              <line x1={b.x} y1={pin.y - b.r} x2={pin.x} y2={pin.y} stroke={R.signal} strokeWidth={1.2} />
+              <line x1={b.x} y1={pin.y + b.r} x2={pin.x} y2={pin.y} stroke={R.signal} strokeWidth={1.2} />
+              <line x1={pin.x} y1={pin.y} x2={planeX} y2={rayTo(b.x, pin.y - b.r)} stroke={R.signal} strokeWidth={1.2} strokeDasharray="3 3" />
+              <line x1={pin.x} y1={pin.y} x2={planeX} y2={rayTo(b.x, pin.y + b.r)} stroke={R.signal} strokeWidth={1.2} strokeDasharray="3 3" />
+            </g>
+          ))}
+          <circle cx={near.x} cy={pin.y} r={near.r} fill={R.fillGreen} stroke={R.goal} strokeWidth={3} />
+          <text x={near.x} y={pin.y + near.r + 20} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
+            0.3 m ball at 1.8 m
+          </text>
+          <circle cx={far.x} cy={pin.y} r={far.r} fill="none" stroke={R.goal} strokeWidth={3} />
+          <text x={far.x} y={pin.y + far.r + 22} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
+            0.75 m ball at 4.5 m
+          </text>
+          <line x1={planeX} y1={pin.y - imgR} x2={planeX} y2={pin.y + imgR} stroke={R.error} strokeWidth={6} />
+          <text x={planeX} y={310} textAnchor="middle" fontFamily={MONO} fontSize={12.5} fill={R.error} fontWeight={600}>
+            one identical image
+          </text>
+        </>
+      )}
+      {tab === "lidar" && (
+        <>
+          <circle cx={bot.x} cy={bot.y} r={20} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
+          <rect x={wallX} y={130} width={14} height={240} fill="#e6e6e3" stroke={R.world} strokeWidth={2} />
+          <text x={wallX + 7} y={120} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+            wall
+          </text>
+          {rays.map((rr, i) => (
+            <g key={i}>
+              <line x1={bot.x} y1={bot.y} x2={rr.x} y2={rr.y} stroke={R.signal} strokeWidth={1} opacity={0.25} />
+              {rr.hit && <circle cx={rr.x} cy={rr.y} r={3} fill={R.signal} />}
+            </g>
+          ))}
+          <circle cx={person.x} cy={person.y} r={person.r} fill="none" stroke={R.line} strokeWidth={1.5} strokeDasharray="4 4" />
+          <text x={person.x} y={person.y + person.r + 24} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>
+            a shape — person? pillar?
+          </text>
+        </>
+      )}
+      {tab === "fuse" && (
+        <>
+          <line x1={30} y1={340} x2={690} y2={340} stroke={R.line} strokeWidth={2} />
+          <rect x={wallX} y={130} width={14} height={210} fill="#e6e6e3" stroke={R.world} strokeWidth={2} />
+          <circle cx={bot.x} cy={312} r={20} fill={R.fillGreen} stroke={R.goal} strokeWidth={3} />
+          <text x={bot.x} y={368} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
+            pose pinned ✓
+          </text>
+          <rect x={person.x - 16} y={234} width={32} height={72} rx={8} fill={R.fillGreen} stroke={R.goal} strokeWidth={2.5} />
+          <circle cx={person.x} cy={220} r={11} fill={R.fillGreen} stroke={R.goal} strokeWidth={2.5} />
+          <line x1={bot.x + 22} y1={306} x2={person.x - 18} y2={280} stroke={R.goal} strokeWidth={2} strokeDasharray="5 4" />
+          <text x={person.x} y={330} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>
+            person, 2.5 m away ✓
+          </text>
+          <text x={300} y={160} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+            camera names it · lidar ranges it · encoders + IMU track the body
           </text>
         </>
       )}
 
-      {/* arm */}
-      <line x1={S13.x} y1={S13.y} x2={Ex} y2={Ey} stroke={R.signal} strokeWidth={10} strokeLinecap="round" />
-      <line x1={Ex} y1={Ey} x2={Tx} y2={Ty} stroke={R.signal} strokeWidth={10} strokeLinecap="round" />
-      <circle cx={S13.x} cy={S13.y} r={9} fill={R.ink} />
-      <circle cx={Ex} cy={Ey} r={7} fill={R.ink} />
-      <circle
-        cx={Tx}
-        cy={Ty}
-        r={12}
-        fill={R.plan}
-        stroke="var(--background)"
-        strokeWidth={2}
-        style={{ cursor: "grab" }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          setDrag("arm");
-        }}
+      <Readout rows={readouts[tab]} />
+      <Legend
+        items={[
+          { color: R.signal, label: "sensor reading" },
+          { color: R.goal, label: "ground truth" },
+          { color: R.error, label: "blind spot" },
+        ]}
       />
-
-      {/* config-space box */}
-      <rect x={BX0} y={BY0} width={BX1 - BX0} height={BY1 - BY0} rx={6} fill="none" stroke={R.line} strokeWidth={2} />
-      <text x={(BX0 + BX1) / 2} y={BY1 + 24} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world}>
-        θ1 →
-      </text>
-      <text x={BX0 - 12} y={(BY0 + BY1) / 2} textAnchor="middle" fontFamily={MONO} fontSize={13} fill={R.world} transform={`rotate(-90 ${BX0 - 12} ${(BY0 + BY1) / 2})`}>
-        θ2 →
-      </text>
-      <circle
-        cx={cfgX}
-        cy={cfgY}
-        r={11}
-        fill={R.plan}
-        stroke="var(--background)"
-        strokeWidth={2}
-        style={{ cursor: "grab" }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          setDrag("cfg");
-        }}
-      />
-      <text x={BX0 + 6} y={BY0 + 18} fontFamily={MONO} fontSize={12} fill={R.world}>
-        one point = one whole arm pose
+      {reduced && (
+        <text x={24} y={404} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: encoder and IMU scenes shown at a fixed instant.
+        </text>
+      )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12.5} fill={tab === "fuse" ? R.goal : R.error}>
+        {tab === "fuse" ? "✓ " : "blind spot: "}
+        {BLIND[tab]}
       </text>
     </Stage>
   );
 }
 
 // ===========================================================================
-// Fig 1.7 · Holonomic vs nonholonomic motion  (draggable field)
-// Drag the target. The omni base slides straight to it; the car can reach the
-// same spot but only via a feasible curve; it can't move straight sideways.
+// Fig 1.6 · One loop, many bodies  (true 3D, orbitable toggle-compare)
+// Five embodiments built from real 3D primitives, each with a calm idle
+// motion. The DoF toggle draws amber rings/arrows on every freedom so the
+// reader can literally count where the numbers live.
 // ===========================================================================
+
+type BodyId = "arm" | "wheeled" | "quadruped" | "humanoid" | "drone";
+const BODIES: { id: BodyId; label: string; dof: string; base: string; hard: string }[] = [
+  { id: "arm", label: "Arm", dof: "6", base: "fixed", hard: "kinematics" },
+  { id: "wheeled", label: "Wheeled", dof: "3", base: "floating", hard: "localization" },
+  { id: "quadruped", label: "Quadruped", dof: "12", base: "floating", hard: "balance" },
+  { id: "humanoid", label: "Humanoid", dof: "25+", base: "floating", hard: "everything at once" },
+  { id: "drone", label: "Drone", dof: "6 (4 motors)", base: "floating", hard: "underactuation" },
+];
+const BODY_HINT: Record<BodyId, string> = {
+  arm: "bolted down: where it is comes free — what the hand does is everything",
+  wheeled: "3 pose numbers, and every one of them has to be estimated on the move",
+  quadruped: "12 motors, but gravity owns the six DoF of the floating body",
+  humanoid: "every hard problem at once, in a body shaped for human tools",
+  drone: "4 motors commanding 6 DoF — underactuated by design",
+};
+
+function armBody(osc: number, dof: boolean): Prim3D[] {
+  const a1 = rad(58 + 12 * osc);
+  const a2 = rad(-70 + 16 * osc);
+  const S: V3 = [0, 0, 0.22];
+  const E: V3 = [0.42 * Math.cos(a1), 0, 0.22 + 0.42 * Math.sin(a1)];
+  const T: V3 = [E[0] + 0.36 * Math.cos(a1 + a2), 0, E[2] + 0.36 * Math.sin(a1 + a2)];
+  return [
+    ...box3([0, 0, 0.1], quat.id, 0.36, 0.36, 0.2, R.world),
+    seg3(S, E, R.signal, { width: 7 }),
+    seg3(E, T, R.signal, { width: 6 }),
+    dot3(S, R.ink, { r: 4.5 }),
+    dot3(E, R.ink, { r: 4 }),
+    dot3(T, R.signal, { r: 5.5 }),
+    ...(dof
+      ? [
+          ...ring3(S, [0, 0, 1], 0.15, R.plan, { n: 20, width: 2 }),
+          ...ring3(S, [0, 1, 0], 0.11, R.plan, { n: 20, width: 2 }),
+          ...ring3(E, [0, 1, 0], 0.09, R.plan, { n: 20, width: 2 }),
+          label3([0, 0, 1.05], "one ring per motorized joint", R.plan, { anchor: "middle", size: 12 }),
+        ]
+      : []),
+  ];
+}
+function wheeledBody(osc: number, dof: boolean): Prim3D[] {
+  const x = 0.28 * osc;
+  const wheels: Prim3D[] = [-0.16, 0.16].flatMap((wx) =>
+    [-0.22, 0.22].flatMap((wy) => ring3([x + wx, wy, 0.11], [0, 1, 0], 0.11, R.world, { n: 16, width: 2 })),
+  );
+  return [
+    ...box3([x, 0, 0.24], quat.id, 0.56, 0.4, 0.18, R.signal),
+    ...wheels,
+    ...(dof
+      ? [
+          seg3([x + 0.34, 0, 0.24], [x + 0.6, 0, 0.24], R.plan, { width: 3 }),
+          dot3([x + 0.6, 0, 0.24], R.plan, { r: 4 }),
+          ...ring3([x, 0, 0.4], [0, 0, 1], 0.18, R.plan, { n: 20, width: 2 }),
+          label3([x, 0, 0.62], "x, y, heading — all estimated", R.plan, { anchor: "middle", size: 12 }),
+        ]
+      : []),
+  ];
+}
+function quadrupedBody(osc: number, dof: boolean): Prim3D[] {
+  const bz = 0.42 + 0.02 * osc;
+  const legs: Prim3D[] = [0, 1, 2, 3].flatMap((i) => {
+    const hx = i < 2 ? 0.24 : -0.24;
+    const hy = i % 2 === 0 ? 0.15 : -0.15;
+    const s = (i === 0 || i === 3 ? osc : -osc) * 0.1;
+    const hip: V3 = [hx, hy, bz - 0.08];
+    const knee: V3 = [hx + s, hy, 0.2];
+    const foot: V3 = [hx + 1.8 * s, hy, 0];
+    return [seg3(hip, knee, R.signal, { width: 5 }), seg3(knee, foot, R.signal, { width: 4 }), dot3(foot, R.ink, { r: 3 })];
+  });
+  const hipRings: Prim3D[] = dof
+    ? [0, 1, 2, 3].flatMap((i) =>
+        ring3([i < 2 ? 0.24 : -0.24, i % 2 === 0 ? 0.15 : -0.15, bz - 0.08], [0, 1, 0], 0.06, R.plan, { n: 14, width: 2 }),
+      )
+    : [];
+  return [
+    ...box3([0, 0, bz], quat.id, 0.64, 0.3, 0.16, R.signal),
+    ...legs,
+    ...hipRings,
+    ...(dof ? [label3([0, 0, 0.78], "3 per leg × 4 legs = 12", R.plan, { anchor: "middle", size: 12 })] : []),
+  ];
+}
+function humanoidBody(osc: number, dof: boolean): Prim3D[] {
+  const swing = 0.16 * osc;
+  const pel: V3 = [0.02 * osc, 0, 0.52];
+  const neck: V3 = [0.02 * osc, 0, 0.88];
+  return [
+    seg3(pel, neck, R.signal, { width: 7 }),
+    dot3([neck[0], 0, 0.96], R.signal, { r: 7 }),
+    // arms, swinging in counter-phase
+    seg3([neck[0], -0.15, 0.84], [swing * 0.6, -0.22, 0.68], R.signal, { width: 4.5 }),
+    seg3([swing * 0.6, -0.22, 0.68], [swing, -0.24, 0.54], R.signal, { width: 4 }),
+    seg3([neck[0], 0.15, 0.84], [-swing * 0.6, 0.22, 0.68], R.signal, { width: 4.5 }),
+    seg3([-swing * 0.6, 0.22, 0.68], [-swing, 0.24, 0.54], R.signal, { width: 4 }),
+    // legs, planted
+    seg3([pel[0], -0.09, 0.52], [0.02, -0.1, 0.26], R.signal, { width: 5 }),
+    seg3([0.02, -0.1, 0.26], [0, -0.11, 0], R.signal, { width: 4.5 }),
+    seg3([pel[0], 0.09, 0.52], [0.02, 0.1, 0.26], R.signal, { width: 5 }),
+    seg3([0.02, 0.1, 0.26], [0, 0.11, 0], R.signal, { width: 4.5 }),
+    ...(dof
+      ? [
+          ...ring3([neck[0], -0.15, 0.84], [1, 0, 0], 0.06, R.plan, { n: 14, width: 2 }),
+          ...ring3([neck[0], 0.15, 0.84], [1, 0, 0], 0.06, R.plan, { n: 14, width: 2 }),
+          ...ring3([pel[0], -0.09, 0.52], [1, 0, 0], 0.06, R.plan, { n: 14, width: 2 }),
+          ...ring3([pel[0], 0.09, 0.52], [1, 0, 0], 0.06, R.plan, { n: 14, width: 2 }),
+          label3([0, 0, 1.12], "25+ joints on a floating base", R.plan, { anchor: "middle", size: 12 }),
+        ]
+      : []),
+  ];
+}
+function droneBody(osc: number, dof: boolean): Prim3D[] {
+  const z = 0.6 + 0.06 * osc;
+  const qd = quat.fromAxisAngle([1, 0, 0], rad(7 * osc));
+  const c: V3 = [0, 0, z];
+  const up = quat.rotate(qd, [0, 0, 1]);
+  const corners = ([[1, 1], [1, -1], [-1, 1], [-1, -1]] as const).map(
+    ([sx, sy]) => v3.add(c, quat.rotate(qd, [sx * 0.3, sy * 0.3, 0])),
+  );
+  return [
+    dot3([0, 0, 0.005], R.world, { r: 6 }),
+    ...corners.flatMap((p): Prim3D[] => [
+      seg3(c, p, R.signal, { width: 4 }),
+      ...ring3(p, up, 0.15, R.signal, { n: 16, width: 2 }),
+      ...(dof
+        ? [seg3(p, v3.add(p, v3.scale(up, 0.2)), R.plan, { width: 2.5 }), dot3(v3.add(p, v3.scale(up, 0.2)), R.plan, { r: 3 })]
+        : []),
+    ]),
+    dot3(c, R.ink, { r: 4.5 }),
+    ...(dof ? [label3([0, 0, 1.05], "4 thrusts must buy 6 DoF", R.plan, { anchor: "middle", size: 12 })] : []),
+  ];
+}
+
+export function RbEmbodiments() {
+  const reduced = usePrefersReducedMotion();
+  const { ref, inView } = useStageVisibility();
+  const orbit = useOrbit(-30, 20);
+  const [body, setBody] = useState<BodyId>("arm");
+  const [showDof, setShowDof] = useState(true);
+  const [t, setT] = useState(0);
+
+  useRafLoop((dt) => setT((v) => v + dt), { playing: inView && !reduced });
+  const osc = reduced ? 0.4 : Math.sin(t * 1.5);
+
+  const info = BODIES.find((b) => b.id === body)!;
+  const bodyPrims =
+    body === "arm"
+      ? armBody(osc, showDof)
+      : body === "wheeled"
+        ? wheeledBody(osc, showDof)
+        : body === "quadruped"
+          ? quadrupedBody(osc, showDof)
+          : body === "humanoid"
+            ? humanoidBody(osc, showDof)
+            : droneBody(osc, showDof);
+  const prims: Prim3D[] = [...grid3(0.8, 0.4), ...bodyPrims];
+
+  const cam: Camera3D = { yawDeg: orbit.yawDeg, pitchDeg: orbit.pitchDeg, dist: 5, zoom: 150, cy: 255 };
+
+  return (
+    <Stage
+      innerRef={ref}
+      title="Fig 1.6 · One loop, many bodies"
+      ariaLabel={`A 3D ${info.label} with ${info.dof} degrees of freedom and a ${info.base} base; its hard problem is ${info.hard}. Drag to orbit.`}
+      svgProps={orbit.svgProps}
+      controls={
+        <>
+          <Tabs options={BODIES.map((b) => ({ id: b.id, label: b.label }))} value={body} onChange={setBody} />
+          <Btn onClick={() => setShowDof((v) => !v)} active={showDof}>
+            {showDof ? "✓ show the DoF" : "show the DoF"}
+          </Btn>
+          <Btn onClick={() => orbit.reset()}>↺ view</Btn>
+        </>
+      }
+    >
+      <Scene3D cam={cam} prims={prims} />
+      <Readout
+        rows={[
+          { label: "total DoF", value: info.dof, color: R.signal },
+          { label: "base", value: info.base, color: info.base === "fixed" ? R.goal : R.plan },
+          { label: "hard problem", value: info.hard, color: R.error },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "the body" },
+          { color: R.plan, label: "its freedoms" },
+        ]}
+      />
+      {reduced && (
+        <text x={24} y={404} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: bodies hold a fixed pose; tabs and orbit still work.
+        </text>
+      )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
+        {BODY_HINT[body]}
+      </text>
+    </Stage>
+  );
+}
+
+// ===========================================================================
+// Fig 1.7 · Holonomic vs nonholonomic motion  (draggable field, real model)
+// The car is a kinematic bicycle with a steering limit, so it owns a minimum
+// turning radius (drawn in red). The omni base has no velocity constraint and
+// slides straight. Drag the target; both use honest integrated dynamics.
+// ===========================================================================
+
+const HOLO_START = { x: 180, y: 300, h: 0 };
+const BIKE = { L: 38, vCar: 130, phiMax: rad(32), vOmni: 165 };
+const RMIN = BIKE.L / Math.tan(BIKE.phiMax); // ≈ 61 px = 0.61 m at 100 px/m
+
+type Pose = { x: number; y: number; h: number };
+function holoStep(p: Pose, target: { x: number; y: number }, mode: "omni" | "car", dt: number): Pose {
+  const dx = target.x - p.x;
+  const dy = target.y - p.y;
+  const distT = Math.hypot(dx, dy);
+  if (distT < 5) return p;
+  if (mode === "omni") {
+    const step = Math.min(distT, BIKE.vOmni * dt);
+    return { x: p.x + (dx / distT) * step, y: p.y + (dy / distT) * step, h: Math.atan2(dy, dx) };
+  }
+  // kinematic bicycle: ẋ = v cos h, ẏ = v sin h, ḣ = (v/L) tan φ
+  const desired = Math.atan2(dy, dx);
+  const e = ((desired - p.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  const phi = clamp(1.6 * e, -BIKE.phiMax, BIKE.phiMax);
+  const vv = BIKE.vCar * clamp(distT / 70, 0.25, 1);
+  const h = p.h + (vv / BIKE.L) * Math.tan(phi) * dt;
+  return {
+    x: clamp(p.x + Math.cos(h) * vv * dt, 30, 690),
+    y: clamp(p.y + Math.sin(h) * vv * dt, 30, 392),
+    h,
+  };
+}
+function holoSim(target: { x: number; y: number }, mode: "omni" | "car") {
+  let p: Pose = HOLO_START;
+  const pts: [number, number][] = [[p.x, p.y]];
+  for (let i = 0; i < 1600; i++) {
+    p = holoStep(p, target, mode, 0.02);
+    if (i % 6 === 0) pts.push([p.x, p.y]);
+    if (Math.hypot(target.x - p.x, target.y - p.y) < 6) break;
+  }
+  return { pts, end: p };
+}
 
 export function RbHolonomic() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useStageVisibility();
   const [mode, setMode] = useState<"omni" | "car">("car");
   const [target, setTarget] = useState({ x: 560, y: 150 });
-  const [pose, setPose] = useState({ x: 200, y: 300, h: 0 }); // h = heading rad
   const [drag, setDrag] = useState(false);
+  const [st, setSt] = useState({ pose: HOLO_START as Pose, trail: [] as [number, number][] });
 
   useRafLoop(
     (dt) => {
-      setPose((p) => {
-        const dx = target.x - p.x;
-        const dy = target.y - p.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 3) return p;
-        if (mode === "omni") {
-          // slides straight in any direction
-          const step = Math.min(dist, 150 * dt);
-          return { x: p.x + (dx / dist) * step, y: p.y + (dy / dist) * step, h: Math.atan2(dy, dx) };
-        }
-        // car: can only drive along heading + steer heading toward target
-        const desired = Math.atan2(dy, dx);
-        let dh = ((desired - p.h + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-        const maxTurn = 2.2 * dt;
-        dh = clamp(dh, -maxTurn, maxTurn);
-        const h = p.h + dh;
-        const drive = Math.min(dist, 130 * dt) * Math.max(0.15, Math.cos(dh)); // slows while turning
-        return { x: p.x + Math.cos(h) * drive, y: p.y + Math.sin(h) * drive, h };
+      setSt((s) => {
+        const pose = holoStep(s.pose, target, mode, dt);
+        const last = s.trail[s.trail.length - 1];
+        const trail =
+          !last || Math.hypot(pose.x - last[0], pose.y - last[1]) > 5
+            ? [...s.trail.slice(-219), [pose.x, pose.y] as [number, number]]
+            : s.trail;
+        return { pose, trail };
       });
     },
     { playing: inView && !reduced },
   );
+
+  // reduced motion: integrate the full path synchronously and draw it static
+  const sim = reduced ? holoSim(target, mode) : null;
+  const pose = sim ? sim.end : st.pose;
+  const trail = sim ? sim.pts : st.trail;
 
   const onMove = (e: ReactPointerEvent<SVGElement>) => {
     if (!drag) return;
     const [x, y] = svgPoint(e);
     setTarget({ x: clamp(x, 40, 680), y: clamp(y, 40, 380) });
   };
-  const reset = () => setPose({ x: 200, y: 300, h: 0 });
+  const reset = () => setSt({ pose: HOLO_START, trail: [] });
 
-  const carPts = (cx: number, cy: number, h: number) => {
-    const c = Math.cos(h);
-    const s = Math.sin(h);
-    const pt = (fx: number, fy: number) => `${cx + fx * c - fy * s},${cy + fx * s + fy * c}`;
+  const distT = Math.hypot(target.x - pose.x, target.y - pose.y);
+  const cL = { x: pose.x - RMIN * Math.sin(pose.h), y: pose.y + RMIN * Math.cos(pose.h) };
+  const cR = { x: pose.x + RMIN * Math.sin(pose.h), y: pose.y - RMIN * Math.cos(pose.h) };
+  const carPts = (() => {
+    const c = Math.cos(pose.h);
+    const s = Math.sin(pose.h);
+    const pt = (fx: number, fy: number) => `${pose.x + fx * c - fy * s},${pose.y + fx * s + fy * c}`;
     return `${pt(24, -13)} ${pt(24, 13)} ${pt(-24, 13)} ${pt(-24, -13)}`;
-  };
+  })();
 
   return (
     <Stage
       innerRef={ref}
       title="Fig 1.7 · Holonomic vs nonholonomic motion"
-      ariaLabel={`A ${mode === "omni" ? "holonomic omni base" : "nonholonomic car"} moving toward a draggable target`}
+      ariaLabel={`A ${mode === "omni" ? "holonomic omni base sliding straight" : "nonholonomic car with a minimum turning radius"} chasing a draggable target, its path traced`}
       svgProps={{
         onPointerMove: onMove,
         onPointerUp: () => setDrag(false),
@@ -639,35 +1317,49 @@ export function RbHolonomic() {
         </>
       }
     >
-      {/* faint grid */}
+      {/* faint metric grid */}
       {Array.from({ length: 8 }).map((_, i) => (
-        <line key={`v${i}`} x1={40 + i * 90} y1={30} x2={40 + i * 90} y2={390} stroke={R.line} strokeWidth={0.8} opacity={0.5} />
+        <line key={`v${i}`} x1={40 + i * 90} y1={40} x2={40 + i * 90} y2={392} stroke={R.line} strokeWidth={0.8} opacity={0.5} />
       ))}
-      {Array.from({ length: 5 }).map((_, i) => (
-        <line key={`h${i}`} x1={40} y1={30 + i * 90} x2={670} y2={30 + i * 90} stroke={R.line} strokeWidth={0.8} opacity={0.5} />
+      {Array.from({ length: 4 }).map((_, i) => (
+        <line key={`h${i}`} x1={40} y1={40 + i * 90} x2={670} y2={40 + i * 90} stroke={R.line} strokeWidth={0.8} opacity={0.5} />
       ))}
 
-      {/* the forbidden sideways move, for the car */}
+      {/* travelled path */}
+      {trail.length > 1 && (
+        <polyline points={trail.map(([x, y]) => `${x},${y}`).join(" ")} fill="none" stroke={R.signal} strokeWidth={2} opacity={0.45} />
+      )}
+
+      {/* the car's steering limit, made visible: minimum-turn circles */}
+      {mode === "car" && (
+        <g opacity={0.55}>
+          <circle cx={cL.x} cy={cL.y} r={RMIN} fill="none" stroke={R.error} strokeWidth={1.5} strokeDasharray="5 5" />
+          <circle cx={cR.x} cy={cR.y} r={RMIN} fill="none" stroke={R.error} strokeWidth={1.5} strokeDasharray="5 5" />
+        </g>
+      )}
       {mode === "car" && (
         <g opacity={0.9}>
-          {svgArrow(pose.x, pose.y, pose.x - Math.sin(pose.h) * 60, pose.y + Math.cos(pose.h) * 60, R.error, 2.5, 8)}
-          <text x={pose.x - Math.sin(pose.h) * 70} y={pose.y + Math.cos(pose.h) * 70} fontFamily={MONO} fontSize={11} fill={R.error} textAnchor="middle">
+          {svgArrow(pose.x, pose.y, pose.x - Math.sin(pose.h) * 58, pose.y + Math.cos(pose.h) * 58, R.error, 2.5, 8)}
+          <text
+            x={clamp(pose.x - Math.sin(pose.h) * 72, 40, 680)}
+            y={clamp(pose.y + Math.cos(pose.h) * 72, 40, 400)}
+            fontFamily={MONO}
+            fontSize={11}
+            fill={R.error}
+            textAnchor="middle"
+          >
             no sideways
           </text>
         </g>
       )}
+      {svgArrow(pose.x, pose.y, pose.x + Math.cos(pose.h) * 52, pose.y + Math.sin(pose.h) * 52, R.goal, 2.5, 9)}
 
-      {/* heading arrow (allowed motion) */}
-      {svgArrow(pose.x, pose.y, pose.x + Math.cos(pose.h) * 54, pose.y + Math.sin(pose.h) * 54, R.goal, 2.5, 9)}
-
-      {/* the robot */}
       {mode === "omni" ? (
         <circle cx={pose.x} cy={pose.y} r={20} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
       ) : (
-        <polygon points={carPts(pose.x, pose.y, pose.h)} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
+        <polygon points={carPts} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
       )}
 
-      {/* target */}
       <circle
         cx={target.x}
         cy={target.y}
@@ -681,280 +1373,36 @@ export function RbHolonomic() {
           setDrag(true);
         }}
       />
-      <text x={40} y={410} fontFamily={MONO} fontSize={13} fill={R.world}>
+
+      <Readout
+        rows={[
+          { label: "to target", value: `${(distT / 100).toFixed(2)} m` },
+          { label: "heading", value: `${Math.round((((pose.h * 180) / Math.PI) % 360 + 360) % 360)}°` },
+          {
+            label: "min turn",
+            value: mode === "car" ? `${(RMIN / 100).toFixed(2)} m` : "0 — any direction",
+            color: mode === "car" ? R.error : R.goal,
+          },
+        ]}
+      />
+      <Legend
+        items={[
+          { color: R.signal, label: "robot + its path" },
+          { color: R.plan, label: "target" },
+          { color: R.goal, label: "allowed velocity" },
+          { color: R.error, label: "forbidden / turn limit" },
+        ]}
+      />
+      {reduced && (
+        <text x={24} y={404} fontFamily={MONO} fontSize={11.5} fill={R.world}>
+          Reduced motion: the full path is integrated and drawn statically.
+        </text>
+      )}
+      <text x={360} y={424} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>
         {mode === "car"
-          ? "the car reaches any spot, but only along curves its wheels allow"
-          : "the omni base slides straight to any target"}
+          ? "every approach is a curve of radius ≥ 0.61 m — that constraint is the parallel-parking shuffle"
+          : "holonomic: the straight line to the target is always a legal motion"}
       </text>
-    </Stage>
-  );
-}
-
-// ===========================================================================
-// Fig 1.5 · Sensors and what each one is blind to  (toggle-compare)
-// The same scene through four sensors; each tab calls out, in red, what that
-// sensor misses. "Fuse all" cancels the blind spots.
-// ===========================================================================
-
-type SensorTab = "encoder" | "imu" | "camera" | "lidar" | "fuse";
-const SENSOR_TABS: { id: SensorTab; label: string }[] = [
-  { id: "encoder", label: "Encoder" },
-  { id: "imu", label: "IMU" },
-  { id: "camera", label: "Camera" },
-  { id: "lidar", label: "LiDAR" },
-  { id: "fuse", label: "Fuse all" },
-];
-const BLIND: Record<SensorTab, string> = {
-  encoder: "blind to wheel slip: counts turns, not the world",
-  imu: "drifts: tiny errors integrate into big ones",
-  camera: "no depth: the 3D world arrives flattened to 2D",
-  lidar: "no meaning: sees shape, not that it's a person",
-  fuse: "each sensor covers another's blind spot",
-};
-
-export function RbSensors() {
-  const reduced = usePrefersReducedMotion();
-  const { ref, inView } = useStageVisibility();
-  const [tab, setTab] = useState<SensorTab>("encoder");
-  const [drift, setDrift] = useState(0); // seconds on the IMU tab
-
-  useRafLoop(
-    (dt) => setDrift((d) => (d > 6 ? 6 : d + dt)),
-    { playing: inView && !reduced && tab === "imu" },
-  );
-
-  const robot = { x: 175, y: 250 };
-  const person = { x: 430, y: 210 };
-  const wallX = 600;
-  const driftAmt = reduced ? 40 : (drift / 6) * 90;
-
-  return (
-    <Stage
-      innerRef={ref}
-      title="Fig 1.5 · Every sensor is blind to something"
-      ariaLabel={`Scene through the ${tab} sensor`}
-      controls={
-        <>
-          <Tabs
-            options={SENSOR_TABS}
-            value={tab}
-            onChange={(t) => {
-              setTab(t);
-              setDrift(0);
-            }}
-          />
-        </>
-      }
-    >
-      {/* ground */}
-      <line x1={30} y1={320} x2={690} y2={320} stroke={R.line} strokeWidth={2} />
-      {/* wall (world structure) */}
-      <rect x={wallX} y={140} width={16} height={180} fill="#e6e6e3" stroke={R.world} strokeWidth={2} />
-      <text x={wallX + 8} y={132} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.world}>wall</text>
-
-      {/* what the sensor perceives */}
-      {tab === "encoder" && (
-        <>
-          <circle cx={robot.x} cy={robot.y} r={22} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
-          {/* believed position runs ahead of true (slip) */}
-          <circle cx={robot.x + 130} cy={robot.y} r={22} fill="none" stroke={R.error} strokeWidth={3} strokeDasharray="5 5" />
-          {svgArrow(robot.x + 26, robot.y, robot.x + 104, robot.y, R.error, 2.5, 8)}
-          <text x={robot.x + 130} y={robot.y - 32} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>believed (slipped)</text>
-          <text x={robot.x} y={robot.y + 42} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>true</text>
-        </>
-      )}
-      {tab === "imu" && (
-        <>
-          <circle cx={robot.x} cy={robot.y} r={22} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
-          <circle cx={robot.x + driftAmt} cy={robot.y - driftAmt * 0.25} r={22} fill="none" stroke={R.error} strokeWidth={3} strokeDasharray="5 5" />
-          {svgArrow(robot.x + 26, robot.y, robot.x + driftAmt - 24, robot.y - driftAmt * 0.25, R.error, 2.5, 8)}
-          <text x={robot.x} y={robot.y + 42} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>true</text>
-          <text x={robot.x + driftAmt} y={robot.y - driftAmt * 0.25 - 30} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>estimate drifting</text>
-        </>
-      )}
-      {tab === "camera" && (
-        <>
-          <circle cx={robot.x} cy={robot.y} r={22} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
-          {/* recognizes the person + wall (semantics) but flat */}
-          <rect x={person.x - 16} y={person.y - 34} width={32} height={70} rx={8} fill={R.fillBlue} stroke={R.signal} strokeWidth={2.5} />
-          <circle cx={person.x} cy={person.y - 46} r={11} fill={R.fillBlue} stroke={R.signal} strokeWidth={2.5} />
-          <text x={person.x} y={person.y + 54} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.signal}>&quot;person&quot; ✓</text>
-          <text x={person.x + 70} y={person.y} fontFamily={MONO} fontSize={13} fill={R.error}>depth = ?</text>
-        </>
-      )}
-      {tab === "lidar" && (
-        <>
-          <circle cx={robot.x} cy={robot.y} r={22} fill={R.fillBlue} stroke={R.signal} strokeWidth={3} />
-          {/* crisp geometry: dotted returns, but person is just a shape */}
-          {Array.from({ length: 14 }).map((_, i) => {
-            const yy = 150 + i * 12;
-            return <circle key={i} cx={wallX} cy={yy} r={2.6} fill={R.signal} />;
-          })}
-          {Array.from({ length: 7 }).map((_, i) => {
-            const yy = person.y - 30 + i * 10;
-            return <circle key={`p${i}`} cx={person.x} cy={yy} r={2.6} fill={R.signal} />;
-          })}
-          <text x={person.x} y={person.y + 54} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.error}>shape = ? (no meaning)</text>
-        </>
-      )}
-      {tab === "fuse" && (
-        <>
-          <circle cx={robot.x} cy={robot.y} r={22} fill={R.fillGreen} stroke={R.goal} strokeWidth={3} />
-          <rect x={person.x - 16} y={person.y - 34} width={32} height={70} rx={8} fill={R.fillGreen} stroke={R.goal} strokeWidth={2.5} />
-          <circle cx={person.x} cy={person.y - 46} r={11} fill={R.fillGreen} stroke={R.goal} strokeWidth={2.5} />
-          <text x={person.x} y={person.y + 54} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>person, 2.1 m away ✓</text>
-          <text x={robot.x} y={robot.y + 42} textAnchor="middle" fontFamily={MONO} fontSize={12} fill={R.goal}>position pinned ✓</text>
-        </>
-      )}
-
-      {/* blind-spot readout lane (fixed, bottom) */}
-      <text x={30} y={404} fontFamily={MONO} fontSize={13} fill={tab === "fuse" ? R.goal : R.error}>
-        {tab === "fuse" ? "✓ " : "blind spot: "}
-        {BLIND[tab]}
-      </text>
-    </Stage>
-  );
-}
-
-// ===========================================================================
-// Fig 1.6 · One loop, many bodies  (toggle-compare)
-// Pick an embodiment; see its DoF, whether the base is fixed or floating, and
-// the hard problem it foregrounds. Each body does a calm idle motion.
-// ===========================================================================
-
-type BodyId = "arm" | "wheeled" | "quadruped" | "humanoid" | "drone";
-const BODIES: { id: BodyId; label: string; dof: string; base: string; hard: string }[] = [
-  { id: "arm", label: "Arm", dof: "6", base: "fixed", hard: "kinematics" },
-  { id: "wheeled", label: "Wheeled base", dof: "3", base: "floating", hard: "localization" },
-  { id: "quadruped", label: "Quadruped", dof: "12", base: "floating", hard: "balance" },
-  { id: "humanoid", label: "Humanoid", dof: "25+", base: "floating", hard: "everything at once" },
-  { id: "drone", label: "Drone", dof: "6 (4 motors)", base: "floating", hard: "underactuated flight" },
-];
-
-export function RbEmbodiments() {
-  const reduced = usePrefersReducedMotion();
-  const { ref, inView } = useStageVisibility();
-  const [body, setBody] = useState<BodyId>("arm");
-  const [showDof, setShowDof] = useState(true);
-  const [t, setT] = useState(0);
-
-  useRafLoop((dt) => setT((v) => v + dt), { playing: inView && !reduced });
-  const osc = reduced ? 0 : Math.sin(t * 1.6);
-
-  const info = BODIES.find((b) => b.id === body)!;
-  const cx = 250;
-  const cy = 250;
-  const joint = showDof ? R.signal : R.world;
-  const baseCol = showDof ? R.plan : R.world;
-
-  return (
-    <Stage
-      innerRef={ref}
-      title="Fig 1.6 · One loop, many bodies"
-      ariaLabel={`${info.label}: ${info.dof} degrees of freedom, ${info.base} base, hard problem ${info.hard}`}
-      controls={
-        <>
-          <Tabs options={BODIES.map((b) => ({ id: b.id, label: b.label }))} value={body} onChange={setBody} />
-          <Btn onClick={() => setShowDof((v) => !v)} active={showDof}>
-            {showDof ? "✓ DoF breakdown" : "show DoF breakdown"}
-          </Btn>
-        </>
-      }
-    >
-      {/* ground line for floating bodies */}
-      {info.base === "floating" && body !== "drone" && (
-        <line x1={90} y1={350} x2={410} y2={350} stroke={R.line} strokeWidth={2} />
-      )}
-
-      {body === "arm" && (
-        <g>
-          <rect x={cx - 30} y={330} width={60} height={26} rx={5} fill="#eeeeec" stroke={R.world} strokeWidth={2} />
-          {(() => {
-            const a1 = rad(60 + osc * 12);
-            const a2 = rad(-70 + osc * 16);
-            const e = { x: cx + 100 * Math.cos(a1), y: 330 - 100 * Math.sin(a1) };
-            const tp = { x: e.x + 90 * Math.cos(a1 + a2), y: e.y - 90 * Math.sin(a1 + a2) };
-            return (
-              <>
-                <line x1={cx} y1={330} x2={e.x} y2={e.y} stroke={joint} strokeWidth={11} strokeLinecap="round" />
-                <line x1={e.x} y1={e.y} x2={tp.x} y2={tp.y} stroke={joint} strokeWidth={11} strokeLinecap="round" />
-                <circle cx={cx} cy={330} r={8} fill={joint} />
-                <circle cx={e.x} cy={e.y} r={7} fill={joint} />
-              </>
-            );
-          })()}
-        </g>
-      )}
-      {body === "wheeled" && (
-        <g>
-          <rect x={cx - 60 + osc * 20} y={300} width={120} height={44} rx={8} fill={R.fillBlue} stroke={joint} strokeWidth={3} />
-          <circle cx={cx - 34 + osc * 20} cy={348} r={16} fill="#eeeeec" stroke={R.world} strokeWidth={3} />
-          <circle cx={cx + 34 + osc * 20} cy={348} r={16} fill="#eeeeec" stroke={R.world} strokeWidth={3} />
-          {showDof && svgArrow(cx + osc * 20, 322, cx + 60 + osc * 20, 322, baseCol, 2.5, 8)}
-        </g>
-      )}
-      {body === "quadruped" && (
-        <g>
-          <rect x={cx - 70} y={250 + osc * 4} width={140} height={40} rx={10} fill={R.fillBlue} stroke={joint} strokeWidth={3} />
-          {[-55, -20, 20, 55].map((dx, i) => (
-            <line
-              key={i}
-              x1={cx + dx}
-              y1={280 + osc * 4}
-              x2={cx + dx + (i % 2 ? osc * 8 : -osc * 8)}
-              y2={350}
-              stroke={joint}
-              strokeWidth={7}
-              strokeLinecap="round"
-            />
-          ))}
-        </g>
-      )}
-      {body === "humanoid" && (
-        <g stroke={joint} strokeWidth={8} strokeLinecap="round" fill="none">
-          <circle cx={cx} cy={170} r={18} fill={R.fillBlue} />
-          <line x1={cx} y1={188} x2={cx} y2={278} />
-          <line x1={cx} y1={210} x2={cx - 42} y2={250 + osc * 14} />
-          <line x1={cx} y1={210} x2={cx + 42} y2={250 - osc * 14} />
-          <line x1={cx} y1={278} x2={cx - 26} y2={348} />
-          <line x1={cx} y1={278} x2={cx + 26} y2={348} />
-        </g>
-      )}
-      {body === "drone" && (
-        <g>
-          {(() => {
-            const yy = cy - 20 + osc * 10;
-            return (
-              <>
-                <line x1={cx - 70} y1={yy - 30} x2={cx + 70} y2={yy + 30} stroke={joint} strokeWidth={7} strokeLinecap="round" />
-                <line x1={cx - 70} y1={yy + 30} x2={cx + 70} y2={yy - 30} stroke={joint} strokeWidth={7} strokeLinecap="round" />
-                {[[-70, -30], [70, 30], [-70, 30], [70, -30]].map(([dx, dy], i) => (
-                  <ellipse key={i} cx={cx + dx} cy={yy + dy} rx={22} ry={6} fill={R.fillBlue} stroke={joint} strokeWidth={2.5} />
-                ))}
-                {showDof && svgArrow(cx, yy + 44, cx, yy + 84, baseCol, 2.5, 8)}
-              </>
-            );
-          })()}
-        </g>
-      )}
-
-      {/* readout panel (fixed right lane) */}
-      <line x1={470} y1={70} x2={470} y2={380} stroke={R.line} strokeWidth={1.5} strokeDasharray="4 6" />
-      <text x={500} y={120} fontFamily={MONO} fontSize={16} fill={R.ink} fontWeight={600}>{info.label}</text>
-      <text x={500} y={162} fontFamily={MONO} fontSize={14} fill={R.world}>total DoF</text>
-      <text x={640} y={162} fontFamily={MONO} fontSize={14} fill={joint} fontWeight={600}>{info.dof}</text>
-      <text x={500} y={196} fontFamily={MONO} fontSize={14} fill={R.world}>base</text>
-      <text x={640} y={196} fontFamily={MONO} fontSize={14} fill={baseCol} fontWeight={600}>{info.base}</text>
-      <text x={500} y={230} fontFamily={MONO} fontSize={14} fill={R.world}>hard problem</text>
-      <text x={500} y={256} fontFamily={MONO} fontSize={15} fill={R.error} fontWeight={600}>{info.hard}</text>
-      {showDof && (
-        <>
-          <circle cx={508} cy={300} r={6} fill={R.signal} />
-          <text x={522} y={305} fontFamily={MONO} fontSize={12} fill={R.world}>actuated joints</text>
-          <circle cx={508} cy={326} r={6} fill={R.plan} />
-          <text x={522} y={331} fontFamily={MONO} fontSize={12} fill={R.world}>base / floating DoF</text>
-        </>
-      )}
     </Stage>
   );
 }

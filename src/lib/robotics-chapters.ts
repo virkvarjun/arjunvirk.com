@@ -94,7 +94,7 @@ const chapter1: Chapter = {
     {
       heading: "Degrees of freedom: the number that governs everything",
       paragraphs: [
-        "Count the joints (really, count the *independent* numbers you need to fully describe a robot's configuration) and you have its **degrees of freedom (DoF)**. It's the single most predictive number about a robot. It tells you how hard the math will be, how many motors you're paying for, and what the robot can and can't reach.",
+        "Count the joints (really, count the *independent* numbers you need to fully describe a robot's configuration) and you have its **degrees of freedom (DoF)**. It's the single most predictive number about a robot. It tells you how hard the math will be, how many motors you're paying for, and what the robot can and can't reach. Do the count for a quadruped: 3 joints per leg, 4 legs — 12 DoF, so twelve motors to buy and twelve numbers to command, before you've even asked where its body is in space.",
         "A human arm has 7 DoF from shoulder to wrist. That extra one past six is why you can hold your hand perfectly still and *still* move your elbow around: there's slack in the system. Most industrial arms have 6, the magic number that lets an end-effector reach any **pose** (position *and* orientation) in its workspace. We'll prove why 6 is magic in Chapter 3; for now, just internalize that DoF is the currency of a robot body.",
         "Here's where it gets subtle, and where a lot of beginners trip: the DoF of the *body* and the DoF of the *task* are different things, and their mismatch defines two failure modes you'll meet everywhere.",
       ],
@@ -109,7 +109,7 @@ const chapter1: Chapter = {
       diagram: {
         id: "rb-1-3",
         caption:
-          "A robot's entire pose is a single point in its configuration space, one axis per degree of freedom. Planning, later, is just finding a path through this space.",
+          "Three joints, three numbers: the entire arm collapses to a single point in a 3D box of joint angles, and a hand path that looks complicated in the world is one smooth curve through that box. Planning, later, is just drawing curves in there.",
       },
     },
     {
@@ -124,7 +124,7 @@ const chapter1: Chapter = {
       heading: "Actuators: how a robot pushes on the world",
       paragraphs: [
         "A joint that can't move is furniture. **Actuators** are what convert stored energy into motion: the muscles. Three families cover almost everything:",
-        "**Electric motors** dominate. They're clean, precise, and easy to control, which is why nearly every modern robot from a hobby arm to a humanoid runs on them. The catch is that a raw motor spins fast with little twisting force (**torque**), so it's almost always paired with a **gearbox** that trades speed for torque. This trade has a hidden cost we'll come back to: gears add friction and *backlash* (a tiny dead zone where the output doesn't move when the input reverses direction), and backlash is a quiet enemy of precision.",
+        "**Electric motors** dominate. They're clean, precise, and easy to control, which is why nearly every modern robot from a hobby arm to a humanoid runs on them. The catch is that a raw motor spins fast with little twisting force (**torque**), so it's almost always paired with a **gearbox** that trades speed for torque. The arithmetic sells it: a small motor might make $0.1$ N·m of torque at 6,000 rpm — not enough to turn a doorknob. Run it through a 100:1 gearbox and you get $\\tau_{\\text{out}} \\approx 100 \\times 0.1 = 10$ N·m at 60 rpm. Now check what a real task needs: holding a 1 kg bottle at the end of a metre-long horizontal arm takes $\\tau = mgr = 1 \\times 9.8 \\times 1 = 9.8$ N·m at the shoulder. The raw motor can't hold it at all; the geared one can, with margin to spare. But the trade has a hidden cost we'll come back to: gears add friction and *backlash* (a tiny dead zone where the output doesn't move when the input reverses direction), and backlash is a quiet enemy of precision.",
         "**Hydraulics** push fluid to make enormous forces: this is how the early heavy Boston Dynamics machines threw their weight around. Incredible power density, but leaky, loud, and hard to control finely. The field has largely moved to electric as motors got stronger.",
         "**Pneumatics** use compressed air. Cheap and springy, great for simple grippers, but that same springiness makes precise position control a nightmare.",
         "There's a design axis hiding here that matters more than the technology: **stiff vs compliant.** A stiff actuator holds its commanded position hard and resists being pushed: great for precision, dangerous around people, because it'll happily crush what's in its way. A **compliant** actuator (via a physical spring, or via software that senses force and yields) gives when pushed. Compliance is what makes a robot safe to work next to and gentle enough to hold an egg. Modern robots increasingly use **torque-controlled** actuators (you command a *force*, not a position) precisely so they can be soft when they need to be. Keep this stiff/compliant split in mind; it comes roaring back in Chapter 4 when we do force control, and again in Chapter 12 when we talk about robots working around humans.",
@@ -134,7 +134,7 @@ const chapter1: Chapter = {
       diagram: {
         id: "rb-1-4",
         caption:
-          "A gearbox buys torque with speed. High ratios lift heavy loads slowly and precisely; that same gearing adds friction and backlash: the quiet price of precision.",
+          "A gearbox buys torque with speed: raising the ratio pivots the motor's torque–speed line, and the robot lives at the operating point where that line crosses the load. The gears charge for the favor in friction and backlash — the quiet price of precision.",
       },
     },
     {
@@ -194,7 +194,7 @@ const chapter1: Chapter = {
         "**Mobile bases** roll around on wheels. Now *where you are* becomes a live, hard question (localization, Chapter 5), and how you get somewhere is planning (Chapter 6).",
         "**Legged robots** (quadrupeds and bipeds) trade wheels for legs to cross terrain wheels can't. The price is balance: they're underactuated and can fall, which makes them the poster child for reinforcement learning (Chapter 7).",
         "**Humanoids** are the maximalist bet: a human-shaped body with arms *and* legs, so it can use human tools in human spaces. They inherit every hard problem at once, which is exactly why they're the arena where the modern vision-language-action stack (Chapter 9) is being proven.",
-        "**Aerial and other** (drones, soft robots, swarms) each bending the same principles to a new medium.",
+        "**Aerial and everything else** (drones, soft robots, swarms) each bend the same principles to a new medium: thrust instead of ground contact, bodies that flex instead of rigid links, many cheap robots instead of one expensive one.",
       ],
     },
     {
@@ -208,7 +208,7 @@ const chapter1: Chapter = {
       heading: "Holonomic vs nonholonomic: why parallel parking is annoying",
       paragraphs: [
         "One last distinction, and it's the one that most surprises newcomers because it feels like it shouldn't matter, but it decides whether motion is easy or a puzzle.",
-        "A robot is **holonomic** if it can move instantaneously in any direction it might want to go. A drone is holonomic-ish: it can slide left, right, up, forward at will. So is a robot on omni-wheels that can scoot sideways.",
+        "A robot is **holonomic** if it can move instantaneously in any direction it might want to go. A drone is holonomic-ish: it can slide left, right, up, or forward at will. So is a robot on omni-wheels that can scoot sideways.",
         "A car is **nonholonomic**. It has 3 degrees of freedom in *where it can end up* (x, y, and heading) but at any instant it can only do two things: drive forward/back and steer. It **cannot** slide directly sideways. That gap (free to reach any parking spot eventually, but forbidden from moving straight into it) is the entire reason parallel parking requires that awkward back-and-forth shuffle. The constraint isn't on where you can *be*; it's on how you're allowed to *get there*.",
         "This matters enormously for planning. A holonomic robot's planner can draw a straight line to the goal. A nonholonomic one has to plan paths its wheels can actually follow (smooth curves, three-point turns) which makes Chapter 6's planning problem genuinely harder. Whenever a motion problem feels weirdly constrained, this is usually why.",
       ],
