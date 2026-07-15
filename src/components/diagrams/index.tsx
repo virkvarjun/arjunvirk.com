@@ -314,6 +314,14 @@ import {
   RbDualSystem,
 } from "./interactive/robotics/ch9";
 import {
+  RbFlowField,
+  RbSdeNoise,
+  RbProbPath,
+  RbCfmTrain,
+  RbOdeVsSde3D,
+  RbCfgGuidance,
+} from "./interactive/robotics/ch9p5";
+import {
   RbBehaviorCloning,
   RbCompoundingError,
   RbActionChunking,
@@ -647,6 +655,13 @@ const registry: Record<string, Entry> = {
   "rb-9-11": { Comp: RbEmbodiedCoT, interactive: true },
   "rb-9-12": { Comp: RbMolmoAct3D, interactive: true },
   "rb-9-13": { Comp: RbDualSystem, interactive: true },
+  // Robotics Bible — chapter 9.5 (flow matching & diffusion interlude)
+  "rb-95-1": { Comp: RbFlowField, interactive: true },
+  "rb-95-2": { Comp: RbSdeNoise, interactive: true },
+  "rb-95-3": { Comp: RbProbPath, interactive: true },
+  "rb-95-4": { Comp: RbCfmTrain, interactive: true },
+  "rb-95-5": { Comp: RbOdeVsSde3D, interactive: true },
+  "rb-95-6": { Comp: RbCfgGuidance, interactive: true },
   // Robotics Bible — chapter 10
   "rb-10-1": { Comp: RbBehaviorCloning, interactive: true },
   "rb-10-2": { Comp: RbCompoundingError, interactive: true },

@@ -7,6 +7,7 @@ import { chapter6 } from "./robotics/chapter-6";
 import { chapter7 } from "./robotics/chapter-7";
 import { chapter8 } from "./robotics/chapter-8";
 import { chapter9 } from "./robotics/chapter-9";
+import { chapter95 } from "./robotics/chapter-9-5";
 import { chapter10 } from "./robotics/chapter-10";
 import { chapter11 } from "./robotics/chapter-11";
 import { chapter12 } from "./robotics/chapter-12";
@@ -386,6 +387,7 @@ const realChapters: Chapter[] = [
   chapter7,
   chapter8,
   chapter9,
+  chapter95,
   chapter10,
   chapter11,
   chapter12,
