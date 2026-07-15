@@ -110,8 +110,8 @@ export const workSection = {
       date: "Jul 2026",
       description: "A full guide of ML in Robotics.",
       href: "/writing/robotics-guide",
-      image: "/projects/robotics-bible.svg",
-      imageContain: true,
+      image: "/projects/robotics-bible.webp",
+      imagePosition: "center 40%",
     },
     {
       title: "LoRA VLA Research @ BracketBot",
