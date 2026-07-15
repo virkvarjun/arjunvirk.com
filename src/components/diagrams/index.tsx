@@ -320,7 +320,16 @@ import {
   RbCfmTrain,
   RbOdeVsSde3D,
   RbCfgGuidance,
+  RbActionChunkDenoise,
 } from "./interactive/robotics/ch9p5";
+import {
+  RbFieldNetwork,
+  RbLatentDiffusion,
+} from "./interactive/robotics/ch9p5-systems";
+import {
+  RbDiscreteDiffusion,
+  RbPi0Anatomy,
+} from "./interactive/robotics/ch9p5-vla";
 import {
   RbBehaviorCloning,
   RbCompoundingError,
@@ -662,6 +671,11 @@ const registry: Record<string, Entry> = {
   "rb-95-4": { Comp: RbCfmTrain, interactive: true },
   "rb-95-5": { Comp: RbOdeVsSde3D, interactive: true },
   "rb-95-6": { Comp: RbCfgGuidance, interactive: true },
+  "rb-95-7": { Comp: RbFieldNetwork, interactive: true },
+  "rb-95-8": { Comp: RbLatentDiffusion, interactive: true },
+  "rb-95-9": { Comp: RbDiscreteDiffusion, interactive: true },
+  "rb-95-10": { Comp: RbPi0Anatomy, interactive: true },
+  "rb-95-11": { Comp: RbActionChunkDenoise, interactive: true },
   // Robotics Bible — chapter 10
   "rb-10-1": { Comp: RbBehaviorCloning, interactive: true },
   "rb-10-2": { Comp: RbCompoundingError, interactive: true },

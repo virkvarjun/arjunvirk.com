@@ -12,7 +12,7 @@ export const chapter95: Chapter = {
   number: "9.5",
   title: "Interlude: Flow Matching & Diffusion Models, From Scratch",
   summary:
-    "The generative engine inside modern robot policies, built from zero: ODEs and SDEs, probability paths, the flow matching loss, score functions, and classifier-free guidance.",
+    "The generative engine inside modern robot policies, built from zero: ODEs and SDEs, probability paths, the flow matching loss, score functions, guidance, the networks and latent spaces that host it all, and why a VLA is sure about now and vague about later.",
   published: "Jul 15, 2026",
   updated: "Jul 15, 2026",
   futureRef:
@@ -27,7 +27,8 @@ export const chapter95: Chapter = {
       heading: "Where we're going",
       paragraphs: [
         `Here is the one-sentence version of this whole chapter: **modern generative models turn noise into data by following a velocity field, and training them is just regression on that field.** Everything else is detail. But the details are exactly what you need when Chapter 9's π0 says "flow matching action expert" or Chapter 10's Diffusion Policy says "denoising", so let's do this properly.`,
-        `The plan, from the ground up. First we agree on what "generate" even means, and the answer will be: sample from a probability distribution. Then we meet the machine that does the sampling, an **ordinary differential equation (ODE)** whose velocity field a neural network will learn, and its noisier sibling, the **stochastic differential equation (SDE)**. Then the real question: what should the network learn? That leads to **probability paths** (a schedule for morphing noise into data), a beautiful dead end (the loss we want is uncomputable), and the escape hatch that makes the whole field work, the **conditional flow matching loss**. After that we re-derive everything through a second lens, **score functions**, which is where diffusion models and their denoising intuition live. And we close with **guidance**, the trick that makes a generative model actually obey a prompt.`,
+        `The plan, from the ground up. First we agree on what "generate" even means, and the answer will be: sample from a probability distribution. Then we meet the machine that does the sampling, an **ordinary differential equation (ODE)** whose velocity field a neural network will learn, and its noisier sibling, the **stochastic differential equation (SDE)**. Then the real question: what should the network learn? That leads to **probability paths** (a schedule for morphing noise into data), a beautiful dead end (the loss we want is uncomputable), and the escape hatch that makes the whole field work, the **conditional flow matching loss**. After that we re-derive everything through a second lens, **score functions**, which is where diffusion models and their denoising intuition live, and we pick up **guidance**, the trick that makes a model obey a prompt.`,
+        `Then, because "a neural network supplies the velocity field" is a sentence hiding a lot of decisions, we open the box: the **architectures** that host the field (and the conditioning trick that robots reuse), the **latent space** trick that makes megapixel generation affordable at all, and how **Stable Diffusion 3** and **Meta's Movie Gen** are assembled from exactly these parts. We take one detour into the **discrete** version of the whole story, because that is secretly where Chapter 9's FAST action tokens live. And we finish where a robotics guide should: taking a real **flow-matching VLA** apart, and looking at the one thing a robot's generative model does that an image generator never has to, which is tell you honestly that it knows what to do right now and has no idea what it will be doing in two seconds.`,
         `One promise before we start: nothing in this chapter is specific to images. The "objects" we generate are just vectors. For Stable Diffusion the vector is an image. For π0 the vector is a chunk of fifty robot actions. Same math, same training loop, different meaning attached to the numbers.`,
         `I am assuming you have read Chapter 8 (you know what a neural network and a training loss are, and you have seen the words diffusion and flow matching used in anger). Everything else we build here.`,
       ],
@@ -282,11 +283,187 @@ export const chapter95: Chapter = {
       },
     },
     {
+      heading: "Opening the box: what the network actually is",
+      paragraphs: [
+        `Up to here the neural network has been a black box that we simply call $u_t^\\theta(x \\mid y)$. Time to open it, because two of the design choices inside turn out to be exactly the choices a robot policy makes.`,
+        `Start by counting inputs. The network takes **three** things: the current noisy point $x$, the time $t$, and the conditioning $y$. It returns **one** thing: a velocity of the same shape as $x$. For the toy datasets in this chapter's figures, a plain multi-layer perceptron with all three concatenated is genuinely enough. For images, video, or robot actions, it is not, and the interesting question becomes *how* the time and the prompt get inside.`,
+        `**Embedding the time.** You could feed the raw scalar $t$ into the network. In practice almost nobody does, because one number among thousands of activations is a whisper the network struggles to hear, and the velocity field's dependence on $t$ is sharp (remember the $1/(1-t)$ in the CondOT field). The standard fix is **Fourier features**: expand $t$ into a bank of sines and cosines at geometrically spaced frequencies,`,
+      ],
+    },
+    {
+      equations: [
+        String.raw`\mathrm{TimeEmb}(t) = \sqrt{\tfrac{2}{d}}\Big[\cos(2\pi w_1 t),\, \dots,\, \cos(2\pi w_{d/2} t),\, \sin(2\pi w_1 t),\, \dots,\, \sin(2\pi w_{d/2} t)\Big]^\top`,
+      ],
+    },
+    {
+      paragraphs: [
+        `Reading the symbols: $d$ is the embedding width, and the frequencies $w_i$ are spaced geometrically from $w_{\\min}$ to $w_{\\max}$, so low frequencies carry the coarse "where are we in the schedule" signal and high frequencies resolve fine differences. The $\\sqrt{2/d}$ out front makes the embedding unit-norm, since $\\sin^2 + \\cos^2 = 1$, which is a free sanity check you can watch in Fig 9.5.7. If this smells like the positional encodings from Chapter 8's transformer section, that is because it is the same trick aimed at a different axis: there it told the model *where in the sequence* a token sat, here it tells the model *where in the noise-to-data schedule* it is.`,
+        `**Embedding the prompt.** For a class label, learn one embedding vector per class and be done. For text, lean on a frozen pretrained encoder: **CLIP** (Chapter 8's contrastive model) gives one coarse vector for the whole caption, while a text transformer such as **T5-XXL** gives a *sequence* of embeddings the model can attend to piecewise. Large systems commonly concatenate several such encoders to get both the gist and the granularity.`,
+        `**The two architectures.** Whatever supplies the field must map an input to an output *of the same shape*, which rules out the funnel-shaped classifier stacks you may be used to. Two designs dominate. The **U-Net** is a convolutional encoder that shrinks spatial size while growing channels, a processing block at the bottleneck, and a decoder that expands back up, with residual connections bridging matching levels; its output is image-shaped by construction. The **diffusion transformer (DiT)** is Chapter 8's ViT pointed at generation: chop the input into patches, embed them as tokens, run attention layers, then "depatchify" back to the original shape.`,
+        `**And now the choice that matters for robots.** Inside a DiT block, how do $t$ and $y$ actually reach the computation? The lazy answer is to concatenate them to the input once at the front, which means the signal must survive being passed down through every layer, and it fades. The standard answer is **adaptive normalization (AdaLN)**: push the time embedding through a small MLP to produce a per-channel scale and shift, $(\\gamma, \\beta) = g(\\tilde{t})$, and use them to modulate the normalized activations *inside every block*:`,
+      ],
+    },
+    {
+      equations: [String.raw`\mathrm{AdaNorm}(x) = (1 + \gamma) \odot \mathrm{Norm}(x) + \beta`],
+    },
+    {
+      paragraphs: [
+        `Reading it: $\\mathrm{Norm}$ is the usual layer normalization, $\\odot$ is elementwise multiplication, and $\\gamma, \\beta$ are computed fresh from the timestep. Because they are injected at every block, the conditioning never has to survive a long journey. It is re-stated at every layer, so the deepest layer knows what time it is just as clearly as the first. Prompts typically enter alongside via cross-attention.`,
+        `Hold onto AdaLN. When we get to π0.5 in a few sections, we will find it making exactly this choice under a slightly different name, and for exactly this reason. Fig 9.5.7 lets you watch the difference: flip to concatenation and the conditioning signal visibly decays through the stack while the readout counts it down, flip to adaptive normalization and it arrives at full strength everywhere.`,
+      ],
+    },
+    {
+      diagram: {
+        id: "rb-95-7",
+        caption:
+          "The vector field is a network with three inputs, and how the time and prompt get in is a real design decision: concatenating them once lets the signal fade with depth, while adaptive normalization restates it inside every block.",
+      },
+    },
+    {
+      quiz: {
+        question:
+          "The Fourier time embedding is built to have norm exactly 1 for every t, and the paper notes this exact form is convenient rather than necessary. Given that the CondOT velocity field contains a 1/(1−t) factor that blows up near t = 1, why would feeding the raw scalar t make the network's job harder, and what does the frequency bank buy?",
+        answer:
+          "The field's dependence on t is highly non-linear and gets sharper as t approaches 1, so the network must resolve small differences in t into large differences in output. A raw scalar gives it one weak, slowly-varying input from which it must synthesize that sharp dependence itself, using up capacity. The Fourier bank hands it a rich, already-non-linear code where nearby times are far apart in embedding space, especially at the high frequencies, so distinguishing t = 0.97 from t = 0.99 is easy rather than a thing to be learned. The unit norm keeps the conditioning signal at a consistent scale across the whole schedule, so no region of time silently dominates the activations. It is the same reason positional encodings beat feeding a raw token index.",
+      },
+    },
+    {
+      heading: "Working in latent space: compress first, generate second",
+      paragraphs: [
+        `Here is a problem you hit immediately at real resolutions. A $1024 \\times 1024$ RGB image is a vector of about **3.1 million** numbers. Our flow model's output has to be *the same size as its input*, so there is no funneling down to a small head like a classifier does. Simulating an ODE in three million dimensions, dozens of steps per sample, is not a thing you want to pay for.`,
+        `The fix is the observation that real images do not fill that space. They cluster near a much lower-dimensional manifold inside it. So: **compress first, generate in the small space, decompress at the end.** Train an **autoencoder**, an encoder $\\mu_\\phi$ that maps an image to a small latent $z$ and a decoder $\\mu_\\theta$ that maps it back, with a reconstruction loss pulling $\\mu_\\theta(\\mu_\\phi(x))$ toward $x$. Downsample by a factor of 16 with 4 latent channels and those 3.1 million numbers become about **16,000**, a compression of roughly **192 times**. Now the ODE is affordable.`,
+        `But a plain autoencoder has a subtle failure. Nothing constrains what the latent distribution *looks like*. You may have compressed the data and simultaneously turned it into a jagged, disconnected mess that is harder to model than what you started with. You solved the size problem and created a shape problem.`,
+        `The **variational autoencoder (VAE)** fixes the shape by making the encoder probabilistic and regularizing it toward a distribution we like. The encoder outputs a Gaussian, $q_\\phi(z \\mid x) = \\mathcal{N}(\\mu_\\phi(x), \\sigma_\\phi^2(x))$, and we add a penalty pulling that Gaussian toward the standard prior $\\mathcal{N}(0, I)$, measured with the **Kullback-Leibler divergence**. The full objective is`,
+      ],
+    },
+    {
+      equations: [String.raw`\mathcal{L}_{\mathrm{VAE}}(\phi, \theta) = \mathcal{L}_{\mathrm{Recon}}(\phi, \theta) + \beta\, \mathbb{E}_{x}\big[D_{\mathrm{KL}}(q_\phi(\cdot \mid x)\, \|\, \mathcal{N}(0, I))\big]`],
+    },
+    {
+      paragraphs: [
+        `Reading the symbols: the first term says latents must decode back into the original image, and the second says the cloud of latents must look like a standard Gaussian. $\\beta$ sets the exchange rate between the two. They genuinely fight: the reconstruction term wants latents spread out and distinctive, the KL term wants them piled into a tidy Gaussian ball. Push $\\beta$ too high and you get **posterior collapse**, where the encoder gives up and outputs the prior no matter the input, so reconstructions turn to mush; a common remedy is **KL warm-up**, starting $\\beta$ at zero and easing it in. In modern image autoencoders $\\beta$ is kept very small. For diagonal Gaussians the KL has a closed form worth seeing, because it makes the "be like a Gaussian" pressure concrete: it penalizes the mean for being away from zero and the variance for being away from one.`,
+        `One mechanical wrinkle: the loss takes an expectation over $z \\sim q_\\phi(z \\mid x)$, a distribution that *depends on the parameters we are differentiating*, so you cannot naively backpropagate through the sampling. The **reparameterization trick** sidesteps it by moving the randomness outside: instead of sampling $z$ directly, draw $\\epsilon \\sim \\mathcal{N}(0, I)$ and set $z = \\mu_\\phi(x) + \\sigma_\\phi(x) \\odot \\epsilon$. Now the only random quantity is $\\epsilon$, whose distribution has nothing to do with $\\phi$, and gradients flow straight through $\\mu_\\phi$ and $\\sigma_\\phi$.`,
+        `Put it together and you have **latent diffusion**, the paradigm essentially every state-of-the-art image and video generator uses today: train the autoencoder first, then train the flow or diffusion model entirely inside its latent space, and at sampling time decode the result with the decoder's *mean* (not a random draw, to avoid injecting noise into the finished product). The intuition for why this works so well is that a good autoencoder strips out high-frequency detail that is perceptually irrelevant, letting the generative model spend its capacity on structure that matters. The catch, and it is a real one, is that your generator is now capped by your autoencoder: if the encoder throws something away, no amount of flow matching will bring it back.`,
+      ],
+    },
+    {
+      diagram: {
+        id: "rb-95-8",
+        caption:
+          "Generating a megapixel image directly means an ODE in three million dimensions, so real systems compress to a latent space first and run the flow there, with a VAE's reconstruction and KL terms fighting to keep that space both faithful and easy to model.",
+      },
+    },
+    {
+      quiz: {
+        question:
+          "A team trains a latent flow matching model and gets samples that are beautifully composed but consistently mushy in fine texture. They spend a month scaling the flow model and the mush persists. What did they probably misdiagnose?",
+        answer:
+          "Almost certainly the autoencoder, not the flow model. In latent diffusion the generator's ceiling is the decoder: the flow model can only produce latents, and whatever the decoder does with a perfect latent is the best output the system can ever emit. If the autoencoder was trained with a pixelwise Gaussian (mean-squared error) reconstruction loss, it systematically produces over-smooth reconstructions, because MSE rewards hedging on uncertain high-frequency detail. Scaling the flow model cannot fix that, since the flow is already landing on good latents and the blur is added downstream. The standard fixes live in the autoencoder: add a perceptual loss in the feature space of a pretrained network, or an adversarial loss on decoded samples, both of which the source notes flag as what practitioners actually do. Diagnostic test: encode and decode a real image without the generator in the loop at all. If that round trip is mushy, the generator was never the problem.",
+      },
+    },
+    {
+      heading: "How the big systems are actually built",
+      paragraphs: [
+        `Worth pausing to notice how little new machinery the frontier systems need. Two case studies from the notes, both of which you can now read end to end.`,
+        `**Stable Diffusion 3.** It trains with the *same conditional flow matching objective* we derived, on a Gaussian probability path, in the latent space of a pretrained autoencoder, with classifier-free guidance trained by randomly dropping the label. Its own paper reports that the team extensively compared flow and diffusion variants and found flow matching best. The engineering on top: three different text embeddings (two CLIP variants plus the sequential output of Google's T5-XXL encoder), and a **multi-modal DiT (MM-DiT)** that extends the transformer to attend not just over image patches but over text tokens as well, so conditioning is granular rather than one squashed vector. Largest model: **8 billion** parameters. Sampling: **50 Euler steps** with a guidance weight between **2.0 and 5.0**.`,
+        `**Meta's Movie Gen Video.** Videos live in $\\mathbb{R}^{T \\times C \\times H \\times W}$, with a new time axis, and almost every design choice is the image recipe adapted to that extra dimension. Same conditional flow matching objective, same straight-line CondOT schedulers $\\alpha_t = t$, $\\beta_t = 1 - t$. The autoencoder becomes a **temporal autoencoder (TAE)** compressing by a factor of 8 in time *and* height *and* width, because memory pressure is far worse for video (which is exactly why generated clips are short); long videos are handled by chopping, encoding pieces separately, and stitching the latents. The backbone is a DiT that patchifies across both space and time, with self-attention among patches and cross-attention to language. Three text embeddings again, each for a reason: UL2 for granular text reasoning, ByT5 for character-level details when a prompt demands specific letters appear, and MetaCLIP for shared text-image space. Largest model: **30 billion** parameters.`,
+        `The lesson to carry: **the math stops changing and the engineering takes over.** Everything above is the conditional flow matching loss plus choices about what space to run in, what network hosts the field, and how the prompt gets in. When you meet the next 40-billion-parameter generator, those are the four questions to ask, and you now know all four.`,
+      ],
+    },
+    {
+      heading: "The discrete dialect: when your data is not a vector",
+      paragraphs: [
+        `Everything so far assumed the object being generated is a point in $\\mathbb{R}^d$ that we can nudge with a velocity. Text is not. A token is a symbol drawn from a vocabulary, and there is no such thing as moving 0.3 of the way from "cat" to "dog". You cannot write an SDE on a discrete set, so the machinery seems to die at the border.`,
+        `It does not, and the way it survives is worth seeing, both because language models built this way are a live research direction and because Chapter 9's discrete-token VLAs are secretly in this dialect. The replacement for a differential equation is a **continuous-time Markov chain (CTMC)**: a process that sits in a state and occasionally *jumps* to another. Instead of a velocity field you specify a **rate matrix** $Q_t(y \\mid x)$, the instantaneous rate of jumping from state $x$ to state $y$. It obeys two obvious rules: off-diagonal rates are non-negative (a negative rate of jumping somewhere is meaningless), and each diagonal entry is minus the sum of its row, which just says you either stay or you leave and the books must balance. Simulation is Euler's method again, in probability rather than position: over a small step $h$, jump to $y$ with probability $h\\,Q_t(y \\mid x)$, otherwise stay.`,
+        `Now the problem that nearly kills it. The state space is $S = \\mathcal{V}^d$, every possible sequence, so its size is **exponential**: vocabulary to the power of sequence length. A single column of that rate matrix could never be stored, let alone predicted. The fix is a **factorized CTMC**: forbid jumps that change more than one token at a time. The model then only has to output a rate for each (position, vocabulary word) pair, a $d \\times V$ table that grows *linearly* in sequence length. A transformer emits exactly that shape without complaint, and you update every position in parallel each step.`,
+        `From there the recipe is beat-for-beat the one we already know, which is the real payoff of having learned it structurally rather than as a list of formulas. Choose a conditional probability path: the **factorized mixture path**, where each token independently either shows its true value with probability $\\kappa_t$ or shows noise, so as $\\kappa_t$ climbs from 0 to 1 information fades in per token. (Note the honest difference from the Gaussian path: nothing *moves* here, because there is nowhere to move to. One distribution fades out and another fades in.) Marginalize over the dataset to get a marginal path. Prove a **discrete marginalization trick** saying the posterior-weighted average of conditional rate matrices follows the marginal path, using the **Kolmogorov Forward Equation** exactly where the continuous story used the continuity equation. And then the punchline lands:`,
+      ],
+    },
+    {
+      equations: [String.raw`Q_t(v_i, j \mid x) = \frac{\dot{\kappa}_t}{1 - \kappa_t}\Big(p_{1 \mid t}(z_j = v_i \mid x) - \delta_{x_j}(v_i)\Big)`],
+    },
+    {
+      paragraphs: [
+        `Reading the symbols: $p_{1 \\mid t}(z_j = v_i \\mid x)$ is simply "given this partially-corrupted sequence, what is the probability that position $j$ was really the token $v_i$?", and the prefactor $\\dot{\\kappa}_t / (1 - \\kappa_t)$ is an urgency term that grows as time runs out. The entire learned content of the rate matrix is that conditional probability, which is **a classifier per token position.** So the training loss is not a regression at all, it is plain **cross-entropy**:`,
+      ],
+    },
+    {
+      equations: [
+        String.raw`\mathcal{L}_{\mathrm{DFM}}(\theta) = \mathbb{E}_{z \sim p_{\text{data}},\, t \sim \mathrm{Unif},\, x \sim p_t(\cdot \mid z)}\left[\sum_{j=1}^{d} -\log p^\theta_{1 \mid t}(z_j \mid x)\right]`,
+      ],
+    },
+    {
+      paragraphs: [
+        `Corrupt a sequence, ask the network to name the original tokens, take the cross-entropy. Simulation-free, exactly as before. Continuous flow matching collapses to regression; discrete flow matching collapses to classification. Same skeleton, different bones.`,
+        `The most famous instance is the **masked diffusion language model (MDLM)**: add a special $[\\text{MASK}]$ token to the vocabulary, start from a fully masked sequence, and let the CTMC reveal tokens over time until $t = 1$ hands you a sentence. Generation as progressive unmasking, in any order, in parallel, rather than strictly left to right. Fig 9.5.9 runs the real path and shows the urgency prefactor exploding as $t \\to 1$.`,
+        `And now the callback that makes this section earn its place in a robotics guide. Chapter 9's **FAST** tokenizer and **π0-FAST** turn continuous robot actions into *discrete tokens* and generate them autoregressively. That is not a different universe from π0's flow head. It is this dialect: a discrete state space, a probability path that corrupts tokens, and a per-position classifier trained with cross-entropy. The fork in Chapter 9 between "discrete tokens" and "continuous flow" is, from up here, a choice of which state space to build the same generative machine on.`,
+      ],
+    },
+    {
+      diagram: {
+        id: "rb-95-9",
+        caption:
+          "In discrete space nothing moves, it fades: tokens are revealed independently on a schedule, the learned object is just a per-position classifier, and the urgency factor explodes as the time left to reveal what remains runs out.",
+      },
+    },
+    {
+      quiz: {
+        question:
+          "Continuous flow matching trains with mean-squared regression onto (z − ε). Discrete flow matching trains with cross-entropy onto the original tokens. Both are called 'the same recipe.' What exactly is the same, and why does the loss change shape?",
+        answer:
+          "What is the same is the structure: pick a conditional probability path from noise to a single data point, find the conditional generator of that path in closed form (a velocity field, or a rate matrix), prove a marginalization trick showing the posterior-weighted average of conditional generators follows the marginal path, then train by regressing on the tractable conditional target and let least squares or maximum likelihood manufacture the intractable marginal one. Both are simulation-free for the same reason. The loss changes shape because the thing being predicted changes type. In R^d the generator is a velocity, a real vector, and the natural fit for 'predict a vector' is squared error, whose optimum is a conditional mean. On a discrete set the generator's learned content is a probability over vocabulary items, and the natural fit for 'predict a distribution over categories' is cross-entropy, whose optimum is the true conditional probability. In both cases the optimum of the loss is exactly the posterior quantity the marginalization trick needs, which is why the same skeleton supports both.",
+      },
+    },
+    {
+      heading: "Putting it in a robot: anatomy of a flow-matching VLA",
+      paragraphs: [
+        `Now we cash everything in. Chapter 9 told you π0 has "a flow matching action expert." You can now read that sentence completely, so let us take it apart.`,
+        `**The substitution that makes it work.** Every result in this chapter was about generating an object $z \\in \\mathbb{R}^d$, and we insisted the math did not care what the object meant. Here is the payoff: let $z$ be **a chunk of 50 future actions**. That is it. That is the whole adaptation. If the robot has 14 controllable joints, a chunk is a $50 \\times 14$ array, which flattened is a point in $\\mathbb{R}^{700}$, and every theorem above applies verbatim. The data distribution $p_{\\text{data}}(z \\mid y)$ is "the chunks a human demonstrator would produce, given what the robot currently sees and was told to do." The initial distribution is a Gaussian of the same shape. Generating a motor command is integrating an ODE from noise for a handful of steps. (Side note: real systems zero-pad the action dimension to a fixed size, commonly 32, so that one model can serve robots with different numbers of joints. Chapter 10's cross-embodiment story, in one implementation detail.)`,
+        `**The anatomy.** π0 (Physical Intelligence, 2024) is two pieces bolted together. A **PaliGemma** vision-language backbone, about 3 billion parameters, reads the camera images and the instruction and produces the conditioning: this is our $y$, and it is where all the semantic understanding lives. Attached to it is a much smaller **action expert**, about 300 million parameters, whose entire job is to be $u_t^\\theta(x \\mid y)$, the velocity field over action chunks. The VLM knows what a pan is; the expert knows how to move.`,
+        `**The training loop is Algorithm 3 with different nouns.** Sample a demonstration chunk $z$ and an observation. Sample noise $\\epsilon$ of the same shape and a time $t \\sim \\mathrm{Unif}[0,1]$. Form the blend $x = t z + (1-t)\\epsilon$. Regress the expert's output on $z - \\epsilon$. That is the identical loss we derived, with no simulation in the loop, which is why a robot policy can be trained with ordinary supervised-learning economics.`,
+        `**Where the conditioning enters, revisited.** Remember AdaLN from the architecture section. π0.5 makes precisely that choice, injecting the conditioning through **adaptive RMSNorm at every layer** rather than concatenating a timestep embedding at the input, so that (as Abhinav Jha puts it in his visualization writeup) the conditioning "is present at every layer." This is not a decorative detail. The velocity the expert must output depends violently on $t$, and a policy whose deep layers have only a faded rumor of what time it is will integrate badly.`,
+        `**Why so few steps.** π0 generates a chunk in roughly **ten** integration steps. You now know exactly why that is allowed rather than lucky: the CondOT path trains the field on *straight lines* from noise to data, and Euler's error comes entirely from pretending the path is straight across a step. Train straight paths, and big steps stop lying. Count the cost honestly: **network function evaluations = integration steps**, and a 50 Hz control loop leaves 20 milliseconds per decision. Ten evaluations of a 300M expert fits. Fifty does not. This is also, concretely, why robot stacks usually leave classifier-free guidance off: CFG runs the network twice per step, doubling your NFE, and (per the earlier quiz) it distorts the very distribution whose calibrated spread you want.`,
+      ],
+    },
+    {
+      diagram: {
+        id: "rb-95-10",
+        caption:
+          "A flow-matching VLA is this whole chapter in one loop: a vision-language backbone turns pixels and words into conditioning, and a small action expert integrates the learned velocity field from noise into a chunk of future actions in a handful of steps.",
+      },
+    },
+    {
+      paragraphs: [
+        `**And now the most interesting thing a robot's generative model does.** Ask what the *spread* of the sampled chunks means, and you get an insight that no image generator can teach you.`,
+        `Abhinav Jha ran PCA on π0.5's actual denoising trajectories on a Mobile ALOHA episode and measured how much the sampled actions disagreed with each other at each point in the chunk. The result: the **immediate** action, at horizon $h = 0$, converged tightly across noise seeds (dispersion 0.27), while the action **fifty steps out**, at $h = 49$, stayed wildly spread (dispersion 1.77). Call it **temporal certainty decay**: the model is confident about now and vague about later, and the vagueness grows smoothly with the horizon.`,
+        `This is not a defect, and the mechanism falls straight out of what we built. The learned distribution is the *demonstration* distribution, so the model's spread is the demonstrators' spread. Given what the camera sees right now, every reasonable human does roughly the same next thing, so the data is nearly unimodal at $h = 0$ and the posterior over chunks agrees there. Fifty steps out, the demonstrators had genuinely diverged, some going left around the obstacle and some right, some already reaching for the faucet, because the far future depends on states nobody has observed yet. The data is multimodal there, so the model's samples are too. A well-calibrated policy *should* be uncertain about the far future. As Jha frames the model's implicit reasoning: it knows exactly what to do right now, but the correct action 49 steps from now depends on future states it has not seen.`,
+        `Fig 9.5.11 reproduces the mechanism from scratch so you can watch it happen. The demonstrations agree at $h = 0$ and fan into three modes later, and the figure integrates the real ODE in $\\mathbb{R}^{100}$ from twelve seeds and **measures** the spread at each horizon index. The spread grows about sixteen-fold from the first waypoint to the last, nobody drew that curve, and all three modes get hit, which is Chapter 10's "preserve the multimodality" requirement showing up as a number.`,
+        `The practical consequence ties the whole guide together. This is why **receding-horizon control** is not a hack: you generate 50 actions, execute only the first handful where the model is actually confident, then throw the vague tail away and replan with fresh observations. Chapter 10's action chunking gave you the reason to predict a chunk (it kills compounding error), and this figure gives you the reason not to *trust* all of it. Both are true at once, and the tension between them is the design.`,
+      ],
+    },
+    {
+      diagram: {
+        id: "rb-95-11",
+        caption:
+          "Measured, not asserted: because demonstrators agree about the next action and diverge about the distant one, the sampled chunks bunch tightly at h = 0 and fan out by h = 49, which is exactly why a robot executes only the confident head of its plan and replans.",
+      },
+    },
+    {
+      quiz: {
+        question:
+          "Your policy's sampled chunks show almost no spread at any horizon, including 50 steps out. A teammate calls this great news: the model is confident and decisive. Using what you now know about what the sampled spread represents, why should you be worried instead?",
+        answer:
+          "Because the spread is supposed to be the demonstration distribution's spread, and real demonstrations genuinely disagree about the far future. A chunk distribution that is tight at h = 49 is claiming certainty that the data does not contain, which means the model is not calibrated to its data. The likely culprits are all bad: it may have mode-collapsed and be averaging away valid alternatives (Chapter 10's mean-regression failure, where averaging left and right sends you into the obstacle); it may have been trained on demonstrations from a single operator with one fixed strategy, so it will shatter on any scene requiring the other one; or someone left guidance turned up, which by construction sharpens samples toward a caricature and destroys diversity. There is also a subtler tell: a policy honestly uncertain about the far future is what makes receding-horizon replanning coherent, so false confidence out at the tail suggests the model would happily commit to a stale plan. Confidence is only good news when it is earned by the data agreeing.",
+      },
+    },
+    {
       heading: "Where this leaves us",
       paragraphs: [
-        `The whole chapter in five sentences. Generation means sampling from $p_{\\text{data}}$, and the sampler is a differential equation: an ODE if you like determinism, an SDE if you add noise, with a neural network supplying the velocity field. You choose a probability path (almost always the Gaussian one, often the straight-line CondOT schedule) that morphs noise into data, and the marginalization trick turns "follow that path" into a computable regression: the conditional flow matching loss, whose gradients provably equal the loss you actually wanted. The score-function dialect (denoising, noise prediction, DDPM) is the same object in different coordinates, and it unlocks the SDE extension: one trained network, a family of samplers, noise level chosen at inference time. Guidance conditions the whole machine on a prompt, and classifier-free guidance is the heuristic that makes conditioning forceful, trading diversity for adherence.`,
-        `Now reread two things from earlier chapters with new eyes. Chapter 9's π0: "a flow matching action expert that integrates a learned velocity field from noise to a 50-step action chunk in about ten steps" is now a sentence where every word has a formula behind it, including why ten steps suffice (straight CondOT paths forgive big Euler steps). Chapter 10's Diffusion Policy, coming next: "denoising diffusion over trajectories" is the score dialect of the same machine, ε-prediction and all. The two-page appendix of most robot-learning papers just became readable.`,
-        `What we skipped, honestly: the source notes (Holderrieth & Erives, 2026, arXiv 2506.02070, with lectures and labs at diffusion.csail.edu) go on to cover the engineering of large-scale image and video generators (U-Net and DiT architectures, latent-space VAEs, the Stable Diffusion 3 and Movie Gen recipes) and discrete diffusion for language. None of that changes the math above; it changes what the vector field's network looks like and what space it runs in. When a robotics paper says "latent diffusion", it means this same machinery running inside an autoencoder's compressed space.`,
+        `The whole chapter in six sentences. Generation means sampling from $p_{\\text{data}}$, and the sampler is a differential equation: an ODE if you like determinism, an SDE if you add noise, with a neural network supplying the velocity field. You choose a probability path (almost always the Gaussian one, often the straight-line CondOT schedule) that morphs noise into data, and the marginalization trick turns "follow that path" into a computable regression: the conditional flow matching loss, whose gradients provably equal the loss you actually wanted. The score-function dialect (denoising, noise prediction, DDPM) is the same object in different coordinates, and it unlocks the SDE extension: one trained network, a family of samplers, noise level chosen at inference time. Guidance conditions the machine on a prompt, and classifier-free guidance is the heuristic that makes conditioning forceful, trading diversity for adherence. The network hosting the field is a U-Net or a DiT that takes Fourier-embedded time through adaptive normalization at every layer, it usually runs inside a VAE's latent space because raw pixel space is too big to integrate in, and if your data is discrete the whole skeleton survives with rate matrices and cross-entropy instead of velocities and regression.`,
+        `**The four questions.** That is the durable takeaway. Any generative system you meet from here, image, video, protein, or robot, is pinned down by four answers: *what space does it run in* (pixels, a VAE latent, an action chunk, a token sequence), *what probability path* (almost always Gaussian, often straight-line CondOT), *what network hosts the field* (U-Net, DiT, an action expert bolted to a VLM), and *how does the conditioning get in* (concatenation, cross-attention, adaptive normalization). Stable Diffusion 3 answers: latent space, CondOT, MM-DiT, three text encoders plus AdaLN. π0 answers: action-chunk space, CondOT, a 300M expert on a PaliGemma backbone, adaptive RMSNorm at every layer. Same four slots. The papers get much shorter once you read them this way.`,
+        `Now reread the rest of the guide with new eyes. Chapter 9's π0, "a flow matching action expert that integrates a learned velocity field from noise to a 50-step action chunk in about ten steps," is now a sentence where every word has a formula behind it, including why ten steps suffice. Chapter 9's π0-FAST, which discretizes actions into tokens and generates them autoregressively, is the CTMC dialect. Chapter 10's Diffusion Policy is the score dialect, ε-prediction and all. Chapter 11's "latent world models" run the same machinery inside an autoencoder. Four systems that read as four separate inventions are one machine with different answers in the four slots.`,
+        `And the one lesson that is specific to robots, the thing the image world cannot teach you: **the spread of your samples is not noise to be minimized, it is the model telling you what it does not know.** Temporal certainty decay is that spread, honestly reported, and receding-horizon control is the engineering response to it. A generative policy is not just a fancy way to output a number. It is a way to output a number *with its uncertainty attached*, and on hardware, that attachment is the difference between a robot that replans and a robot that confidently drives its plan into a wall.`,
+        `**Sources and going deeper.** This chapter is built from Holderrieth & Erives, *An Introduction to Flow Matching and Diffusion Models* (2026, arXiv 2506.02070), whose lectures and hands-on labs are at diffusion.csail.mit.edu and are worth your time, especially the lab where you build a model from scratch. The VLA framing and the temporal certainty decay measurement come from Abhinav Jha's *Visualizing Flow Matching in Robotics* (2026, abhinavjha.xyz), which PCA-projects π0.5's real denoising trajectories and is the empirical companion to this chapter's theory; he is appropriately careful that projecting from high dimensions to two can mislead, and that his visualizations show on-manifold samples rather than the global field. Federico Sarrocco's *Flow Matching* writeup (federicosarrocco.com/blog/flow-matching) is a good theory-to-PyTorch companion if you want to see each equation land as code.`,
         `*Next: back to the main line. Chapter 10 asks where the demonstrations that feed all of this actually come from, and why collecting them is the real bottleneck.*`,
       ],
     },
