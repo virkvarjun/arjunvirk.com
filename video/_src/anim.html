@@ -1,0 +1,239 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#ffffff;}
+  #stage{width:1920px;height:1080px;background:#ffffff;}
+  text{font-family:'Inter',system-ui,-apple-system,sans-serif;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;}
+</style>
+</head>
+<body>
+<svg id="stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+// ---------------------------------------------------------------------------
+// Deterministic section-animation player. The render script calls
+// window.renderScene(u) with u in [0,1]; every scene is a pure function of u
+// plus fixed seeded data, so a given u always produces the identical frame.
+// Design language mirrors the guide, recolored for a white background.
+// ---------------------------------------------------------------------------
+const SVG='http://www.w3.org/2000/svg';
+const C={ink:'#16181d',mut:'#7b8494',blue:'#3f5fd6',amber:'#c07d16',green:'#2e9e6b',
+         red:'#cf3b3b',grid:'#e9ecf1',faint:'#f3f5f8'};
+const W=1920,H=1080;
+const stage=document.getElementById('stage');
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const smooth=t=>t*t*(3-2*t);
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+function mulberry32(s){let a=s>>>0;return()=>{a|=0;a=(a+0x6d2b79f5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
+function gaussPairs(seed,n){const r=mulberry32(seed),o=[];for(let i=0;i<n;i++){const u1=Math.max(r(),1e-9),u2=r();const R=Math.sqrt(-2*Math.log(u1));o.push([R*Math.cos(2*Math.PI*u2),R*Math.sin(2*Math.PI*u2)]);}return o;}
+function el(t,a){const e=document.createElementNS(SVG,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
+function add(e){stage.appendChild(e);return e;}
+
+// shared chrome: title, index chip, caption, baseline
+function chrome(idx,total,title,caption){
+  add(el('rect',{x:0,y:0,width:W,height:H,fill:'#fff'}));
+  add(el('line',{x1:140,y1:238,x2:1780,y2:238,stroke:C.grid,'stroke-width':2}));
+  const chip=add(el('text',{x:140,y:150,fill:C.mut,'font-size':30,'font-weight':600,class:'mono'}));
+  chip.textContent=`FLOW MATCHING · ${String(idx).padStart(2,'0')} / ${String(total).padStart(2,'0')}`;
+  const t=add(el('text',{x:140,y:212,fill:C.ink,'font-size':62,'font-weight':700}));
+  t.textContent=title;
+  const cap=add(el('text',{x:140,y:1004,fill:C.mut,'font-size':34}));
+  cap.textContent=caption;
+}
+const CX=960,CY=610; // illustration center
+
+// arrowhead marker helper
+function arrow(x1,y1,x2,y2,col,w){
+  const g=add(el('g',{}));
+  g.appendChild(el('line',{x1,y1,x2,y2,stroke:col,'stroke-width':w,'stroke-linecap':'round'}));
+  const ang=Math.atan2(y2-y1,x2-x1),hl=w*3.2;
+  g.appendChild(el('polygon',{points:`${x2},${y2} ${x2-hl*Math.cos(ang-.4)},${y2-hl*Math.sin(ang-.4)} ${x2-hl*Math.cos(ang+.4)},${y2-hl*Math.sin(ang+.4)}`,fill:col}));
+  return g;
+}
+
+// =========================================================================
+// SCENES — each returns a render(u) after building its static DOM.
+// =========================================================================
+const SCENES={};
+
+// 01 generation is sampling: dots drawn under a density hill
+SCENES.sampling=()=>{
+  chrome(1,12,'Generation is sampling','A model does not "know" the answer. It draws a sample from a distribution.');
+  const pts=gaussPairs(11,80).map(g=>[CX+g[0]*220+ (g[0]>0?120:-120)*0.0,CY+120+g[1]*70]);
+  // bimodal target
+  const data=[]; const r=mulberry32(7);
+  for(let i=0;i<90;i++){const m=r()<.5?-1:1;data.push([CX+m*230+ (r()-.5)*150, CY+150+(r()-.5)*160]);}
+  // density curve
+  const dpath=[];for(let i=0;i<=120;i++){const x=CX-460+i*920/120;const g=(m)=>Math.exp(-Math.pow((x-(CX+m*230))/150,2));const y=CY-120-260*(g(-1)+g(1))/1.2;dpath.push(`${i?'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`);}
+  add(el('path',{d:dpath.join(' '),fill:'none',stroke:C.mut,'stroke-width':3,opacity:.9}));
+  add(el('text',{x:CX+470,y:CY-300,fill:C.mut,'font-size':28,'text-anchor':'end',class:'mono'})).textContent='p_data';
+  const dots=data.map(p=>add(el('circle',{cx:p[0],cy:p[1],r:8,fill:C.green,opacity:0})));
+  return u=>{const k=ease(u)*data.length;dots.forEach((d,i)=>{const on=clamp(k-i,0,1);d.setAttribute('opacity',0.75*on);d.setAttribute('r',(4+4*on).toFixed(1));});};
+};
+
+// 02 flow models: noise flows along arrows into a ring
+SCENES.flow=()=>{
+  chrome(2,12,'Flow models: follow the arrows','A velocity field at every point. Drop noise, follow the arrows, arrive at data.');
+  for(let gx=-3;gx<=3;gx++)for(let gy=-2;gy<=2;gy++){const x=CX+gx*120,y=CY+gy*120;const a=Math.atan2(-(y-CY),-(x-CX));arrow(x,y,x+38*Math.cos(a),y+38*Math.sin(a),C.grid,3);}
+  const N=46,start=gaussPairs(3,N).map(g=>[CX+g[0]*300,CY+g[1]*230]);
+  const target=Array.from({length:N},(_,i)=>{const a=i/N*2*Math.PI;return[CX+170*Math.cos(a),CY+150*Math.sin(a)];});
+  const ring=[];for(let i=0;i<=64;i++){const a=i/64*2*Math.PI;ring.push(`${i?'L':'M'}${(CX+170*Math.cos(a)).toFixed(1)},${(CY+150*Math.sin(a)).toFixed(1)}`);}
+  add(el('path',{d:ring.join(' ')+' Z',fill:'none',stroke:C.green,'stroke-width':3,opacity:.5}));
+  const dots=start.map(()=>add(el('circle',{r:7,fill:C.blue,opacity:.85})));
+  const trails=start.map(()=>add(el('path',{fill:'none',stroke:C.blue,'stroke-width':2,opacity:.28})));
+  return u=>{const t=ease(u);start.forEach((s,i)=>{const x=lerp(s[0],target[i][0],t),y=lerp(s[1],target[i][1],t);dots[i].setAttribute('cx',x);dots[i].setAttribute('cy',y);const tp=Math.max(0,t-.2);trails[i].setAttribute('d',`M${lerp(s[0],target[i][0],tp).toFixed(1)},${lerp(s[1],target[i][1],tp).toFixed(1)} L${x.toFixed(1)},${y.toFixed(1)}`);});};
+};
+
+// 03 diffusion: jittery brownian paths noise->data
+SCENES.diffusion=()=>{
+  chrome(3,12,'Diffusion models: add noise on purpose','Same journey, but each step also gets a random shove. A flow with weather.');
+  const N=28,start=gaussPairs(9,N).map(g=>[CX+g[0]*300,CY+g[1]*210]);
+  const target=Array.from({length:N},(_,i)=>{const m=i%2?1:-1;return[CX+m*210+(mulberry32(i+1)()-.5)*90,CY+(mulberry32(i+9)()-.5)*180];});
+  const paths=start.map((s,i)=>{const seed=mulberry32(100+i);const steps=40,pts=[];let x=s[0],y=s[1];for(let k=0;k<=steps;k++){const t=k/steps;const tx=lerp(s[0],target[i][0],ease(t)),ty=lerp(s[1],target[i][1],ease(t));x=lerp(x,tx,.5)+(seed()-.5)*40*(1-t);y=lerp(y,ty,.5)+(seed()-.5)*40*(1-t);pts.push([x,y]);}return pts;});
+  target.forEach(t=>add(el('circle',{cx:t[0],cy:t[1],r:9,fill:'none',stroke:C.green,'stroke-width':2.5,opacity:.6})));
+  const lines=paths.map(()=>add(el('path',{fill:'none',stroke:C.amber,'stroke-width':2,opacity:.5})));
+  const heads=paths.map(()=>add(el('circle',{r:6,fill:C.amber})));
+  return u=>{const t=ease(u);paths.forEach((p,i)=>{const k=Math.round(t*(p.length-1));lines[i].setAttribute('d',p.slice(0,k+1).map((q,j)=>`${j?'L':'M'}${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' '));heads[i].setAttribute('cx',p[k][0]);heads[i].setAttribute('cy',p[k][1]);});};
+};
+
+// 04 probability path: a gaussian blob morphs into two clusters
+SCENES.path=()=>{
+  chrome(4,12,'The probability path','A schedule that morphs noise into data. We choose the in-between.');
+  const N=260,noise=gaussPairs(21,N);
+  const dat=noise.map((g,i)=>{const m=i%2?1:-1;const r=mulberry32(i+3);return[m*230+(r()-.5)*120,(r()-.5)*150];});
+  const dots=noise.map(()=>add(el('circle',{r:4,fill:C.blue,opacity:.55})));
+  // t bar
+  add(el('rect',{x:CX-300,y:CY+300,width:600,height:10,rx:5,fill:C.grid}));
+  const fill=add(el('rect',{x:CX-300,y:CY+300,width:0,height:10,rx:5,fill:C.amber}));
+  add(el('text',{x:CX-300,y:CY+280,fill:C.mut,'font-size':26,class:'mono'})).textContent='t = 0  (noise)';
+  add(el('text',{x:CX+300,y:CY+280,fill:C.mut,'font-size':26,'text-anchor':'end',class:'mono'})).textContent='t = 1  (data)';
+  const knob=add(el('circle',{cy:CY+305,r:14,fill:C.amber}));
+  return u=>{const t=ease(u);noise.forEach((g,i)=>{const x=CX+lerp(g[0]*150,dat[i][0],t),y=CY-40+lerp(g[1]*130,dat[i][1],t);dots[i].setAttribute('cx',x);dots[i].setAttribute('cy',y);dots[i].setAttribute('fill',t>.5?C.green:C.blue);});fill.setAttribute('width',600*t);knob.setAttribute('cx',CX-300+600*t);};
+};
+
+// 05 flow matching loss: predicted arrow rotates to match target
+SCENES.cfm=()=>{
+  chrome(5,12,'Flow matching: regression on velocities','Train a network to predict the velocity. Least squares does the rest.');
+  const ox=CX,oy=CY-10,L=280;
+  const tgt=arrow(ox,oy,ox+L*Math.cos(-0.5),oy+L*Math.sin(-0.5),C.green,6);
+  add(el('text',{x:ox+L*Math.cos(-0.5)+20,y:oy+L*Math.sin(-0.5),fill:C.green,'font-size':30,class:'mono'})).textContent='target  z − ε';
+  const predG=add(el('g',{}));
+  const errText=add(el('text',{x:140,y:900,fill:C.red,'font-size':40,'font-weight':700,class:'mono'}));
+  add(el('circle',{cx:ox,cy:oy,r:12,fill:C.ink}));
+  return u=>{const a0=2.4,a=lerp(a0,-0.5,ease(u));const ar=arrow(ox,oy,ox+L*Math.cos(a),oy+L*Math.sin(a),C.blue,6);predG.replaceChildren();while(ar.firstChild)predG.appendChild(ar.firstChild);
+    const err=Math.abs(a-(-0.5));errText.textContent='‖ uθ − target ‖  =  '+err.toFixed(2);errText.setAttribute('fill',err<.15?C.green:C.red);};
+};
+
+// 06 scores & denoising: a noised point climbs uphill to data
+SCENES.score=()=>{
+  chrome(6,12,'Scores, denoising & DDPM','The score points uphill toward data. Learning it is learning to denoise.');
+  // contour rings around two data modes
+  const modes=[[CX-190,CY],[CX+200,CY-30]];
+  modes.forEach(m=>{for(let k=1;k<=4;k++)add(el('circle',{cx:m[0],cy:m[1],r:k*46,fill:'none',stroke:C.grid,'stroke-width':2}));add(el('circle',{cx:m[0],cy:m[1],r:9,fill:C.green}));});
+  // score field
+  for(let gx=-4;gx<=4;gx++)for(let gy=-3;gy<=3;gy++){const x=CX+gx*110,y=CY+gy*95;let vx=0,vy=0;modes.forEach(m=>{const dx=m[0]-x,dy=m[1]-y,d=Math.hypot(dx,dy)+1;const w=Math.exp(-d/160);vx+=dx/d*w;vy+=dy/d*w;});const n=Math.hypot(vx,vy)+1e-6;arrow(x,y,x+34*vx/n,y+34*vy/n,C.faint==C.faint?'#dfe3ea':'#dfe3ea',2.5);}
+  const p0=[CX-360,CY+250];const path=[];let x=p0[0],y=p0[1];for(let k=0;k<=60;k++){let vx=0,vy=0;modes.forEach(m=>{const dx=m[0]-x,dy=m[1]-y,d=Math.hypot(dx,dy)+1;const w=Math.exp(-d/150);vx+=dx/d*w;vy+=dy/d*w;});const n=Math.hypot(vx,vy)+1e-6;x+=vx/n*9;y+=vy/n*9;path.push([x,y]);}
+  const line=add(el('path',{fill:'none',stroke:C.red,'stroke-width':3,opacity:.7}));
+  const head=add(el('circle',{r:11,fill:C.red}));
+  return u=>{const k=Math.round(ease(u)*(path.length-1));line.setAttribute('d',path.slice(0,k+1).map((q,j)=>`${j?'L':'M'}${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' '));head.setAttribute('cx',path[k][0]);head.setAttribute('cy',path[k][1]);};
+};
+
+// 07 guidance: samples pulled to a labeled target as w rises
+SCENES.guidance=()=>{
+  chrome(7,12,'Guidance: making the model listen','Amplify the prompt. Adherence climbs, diversity shrinks. A volume knob.');
+  const tgt=[CX+260,CY-40];add(el('rect',{x:tgt[0]-16,y:tgt[1]-16,width:32,height:32,fill:'none',stroke:C.amber,'stroke-width':3}));
+  add(el('text',{x:tgt[0]+30,y:tgt[1],fill:C.amber,'font-size':30,class:'mono'})).textContent='prompt';
+  const N=40,start=gaussPairs(15,N).map(g=>[CX-140+g[0]*230,CY+g[1]*210]);
+  const dots=start.map(()=>add(el('circle',{r:7,fill:C.blue,opacity:.8})));
+  // knob
+  add(el('text',{x:140,y:900,fill:C.mut,'font-size':34,class:'mono'})).textContent='guidance w';
+  const bar=add(el('rect',{x:340,y:876,width:0,height:22,rx:11,fill:C.blue}));
+  add(el('rect',{x:340,y:876,width:520,height:22,rx:11,fill:'none',stroke:C.grid,'stroke-width':2}));
+  const wtxt=add(el('text',{x:900,y:898,fill:C.ink,'font-size':34,'font-weight':700,class:'mono'}));
+  return u=>{const w=lerp(0,5,ease(u));const pull=clamp(w/5,0,1);start.forEach((s,i)=>{const x=lerp(s[0],tgt[0]+(mulberry32(i+2)()-.5)*70*(1-pull),pull),y=lerp(s[1],tgt[1]+(mulberry32(i+8)()-.5)*70*(1-pull),pull);dots[i].setAttribute('cx',x);dots[i].setAttribute('cy',y);});bar.setAttribute('width',520*pull);wtxt.textContent='= '+w.toFixed(1);};
+};
+
+// 08 architectures: conditioning re-injected at every block (AdaLN)
+SCENES.arch=()=>{
+  chrome(8,12,'Opening the box: the network','Time and prompt enter at every layer, not just the front. This is AdaLN.');
+  const n=6,bw=150,bh=150,gap=60,x0=CX-(n*bw+(n-1)*gap)/2,y=CY-40;
+  const blocks=[];for(let i=0;i<n;i++){const bx=x0+i*(bw+gap);add(el('rect',{x:bx,y,width:bw,height:bh,rx:16,fill:'#fff',stroke:C.ink,'stroke-width':3}));blocks.push([bx,y]);if(i<n-1)arrow(bx+bw,y+bh/2,bx+bw+gap,y+bh/2,C.mut,3);}
+  add(el('text',{x:x0,y:y-40,fill:C.mut,'font-size':26,class:'mono'})).textContent='x';
+  add(el('text',{x:x0+n*(bw+gap)-gap,y:y-40,fill:C.blue,'font-size':26,'text-anchor':'end',class:'mono'})).textContent='velocity u';
+  // conditioning bus
+  add(el('rect',{x:x0-30,y:y+bh+120,width:n*(bw+gap)-gap+60,height:8,rx:4,fill:C.grid}));
+  add(el('text',{x:x0-30,y:y+bh+180,fill:C.amber,'font-size':26,class:'mono'})).textContent='conditioning  (t, y)';
+  const taps=blocks.map(b=>{const cx=b[0]+bw/2;add(el('line',{x1:cx,y1:y+bh+124,x2:cx,y2:y+bh,stroke:C.amber,'stroke-width':4}));return add(el('circle',{cx,cy:y+bh/2,r:0,fill:C.amber,opacity:.35}));});
+  const pulse=add(el('circle',{cy:y+bh+124,r:14,fill:C.amber}));
+  return u=>{const p=ease(u);const px=x0-30+ (n*(bw+gap)-gap+60)*p;pulse.setAttribute('cx',px);taps.forEach((t,i)=>{const cx=blocks[i][0]+bw/2;const d=Math.abs(cx-px);const on=Math.max(0,1-d/120);t.setAttribute('r',(6+70*on).toFixed(1));t.setAttribute('opacity',(0.12+0.4*on).toFixed(2));});};
+};
+
+// 09 latent space: compress -> generate small -> decompress
+SCENES.latent=()=>{
+  chrome(9,12,'Working in latent space','Pixel space is too big to generate in. Compress, generate small, decompress.');
+  function grid(cx,cy,cells,size,col){const g=add(el('g',{}));const s=size/cells;for(let i=0;i<cells;i++)for(let j=0;j<cells;j++)g.appendChild(el('rect',{x:cx-size/2+i*s,y:cy-size/2+j*s,width:s-1,height:s-1,fill:col,opacity:.5}));return g;}
+  const big=grid(CX-560,CY,16,300,C.blue);
+  const small=grid(CX,CY,4,150,C.green);
+  const big2=grid(CX+560,CY,16,300,C.blue);
+  arrow(CX-380,CY,CX-90,CY,C.mut,4);arrow(CX+90,CY,CX+380,CY,C.mut,4);
+  add(el('text',{x:CX-560,y:CY-190,fill:C.mut,'font-size':26,'text-anchor':'middle',class:'mono'})).textContent='image  ·  3.1M';
+  add(el('text',{x:CX,y:CY-120,fill:C.green,'font-size':26,'text-anchor':'middle',class:'mono'})).textContent='latent · 16K';
+  add(el('text',{x:CX,y:CY+130,fill:C.green,'font-size':24,'text-anchor':'middle',class:'mono'})).textContent='flow runs here';
+  add(el('text',{x:CX+560,y:CY-190,fill:C.mut,'font-size':26,'text-anchor':'middle',class:'mono'})).textContent='image  ·  192× smaller';
+  const enc=add(el('circle',{cx:CX-235,cy:CY,r:12,fill:C.amber}));
+  const dec=add(el('circle',{cx:CX+90,cy:CY,r:12,fill:C.amber,opacity:0}));
+  return u=>{const p=ease(u);enc.setAttribute('cx',lerp(CX-380,CX-90,clamp(p*2,0,1)));enc.setAttribute('opacity',p<.5?1:0);dec.setAttribute('opacity',p>.5?1:0);dec.setAttribute('cx',lerp(CX+90,CX+380,clamp((p-.5)*2,0,1)));small.setAttribute('opacity',clamp(1-Math.abs(p-.5)*1.4,.2,1));};
+};
+
+// 10 discrete diffusion: [MASK] tokens reveal a sentence
+SCENES.discrete=()=>{
+  chrome(10,12,'The discrete dialect','No velocity when data is tokens. Generation becomes progressive unmasking.');
+  const words=['pick','up','the','pan','and','rinse','it','now'];
+  const order=[3,0,5,1,6,2,4,7]; // seeded reveal order
+  const bw=190,gap=22,x0=CX-(words.length*bw+(words.length-1)*gap)/2,y=CY-60;
+  const cells=words.map((w,i)=>{const bx=x0+i*(bw+gap);add(el('rect',{x:bx,y,width:bw,height:110,rx:12,fill:C.faint,stroke:C.grid,'stroke-width':2}));const t=add(el('text',{x:bx+bw/2,y:y+70,fill:C.mut,'font-size':34,'text-anchor':'middle','font-weight':600,class:'mono'}));t.textContent='[MASK]';return {t,bx,bw,w,i};});
+  return u=>{const k=ease(u)*words.length;cells.forEach(c=>{const rank=order.indexOf(c.i);const on=rank<k;c.t.textContent=on?c.w:'[MASK]';c.t.setAttribute('fill',on?C.ink:C.mut);c.t.setAttribute('font-size',on?38:30);});};
+};
+
+// 11 VLA anatomy: camera+text -> backbone -> expert -> action chunk
+SCENES.vla=()=>{
+  chrome(11,12,'Putting it in a robot','A vision-language brain conditions a flow-matching action expert.');
+  const y=CY-30;
+  function box(x,w,label,col){add(el('rect',{x,y:y-70,width:w,height:140,rx:16,fill:'#fff',stroke:col,'stroke-width':3}));add(el('text',{x:x+w/2,y:y+8,fill:col,'font-size':30,'text-anchor':'middle','font-weight':600})).textContent=label;}
+  box(180,300,'VLM backbone',C.ink);
+  box(660,300,'action expert',C.blue);
+  arrow(150,y,178,y,C.mut,3);arrow(482,y,658,y,C.mut,3);arrow(962,y,1040,y,C.mut,3);
+  add(el('text',{x:150,y:y-120,fill:C.mut,'font-size':26,class:'mono'})).textContent='camera + "rinse the pan"';
+  // action chunk waypoints appearing
+  const wpN=14,base=Array.from({length:wpN},(_,i)=>[1080+i*46,y]);
+  const chunk=base.map(()=>add(el('circle',{r:8,fill:C.green,opacity:0})));
+  const line=add(el('path',{fill:'none',stroke:C.green,'stroke-width':3,opacity:.5}));
+  add(el('text',{x:1080+wpN*46/2,y:y+150,fill:C.green,'font-size':26,'text-anchor':'middle',class:'mono'})).textContent='action chunk';
+  return u=>{const p=ease(u);const k=p*wpN;const pts=[];base.forEach((b,i)=>{const on=clamp(k-i,0,1);const yy=y-70*Math.sin(i/wpN*Math.PI)*on;chunk[i].setAttribute('cx',b[0]);chunk[i].setAttribute('cy',yy);chunk[i].setAttribute('opacity',.85*on);if(on>0)pts.push(`${i?'L':'M'}${b[0]},${yy.toFixed(1)}`);});line.setAttribute('d',pts.join(' '));};
+};
+
+// 12 temporal certainty decay: tight now, fanning later
+SCENES.decay=()=>{
+  chrome(12,12,'Temporal certainty decay','Sure about now, vague about later. The spread is the model telling the truth.');
+  const N=12,steps=48,x0=CX-460,x1=CX+460;
+  const modes=[130,-10,-150];
+  const runs=Array.from({length:N},(_,r)=>{const rng=mulberry32(200+r);const m=modes[r%3];const pts=[];for(let i=0;i<=steps;i++){const s=i/steps;const g=s<.32?0:(s-.32)/.68;const y=CY+ (m*g*g)+(rng()-.5)*24*(0.15+g);pts.push([lerp(x0,x1,s),y]);}return pts;});
+  const lines=runs.map(()=>add(el('path',{fill:'none',stroke:C.blue,'stroke-width':2.5,opacity:.75})));
+  add(el('circle',{cx:x0,cy:CY,r:10,fill:C.amber}));add(el('text',{x:x0,y:CY+90,fill:C.amber,'font-size':26,'text-anchor':'middle',class:'mono'})).textContent='h = 0';
+  add(el('text',{x:x1,y:CY-210,fill:C.red,'font-size':26,'text-anchor':'middle',class:'mono'})).textContent='h = 49';
+  return u=>{const k=Math.round(ease(u)*steps);runs.forEach((p,i)=>{lines[i].setAttribute('d',p.slice(0,k+1).map((q,j)=>`${j?'L':'M'}${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' '));});};
+};
+
+// ---- boot ----
+const params=new URLSearchParams(location.search);
+const id=params.get('scene')||'flow';
+let renderFn=(SCENES[id]||SCENES.flow)();
+window.renderScene=(u)=>{ renderFn(clamp(u,0,1)); };
+window.renderScene(0);
+window.__ready=true;
+</script>
+</body>
+</html>
