@@ -102,7 +102,7 @@ async function renderScroll(browser) {
   const docMax = await page.evaluate(() => document.body.scrollHeight - window.innerHeight);
   // Cap the travel to a calm, readable pace rather than the whole document, so
   // the 10s clip glides instead of blurring past.
-  const PACE = 1000; // pixels per second
+  const PACE = 2400; // pixels per second
   const maxScroll = Math.min(docMax, PACE * DUR);
   const tmp = mkdtempSync(path.join(tmpdir(), "scroll-"));
   for (let i = 0; i < N; i++) {
