@@ -220,7 +220,7 @@ export const workSection = {
       date: "Jul 2026",
       description:
         "An app that fights the forgetting curve by tracking what you have learned and tuning the questions it asks each day so the material sticks.",
-      href: "#",
+      href: "https://recall-delta-two.vercel.app/",
       image: "/projects/backtracking.svg",
       imageContain: true,
     },

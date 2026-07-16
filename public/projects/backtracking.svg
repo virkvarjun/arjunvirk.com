@@ -1,12 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-label="Backtracking">
-  <line x1="32" y1="162" x2="288" y2="162" stroke="#111111" stroke-width="3"/>
-  <line x1="40" y1="162" x2="40" y2="40" stroke="#111111" stroke-width="3"/>
-  <path d="M40 60 Q80 120 120 132 M120 74 Q160 122 200 130 M200 76 Q240 118 280 126"
-        fill="none" stroke="#111111" stroke-width="3"/>
-  <g stroke="#3f5fd6" stroke-width="3">
-    <line x1="120" y1="132" x2="120" y2="74"/>
-    <line x1="200" y1="130" x2="200" y2="76"/>
-  </g>
-  <circle cx="120" cy="74" r="7" fill="#3f5fd6"/>
-  <circle cx="200" cy="76" r="7" fill="#3f5fd6"/>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Recall">
+  <defs>
+    <linearGradient id="recall-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c2611f"/>
+      <stop offset="1" stop-color="#e07a3f"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#recall-bg)"/>
+  <!-- rising retention curve with expanding-interval review nodes -->
+  <path d="M140 370 Q 210 340 268 300 Q 326 260 392 140"
+        fill="none" stroke="#ffffff" stroke-width="24"
+        stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <circle cx="140" cy="370" r="18" fill="#ffffff"/>
+  <circle cx="268" cy="300" r="25" fill="#ffffff"/>
+  <circle cx="392" cy="140" r="34" fill="#ffffff"/>
 </svg>
