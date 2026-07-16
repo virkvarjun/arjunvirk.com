@@ -99,7 +99,11 @@ async function renderScroll(browser) {
   }, stitch.slice(1));
 
   await page.waitForTimeout(400);
-  const maxScroll = await page.evaluate(() => document.body.scrollHeight - window.innerHeight);
+  const docMax = await page.evaluate(() => document.body.scrollHeight - window.innerHeight);
+  // Cap the travel to a calm, readable pace rather than the whole document, so
+  // the 10s clip glides instead of blurring past.
+  const PACE = 1000; // pixels per second
+  const maxScroll = Math.min(docMax, PACE * DUR);
   const tmp = mkdtempSync(path.join(tmpdir(), "scroll-"));
   for (let i = 0; i < N; i++) {
     const y = Math.round((i / (N - 1)) * maxScroll); // linear, equal pace
@@ -109,7 +113,7 @@ async function renderScroll(browser) {
   await page.close();
   encode(tmp, "f_%04d.jpg", FPS, path.join(outDir, "scroll.mp4"), 20);
   rmSync(tmp, { recursive: true, force: true });
-  console.log("  ✓ scroll/scroll.mp4  (" + maxScroll + "px over 10s)");
+  console.log("  ✓ scroll/scroll.mp4  (" + maxScroll + "px over 10s, " + PACE + " px/s)");
 }
 
 const mode = process.argv[2] || "sections";
