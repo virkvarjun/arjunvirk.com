@@ -162,6 +162,8 @@ export default function Home() {
           {workSection.projects.map((project) => {
             const hasLink = Boolean(project.href) && project.href !== "#";
             const isExternal = hasLink && !project.href.startsWith("/");
+            const isVideo = hasLink && /\.(mp4|webm|mov)$/i.test(project.href);
+            const opensNewTab = isExternal || isVideo;
             const imageClasses = project.imageBare
               ? "block overflow-hidden rounded-lg"
               : "block aspect-[16/10] overflow-hidden rounded-lg bg-[var(--card)] ring-1 ring-[var(--border)]";
@@ -192,12 +194,26 @@ export default function Home() {
                 {hasLink ? (
                   <a
                     href={project.href}
-                    target={isExternal ? "_blank" : undefined}
-                    rel={isExternal ? "noopener noreferrer" : undefined}
-                    className={`${imageClasses} transition-opacity hover:opacity-80`}
-                    aria-label={project.title}
+                    target={opensNewTab ? "_blank" : undefined}
+                    rel={opensNewTab ? "noopener noreferrer" : undefined}
+                    className={`group ${imageClasses} ${
+                      isVideo ? "relative" : ""
+                    } transition-opacity hover:opacity-80`}
+                    aria-label={isVideo ? `${project.title} — play demo` : project.title}
                   >
                     {thumbnail}
+                    {isVideo ? (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                      >
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 ring-1 ring-white/70 backdrop-blur-sm transition-transform group-hover:scale-110">
+                          <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5 fill-white">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </span>
+                      </span>
+                    ) : null}
                   </a>
                 ) : (
                   <div className={imageClasses}>{thumbnail}</div>
@@ -206,8 +222,8 @@ export default function Home() {
                   {hasLink ? (
                     <a
                       href={project.href}
-                      target={isExternal ? "_blank" : undefined}
-                      rel={isExternal ? "noopener noreferrer" : undefined}
+                      target={opensNewTab ? "_blank" : undefined}
+                      rel={opensNewTab ? "noopener noreferrer" : undefined}
                       className="font-semibold underline-offset-2 hover:underline"
                     >
                       {project.title}

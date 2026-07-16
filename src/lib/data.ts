@@ -202,9 +202,8 @@ export const workSection = {
       date: "Jul 2026",
       description:
         "An app that logs what you are doing every ten minutes, learns your peak productivity hours, and builds a dynamic daily schedule around them.",
-      href: "#",
-      image: "/projects/meridian.svg",
-      imageContain: true,
+      href: "/projects/meridian-demo.mp4",
+      image: "/projects/meridian-poster.png",
     },
     {
       title: "Dancing Humanoid (1st Place Provincially)",
@@ -235,14 +234,13 @@ export const workSection = {
       image: "/projects/hack49.png",
     },
     {
-      title: "Currentz",
+      title: "Daybreak",
       category: "Engineering",
       date: "Jul 2026",
       description:
         "A personal daily digest of paper recommendations, relevant news, and takes from the leaders you follow on X, built as a calmer replacement for endless scrolling.",
-      href: "#",
-      image: "/projects/currentz.svg",
-      imageContain: true,
+      href: "/projects/daybreak-demo.mp4",
+      image: "/projects/daybreak-poster.png",
     },
     {
       title: "Robot See, Robot Do",
