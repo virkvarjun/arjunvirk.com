@@ -423,9 +423,9 @@ export const chapter9: Chapter = {
       ],
     },
     {
-      heading: "STATE OF THE ROSTER (as of Aug 2026)",
+      heading: "STATE OF THE ROSTER (as of Jul 2026)",
       paragraphs: [
-        `> **Freshness note, read this first.** VLAs are the fastest-moving area in this entire guide. The snapshot below is accurate *as of August 2026* and *will* go stale; treat it as a dated photograph, not a standing fact. Where a number is a lab's own benchmark, it's flagged **vendor-reported** and should be checked against independent evaluation before you quote it. When you come back to this chapter in six months, re-derive the landscape from the *axes* in the previous section, those are durable, not from these specific model names.`,
+        `> **Freshness note, read this first.** VLAs are the fastest-moving area in this entire guide. The snapshot below is accurate *as of July 2026* and *will* go stale; treat it as a dated photograph, not a standing fact. Where a number is a lab's own benchmark, it's flagged **vendor-reported** and should be checked against independent evaluation before you quote it. When you come back to this chapter in six months, re-derive the landscape from the *axes* in the previous section, those are durable, not from these specific model names.`,
         `**Physical Intelligence, π0 / π0-FAST / π0.5.** The flow-matching flagship line. PaliGemma-3B backbone plus a ~300M flow-matching action expert, 50-step action chunks at up to 50 Hz, dexterous long-horizon tasks (laundry, table bussing). π0.5 adds open-world home generalization and language-subtask hierarchy; FAST and Knowledge Insulation let discrete supervision and continuous action coexist. Ported into LeRobot, so widely runnable.`,
         `**OpenVLA / OpenVLA-OFT.** The open, LoRA-tunable workhorse the community builds on. 7B, dual-encoder (DINOv2+SigLIP). OFT moved it to parallel decoding, action chunking, and continuous L1 actions (97.1% avg on LIBERO). The default starting point for a lab that wants to fine-tune its own VLA on modest hardware.`,
         `**Octo.** The open, from-scratch, diffusion-headed generalist. Small (27–93M), the useful control case proving how far continuous actions get *without* a pretrained VLM. Still a common baseline.`,

@@ -117,7 +117,7 @@ export const chapter12: Chapter = {
     },
     {
       paragraphs: [
-        "> **STATE OF THE HUMANOID ROSTER (as of Sep 2026: a fast-moving snapshot, read the caveat)**",
+        "> **STATE OF THE HUMANOID ROSTER (as of Jul 2026: a fast-moving snapshot, read the caveat)**",
         "This box describes *approaches*, not spec sheets, and it will be stale fast: the humanoid roster changes practically every quarter, companies come and go, and vendor demos are not deployed products. Treat every name here as \"a serious effort exploring this direction as of writing,\" nothing more. Do not read specific unverifiable performance claims into it.",
       ],
     },
