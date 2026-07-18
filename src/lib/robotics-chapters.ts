@@ -22,8 +22,8 @@ const chapter1: Chapter = {
   title: "Anatomy of a Robot",
   summary:
     "What a robot actually is: the sense–plan–act loop, joints, degrees of freedom, actuators, sensors, and why parallel parking is hard.",
-  published: "Jul 6, 2026",
-  updated: "Jul 6, 2026",
+  published: "Jun 30, 2026",
+  updated: "Jun 30, 2026",
   futureRef:
     "The concepts here are stable: joints, DoF, the sense–plan–act loop, and the proprioceptive/exteroceptive split haven't changed in decades and won't. Specific sensor and actuator hardware improves year over year (cheaper LiDAR, stronger motors, better tactile skin), so treat any specific spec as a snapshot, but the mental model is evergreen. Come back to Fig 1.3 (configuration space) whenever planning or kinematics stops making sense. Almost every later idea is a motion through that space.",
   sections: [
@@ -259,8 +259,8 @@ const STUBS: Array<{
     title: "The Language of Space: Frames, Rotations & Transforms",
     summary:
       "Coordinate frames, rotation matrices, gimbal lock, quaternions, and the 4×4 transforms that let a robot translate between everything it sees.",
-    published: "Jul 13, 2026",
-    updated: "Jul 13, 2026",
+    published: "Jul 1, 2026",
+    updated: "Jul 1, 2026",
     futureRef:
       "Timeless math. Revisit quaternions whenever orientation bugs appear.",
   },
@@ -270,8 +270,8 @@ const STUBS: Array<{
     title: "Kinematics: Forward, Inverse & the Jacobian",
     summary:
       "Turning joint angles into hand positions and back again; why inverse kinematics is hard, why 6 DoF is magic, and what the Jacobian buys you.",
-    published: "Jul 20, 2026",
-    updated: "Jul 20, 2026",
+    published: "Jul 3, 2026",
+    updated: "Jul 3, 2026",
     futureRef:
       "Timeless. The Jacobian reappears in control, RL, and VLA action spaces.",
   },
@@ -281,8 +281,8 @@ const STUBS: Array<{
     title: "Control: From PID to Whole-Body",
     summary:
       "Making the body actually track a command against gravity and friction: P, I, D, feedforward, and force/impedance control.",
-    published: "Jul 27, 2026",
-    updated: "Jul 27, 2026",
+    published: "Jul 4, 2026",
+    updated: "Jul 4, 2026",
     futureRef:
       "Classical control is stable; learned control (RL) is the moving frontier.",
   },
@@ -292,8 +292,8 @@ const STUBS: Array<{
     title: "Estimation, Localization & SLAM",
     summary:
       "Fighting drift and lying sensors with probability: Bayes filters, Kalman, particle filters, mapping, and loop closure.",
-    published: "Aug 3, 2026",
-    updated: "Aug 3, 2026",
+    published: "Jul 5, 2026",
+    updated: "Jul 5, 2026",
     futureRef:
       "Filters are settled; visual/neural SLAM and 3DGS maps are advancing fast.",
   },
@@ -303,8 +303,8 @@ const STUBS: Array<{
     title: "Motion Planning & Navigation",
     summary:
       "Finding a path through configuration space: Dijkstra, A*, RRT and RRT*, trajectory optimization, and the global/local planner split.",
-    published: "Aug 10, 2026",
-    updated: "Aug 10, 2026",
+    published: "Jul 7, 2026",
+    updated: "Jul 7, 2026",
     futureRef:
       "Classical planners are stable; learned planning is where to watch.",
   },
@@ -314,8 +314,8 @@ const STUBS: Array<{
     title: "Reinforcement Learning for Robots",
     summary:
       "Learning the policy when you can't hand-code it: MDPs, value functions, policy gradients, PPO, sim2real, and teacher–student.",
-    published: "Aug 17, 2026",
-    updated: "Aug 17, 2026",
+    published: "Jul 8, 2026",
+    updated: "Jul 8, 2026",
     futureRef:
       "PPO is the workhorse; revisit sim2real recipes yearly, since they churn.",
   },
@@ -325,8 +325,8 @@ const STUBS: Array<{
     title: "Perception: Vision & Vision-Language Models",
     summary:
       "The eyes of a modern robot: attention and Q/K/V, ViT, CLIP, SigLIP, and the diffusion/flow-matching machinery that generates behavior.",
-    published: "Aug 24, 2026",
-    updated: "Aug 24, 2026",
+    published: "Jul 10, 2026",
+    updated: "Jul 10, 2026",
     futureRef:
       "Backbones (ViT/CLIP/SigLIP) are stable anchors; refresh encoders yearly.",
   },
@@ -336,8 +336,8 @@ const STUBS: Array<{
     title: "Vision-Language-Action Models",
     summary:
       "The models running today's robots, as a lineage where each fixes the last: RT-1/2, OpenVLA, Octo, π0/π0.5, FAST, MolmoAct, GR00T, and Gemini Robotics.",
-    published: "Aug 31, 2026",
-    updated: "Aug 31, 2026",
+    published: "Jul 11, 2026",
+    updated: "Jul 11, 2026",
     futureRef:
       "FAST-MOVING. Model roster (π, GR00T, Gemini Robotics, MolmoAct) changes every few months; see the dated \"state of the roster\" box and re-check quarterly.",
   },
@@ -347,8 +347,8 @@ const STUBS: Array<{
     title: "Learning from Demonstration & Data Collection",
     summary:
       "Where robot data comes from: behavior cloning, action chunking (ACT), Diffusion Policy, teleop, UMI, and the LeRobot/Rerun tooling.",
-    published: "Sep 7, 2026",
-    updated: "Sep 7, 2026",
+    published: "Jul 12, 2026",
+    updated: "Jul 12, 2026",
     futureRef:
       "Methods (ACT, Diffusion Policy) stable; tooling (LeRobot, Rerun) versions fast.",
   },
@@ -358,8 +358,8 @@ const STUBS: Array<{
     title: "World Models & Simulation",
     summary:
       "Escaping the data bottleneck: learned world models, Dreamer, video-generation models, Gaussian splatting, sim2real, and phys2real.",
-    published: "Sep 14, 2026",
-    updated: "Sep 14, 2026",
+    published: "Jul 14, 2026",
+    updated: "Jul 14, 2026",
     futureRef:
       "FAST-MOVING. Named systems are bleeding-edge; lean on the taxonomy, re-check the roster.",
   },
@@ -369,8 +369,8 @@ const STUBS: Array<{
     title: "Manipulation, Humanoids & Deploying Real Systems",
     summary:
       "Assembling the whole stack: grasping, dexterous hands, humanoids, ROS 2, evaluation, and safety, plus where the field goes next.",
-    published: "Sep 21, 2026",
-    updated: "Sep 21, 2026",
+    published: "Jul 15, 2026",
+    updated: "Jul 15, 2026",
     futureRef:
       "Humanoid hardware roster changes constantly; principles (grasping, safety) don't.",
   },
