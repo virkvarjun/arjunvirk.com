@@ -1,0 +1,208 @@
+Chapter 14 ended with two philosophies of what a learned model should be: MuZero's "predict only what planning needs," and a promise that the opposite bet — *predict the world itself* — would get its own chapter. This is it. **World models** learn a compressed, predictive simulation of the environment from raw sensory streams, then use it three ways: as a **dream** to train policies in (imagination is free; reality is not — Chapter 22's five walls, all at once), as a **planning substrate** at decision time, and as a **representation** whose learning signal (predict the future) is dense even when reward is absent.
+
+The chapter is paper-driven, tracing one of the cleanest research arcs in modern AI: the 2018 proof-of-concept that an agent can learn *inside its own hallucination*; PlaNet's recurrent state-space model, still the field's workhorse architecture; the Dreamer line, which made imagination-training general enough to win from Atari to Minecraft to real robots — with DreamerV3's one-configuration result now in *Nature*; TD-MPC's reconstruction-free counterpoint; the transformer and diffusion world models that imported generative modeling's heavy machinery; Genie's leap from "model of one environment" to "generator of environments"; and DINO-WM's minimalist thesis that frozen vision features plus a forward model already buy zero-shot planning. By the end you should be able to say precisely what each system predicts, in what space, trained by what loss, and used by which of the three mechanisms — and why this line of work is many researchers' best bet for robot learning's data problem.
+
+## 1. The Idea, and Its Three Uses
+
+A world model is a learned triple (plus reward head): an **encoder** compressing observations into a latent state $z_t$, a **dynamics model** predicting $z_{t+1}$ from $(z_t, a_t)$, and (usually) a **decoder** reconstructing observations — trained on experience by generative losses, no reward needed. The uses:
+
+1. **Imagination training** (background planning, Chapter 8/14 taxonomy): roll thousands of latent trajectories per real step; train an actor-critic *entirely on dreamed data*. The real environment's job shrinks to keeping the model honest.
+2. **Decision-time planning**: MPC/CEM/MPPI in latent space — Chapter 14's PETS with the state space swapped for a learned one that sees through pixels.
+3. **Representation learning**: predicting the future forces the latent to carry controllable, persistent structure — reward-free pretraining for control (and the exploration bonus factory of Chapter 15's Plan2Explore).
+
+The central engineering tension, inherited intact from Chapter 14: **compounding error and exploitation** — now in a latent space nobody can inspect, over horizons imagination makes arbitrarily long. Every system below is a position on how much to predict (pixels? features? values?), in what space (continuous? discrete tokens?), and how far to trust the dream.
+
+## 2. Ha & Schmidhuber (2018): Learning Inside the Dream
+
+**The paper:** "World Models" — the modern line's manifesto, complete with the cognitive-science framing (we act on our brain's model of reality, not reality).
+
+**The system,** three separated stages, deliberately simple: a **VAE** (V) compresses each 64×64 frame to $z \in \R^{32}$; an **MDN-RNN** (M) — an LSTM emitting a *mixture of Gaussians* over the next latent (multimodality and stochasticity priced in; Chapter 14's "the mean of two futures is not a future") — learns $p(z_{t+1} \mid z_t, a_t, h_t)$; a **controller** (C) of laughable size (a single linear layer, ~a thousand parameters) maps $(z_t, h_t)$ to actions, trained not by gradient descent but by **CMA-ES** — evolution, feasible only because C is tiny and V/M carry all the capacity.
+
+**The headline experiment:** on VizDoom's fire-dodging task, C was trained **entirely inside M's hallucination** — the agent never touched the real game during policy learning — then transferred to the real environment and *won*. The paper also met imagination's fundamental bug head-on: train in a too-deterministic dream and C learns to exploit M's quirks (adversarially suppressing the fireballs in the hallucination — Chapter 14's model exploitation, in its purest recorded form); the fix was a **temperature** knob inflating the MDN's sampling noise, making the dream *harder and more stochastic* than reality — uncertainty-as-regularizer, PILCO's philosophy by cruder means. Limitations were equally clean: V's features are reconstruction-driven (they encode wall textures as faithfully as fireballs), the stages don't cofine-tune, and evolution caps controller complexity. Every successor is an answer to one of these.
+
+## 3. PlaNet (2019): the RSSM
+
+**The paper:** Hafner et al., "Learning Latent Dynamics for Planning from Pixels" — the architecture paper. Its **recurrent state-space model (RSSM)** remains the default world-model backbone, and its design encodes the chapter's key insight about prediction under uncertainty.
+
+**The model.** The latent state has two streams: a **deterministic** recurrent path $h_t = f(h_{t-1}, z_{t-1}, a_{t-1})$ (a GRU — memory that survives noise) and a **stochastic** path $z_t$ sampled per step (capacity for genuine unpredictability). Both feed the decoders. Training is variational (an ELBO): reconstruction terms for observations and rewards, plus a KL between the **posterior** $q(z_t \mid h_t, o_t)$ (which peeks at the current frame) and the **prior** $p(z_t \mid h_t)$ (which must predict without peeking). That KL *is* the dynamics loss: it drags the open-loop predictor toward the filtered truth. Why both streams? Purely stochastic models forget (noise compounds across steps; nothing persists), purely deterministic ones can't represent chance (and get exploited pretending they can) — the ablations in the paper make both failure modes plain. You met this object's job description in Chapter 3: the RSSM state $(h_t, z_t)$ is a *learned belief state* for a POMDP, trained by prediction instead of Bayes' rule.
+
+**The agent:** no policy at all — CEM planning (Chapter 14, verbatim) over action sequences in latent space, replanned each step, value-free (finite-horizon return sums). **Results:** on the DeepMind Control suite *from pixels*, PlaNet matched or approached the model-free D4PG's performance with **~200× fewer environment steps** — the chapter's data-efficiency thesis, quantified — while one agent with one hyperparameter set handled six tasks. Its ceiling: CEM's shortsighted finite horizon and per-step planning cost; the obvious upgrade — learn long-horizon values and a policy — is Dreamer.
+
+## 4. The Dreamer Line: Actor-Critic in Imagination
+
+**DreamerV1** (Hafner et al., ICLR 2020) put Chapter 13 inside the dream: from every posterior state in replayed experience, roll the RSSM forward $H = 15$ steps *under the current policy*, and train — entirely on these imagined trajectories — a critic $v_\psi$ on λ-returns (Chapter 7's machinery, operating on dreamed rewards) and an actor by **backpropagating the λ-return through the learned dynamics**: the model is a differentiable simulator, so the policy gradient flows *analytically* through imagined futures (reparameterized end to end — PILCO's analytic-gradient dream, finally scaled; contrast the score-function estimators of Chapter 11, and recall Chapter 13's estimator fork — this is reparameterization's biggest win). The critic bootstraps beyond the 15-step window, so imagination stays short (compounding error contained) while credit reaches long.
+
+<Pseudocode title="Dreamer's loop (all versions, schematically)">
+<L>Loop forever:</L>
+<L i={1}>Act in the real environment with the current actor (on the RSSM's filtered state); add experience to replay</L>
+<L i={1}>Model learning: sample sequence batches; update RSSM + decoders (reconstruction, reward, continue-flag, KL prior↔posterior)</L>
+<L i={1}>Imagination: from each posterior state, unroll $H$ steps with prior dynamics + current actor</L>
+<L i={1}>Critic: regress $v_\psi$ toward λ-returns computed on imagined rewards/values</L>
+<L i={1}>Actor: ascend the λ-returns by analytic gradients through the unrolled model (+ entropy)</L>
+</Pseudocode>
+
+**DreamerV2** (2021) made one representational change with outsized effect — the stochastic latent became a grid of **categorical (discrete) variables** (straight-through gradients), plus **KL balancing** (separate learning rates for dragging prior→posterior vs. regularizing posterior→prior) — and became the first agent to exceed human-level Atari performance training on a single GPU, competitive with Rainbow-class model-free agents on their home turf. (Why discrete helps is only partly settled: sharper multimodality, no Gaussian mode-averaging, gradients that don't shrink through saturation — an honest "empirically decisive, theoretically murky" entry.)
+
+**DreamerV3** (2023; *Nature* 2025) is the robustness paper: **symlog** squashing of observations/rewards/values (scale-invariance across domains), twohot critic targets, percentile-based return normalization, unimix categoricals — a bundle of normalization engineering with one goal: **fixed hyperparameters everywhere**. The result: one configuration mastering 150+ tasks spanning Atari, ProcGen, DMC, Minecraft — including obtaining Minecraft **diamonds from scratch**, a canonical sparse-reward, 20,000-step-horizon challenge, with no human data — outperforming specialized tuned agents throughout. For this book's purposes DreamerV3 is the strongest available evidence for the world-model thesis: *predict-the-world training signals are so dense and transferable that one recipe spans domains that model-free methods treat as separate research programs.* **DayDreamer** (2022) supplied the robotics exhibit: Dreamer, unchanged, on physical robots — an A1 quadruped learning to walk **from scratch in about one hour** of real time (then adapting online to pushes within minutes), plus pick-and-place and navigation on other platforms, all without simulators. One hour is a Chapter-22-wall demolished: imagination multiplies each real transition into thousands of training steps, which is exactly the sample-efficiency arithmetic Section 1 promised.
+
+<Check q="Dreamer trains its actor by backpropagating returns through the learned dynamics — the one thing Chapter 11 said we could never do through the real environment. What exactly changed, and what new failure mode does this gradient path introduce?">
+The environment didn't become differentiable; it was replaced by a neural stand-in that is. Gradients flow through the RSSM's unrolled transitions — low-variance, exact credit assignment through imagined time (reparameterization's win over score functions). The new failure: the gradient is only as truthful as the model along the imagined trajectory — and gradient *ascent* actively steers imagination toward states where the model's reward/dynamics gradients err optimistically (model exploitation, now guided by derivatives rather than search). Dreamer's containments: short horizons H with critic bootstrap, entropy regularization, stochastic latents (the dream stays noisy), and continual model retraining on the policy's own fresh real data — the Dyna loop as immune system.
+</Check>
+
+## 5. TD-MPC and TD-MPC2: the Reconstruction-Free Counterpoint
+
+**The papers:** Hansen, Wang & Su (ICML 2022); Hansen, Su & Wang (ICLR 2024). The Dreamer line bets on reconstruction; Chapter 14's MuZero bet against it. **TD-MPC** stakes out the productive middle: a latent dynamics model trained with *no decoder at all* — the latent is shaped only by what control needs: consistency (predicted next-latent matches the encoder's), reward prediction, and TD value prediction (Chapter 6's machinery as a *representation* loss). Control is hybrid, and the name says it: **TD** — a learned Q/value provides long-horizon judgment — plus **MPC** — short-horizon planning (MPPI, the exponentially-weighted CEM cousin) in latent space, with the value function as terminal utility and a learned policy prior seeding the sampler. Planning handles the near future precisely; the value function compresses the far future; neither is asked to do the other's job (Chapter 8's background-vs-decision-time dichotomy, resolved by portfolio).
+
+**TD-MPC2** scaled the recipe — larger normalized architectures (SimNorm latents, layer-norm everywhere), discrete regression losses (the same symlog-twohot family as DreamerV3: convergent evolution worth noticing) — to **317 continuous-control tasks across 4 domains with one set of hyperparameters**, including 61-DoF humanoids, with clean scaling curves (5M-parameter agents beaten by 48M, beaten by 317M) and multi-task checkpoints that fine-tune to new tasks in minutes. The Dreamer-vs-TD-MPC contrast is the field's live controlled experiment on Chapter 14's deepest question: reconstruction (task-agnostic, transferable, distractor-fragile) versus value-shaped latents (task-focused, distractor-robust, less transferable across rewards) — keep both columns in your head, because Section 7's foundation-world-model turn is a bet that the first column wins at scale.
+
+## 6. Transformers and Diffusion Take the Dynamics Job
+
+The RSSM is a small RNN; the generative-modeling revolution offered bigger hammers, benchmarked on **Atari 100k** (two hours of gameplay — the sample-efficiency arena).
+
+**IRIS** (Micheli, Alonso & Fleuret, ICLR 2023): discretize frames into VQ tokens; let a **GPT-style transformer** be the world model (next-token prediction over interleaved observation-token/action streams); train the policy inside the transformer's imagination. Attention over long contexts replaces recurrence — better long-range consistency, language-model tooling imported wholesale — and IRIS set the then-state-of-the-art on Atari 100k among lookahead-free agents. It is Chapter 18's Trajectory-Transformer idea, repurposed: there the sequence model planned; here it *dreams* for a student policy.
+
+**DIAMOND** (Alonso et al., NeurIPS 2024): the world model is a **diffusion model** generating the next frame directly in pixel space — no discrete bottleneck, so the small-but-decisive visual details that token vocabularies blur (the half-visible enemy, the two-pixel projectile) survive. New Atari 100k state-of-the-art among world-model agents (mean human-normalized score ≈ 1.46), and a memorable demonstration: a playable neural CS:GO, the world model *as* the game engine. The token-vs-pixels trade is Chapter 14's "what should a model predict?" once more, now with the answer visibly task-dependent: predict coarsely and you miss what matters; predict everything and you pay everywhere.
+
+## 7. Genie: from World Model to World Generator
+
+**The papers/systems:** Genie (Bruce et al., ICML 2024), Genie 2 (DeepMind, 2024), Genie 3 (DeepMind, 2025). A world model learns *one* environment from *that environment's* data. Genie asks the foundation-model question: train on **hundreds of thousands of hours of unlabeled internet video** (2D platformers first) and learn a model that generates *interactive environments* — playable worlds — from a prompt image. The technical key is the **latent action model**: with no action labels in video, Genie learns, unsupervised, a small discrete vocabulary of latent actions that best explain frame-to-frame change — inferring *controllability itself* from passive data (the inverse-model idea of Chapter 15's ICM, promoted from feature-filter to interface). Genie 2 extended to 3D worlds from a single prompt image; **Genie 3** (2025) reached real-time interaction at 720p with worlds remaining consistent for *minutes* (visual memory persisting off-screen) plus promptable events ("make it rain") — and DeepMind explicitly positions it as *infrastructure for embodied agents*: SIMA agents have been trained and evaluated inside Genie-generated worlds.
+
+Why this matters to the robotics arc: Chapter 22's playbook needed a simulator per task, hand-built; the Dreamer line learns a simulator per environment, from that robot's own experience; Genie points at simulators *generated on demand from the world's video* — unlimited, promptable training environments, with the sim-to-real question transformed into "how faithful is generated physics?" (currently: not very, for contact-rich manipulation — an honest gap). File Genie with Chapter 25's open problems: the bet that world models become *foundation models of interaction*, pretrained on video the way LLMs pretrained on text.
+
+## 8. DINO-WM: Features, Not Pixels
+
+**The paper:** Zhou et al., "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning" (2024/2025) — the minimalist counterpoint that closes the loop with Section 5's debate. Skip reconstruction *and* skip task-shaped losses: encode observations with **frozen DINOv2 patch features** (a pretrained self-supervised vision backbone — nothing is learned about seeing), train only a transformer forward model over those features, and control by **planning as inference-time optimization**: given a *goal image*, CEM over action sequences to minimize distance between predicted future features and the goal's features. No reward model, no policy, no value function, no decoder — and it achieves strong zero-shot goal-reaching across mazes, tabletop pushing, and deformable-object tasks, beating reconstruction-based world models trained per-domain. The thesis: *generic pretrained vision features are already a good enough state space; the only thing control needs learned is dynamics.* It is the cleanest current evidence for a modular future — perception from vision foundation models, dynamics from interaction data, tasks specified as goals at inference time — against the end-to-end bets on either side. (Its limits mark the frontier: goal images are a narrow task language, and frozen features carry no guarantee of encoding what contact dynamics need.)
+
+## 9. Worked Example: a Micro-Dreamer on Pendulum
+
+Imagination-training's core loop, small enough to run: learn a dynamics + reward model from a modest buffer of real Pendulum transitions, then train a policy by **analytic gradients through the learned model only** — the policy never touches the environment during optimization — and evaluate in reality:
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+
+env = gym.make("Pendulum-v1")
+H, ROLL = 15, 512                        # imagination horizon, dream batch
+S, A, R, S2 = [], [], [], []             # the real-experience buffer
+tt = lambda x: torch.as_tensor(np.array(x), dtype=torch.float32)
+
+# ---- World model: deterministic dynamics (delta) + reward head
+dyn = nn.Sequential(nn.Linear(4, 256), nn.SiLU(),
+                    nn.Linear(256, 256), nn.SiLU(), nn.Linear(256, 3))
+rew = nn.Sequential(nn.Linear(4, 256), nn.SiLU(), nn.Linear(256, 1))
+opt_m = torch.optim.Adam([*dyn.parameters(), *rew.parameters()], lr=1e-3)
+
+# ---- Actor: trained ONLY in imagination, never on real gradients
+actor = nn.Sequential(nn.Linear(3, 256), nn.SiLU(),
+                      nn.Linear(256, 256), nn.SiLU(), nn.Linear(256, 1),
+                      nn.Tanh())
+opt_a = torch.optim.Adam(actor.parameters(), lr=3e-4)
+
+def collect(n, use_actor, noise=0.3, seed=0):
+    s, _ = env.reset(seed=seed)
+    for _ in range(n):
+        if use_actor:
+            with torch.no_grad():
+                a = 2.0 * actor(torch.as_tensor(s, dtype=torch.float32))
+            a = np.clip(a.numpy() + noise * np.random.randn(1), -2, 2) \
+                  .astype(np.float32)
+        else:
+            a = env.action_space.sample()
+        s2, r, term, trunc, _ = env.step(a)
+        S.append(s); A.append(a); R.append([r]); S2.append(s2)
+        s = s2 if not (term or trunc) else env.reset()[0]
+
+def train_model(steps=2_000):
+    Sx, Ax, Rx, S2x = tt(S), tt(A), tt(R), tt(S2)
+    for _ in range(steps):
+        i = torch.randint(len(Sx), (256,))
+        sa = torch.cat([Sx[i], Ax[i]], -1)
+        loss = ((Sx[i] + dyn(sa) - S2x[i])**2).mean() + \
+               ((rew(sa) - Rx[i])**2).mean()
+        opt_m.zero_grad(); loss.backward(); opt_m.step()
+
+def train_actor(epochs=200):
+    Sx = tt(S)
+    for _ in range(epochs):
+        i = torch.randint(len(Sx), (ROLL,))
+        z = Sx[i]                        # start dreams at real states
+        total = 0.0
+        for t in range(H):               # unroll the dream, differentiably
+            a = 2.0 * actor(z)
+            sa = torch.cat([z, a], -1)
+            total = total + rew(sa).squeeze(-1) * (0.99 ** t)
+            z = z + dyn(sa)              # gradients flow through dynamics
+        loss = -total.mean()
+        opt_a.zero_grad(); loss.backward()
+        nn.utils.clip_grad_norm_(actor.parameters(), 10.0)
+        opt_a.step()
+
+# ---- The Dreamer loop: act -> model -> imagine -> act better -> ...
+collect(4_000, use_actor=False)          # seed with random experience
+for rnd in range(3):
+    train_model(); train_actor()
+    collect(2_000, use_actor=True, seed=rnd + 1)   # fresh on-policy data
+train_model(); train_actor()
+
+rets = []
+for ep in range(20):                     # evaluate in the REAL environment
+    s, _ = env.reset(seed=1_000 + ep)
+    total, done = 0.0, False
+    while not done:
+        with torch.no_grad():
+            a = 2.0 * actor(torch.as_tensor(s, dtype=torch.float32))
+        s, r, term, trunc, _ = env.step(a.numpy())
+        total += r; done = term or trunc
+    rets.append(total)
+print(f"dream-trained policy, real returns: {np.mean(rets):.1f} "
+      f"(random ~ -1200; good ~ -200)")
+```
+
+Measured result: **real returns ≈ −307** (random ≈ −1,200; strong ≈ −150) from a policy that **never received a real-environment gradient** — 10,000 real steps bought the model; imagination bought the skill. Two ablations are the lesson. Delete the loop — train the model once on the initial random data and dream from there — and returns stall near **−800**: random collection never visits upright states, so the dream contains no knowledge of the regime that matters (the Dyna cycle of fresh on-policy data is load-bearing, exactly as the pseudocode box insists). And stretch H to 100 (Exercise 23.7) to watch returns crater as dreams drift off-manifold — compounding error, felt directly; the missing anatomy (critic bootstrap to keep H short, stochastic latents) is precisely what full Dreamer adds.
+
+<Pitfall title="Common pitfalls — world-model practice">
+**Validate open-loop rollouts, not one-step error** (Chapter 14's rule, doubled in latent spaces you can't eyeball — decode dreamed futures and *watch* them). **Distractors are the reconstruction bet's tax**: a TV in the room consumes latent capacity by loss design; TD-MPC-style or DINO-feature objectives are the standard hedges (and the "distracting control suite" is the benchmark that measures this exact axis). **The KL/regularization balance is the RSSM's soul**: posterior collapse (prior ignored, model can't dream) and prior collapse (posterior ignores observations, model can't track) are the two ditches; KL balancing and free bits are the guardrails. **Reward-head error dominates**: dreamed policy quality is gated by the reward model far more than the dynamics (the optimizer aims at it — Chapter 14's reward-model warning, squared in imagination). **Termination in dreams**: an unmodeled `done` lets imagined value leak through death — Dreamer's continue-flag head exists for this (the third appearance of this book's most repeated bug). **Stale dreams**: imagination from old replay states trains the policy on yesterday's visitation — refresh starts from recent data as the policy moves.
+</Pitfall>
+
+## 10. Summary
+
+- World models = encoder + latent dynamics (+ decoder/reward heads), trained by prediction; used for **imagination training**, **latent planning**, and **representation** — attacking the robot data problem at its root.
+- **Ha & Schmidhuber**: VAE + MDN-RNN + evolved linear controller; policies trained inside the hallucination transfer to reality; temperature vs. dream exploitation — the manifesto and its bug report, together.
+- **PlaNet's RSSM**: deterministic (memory) + stochastic (chance) latent streams, ELBO with prior↔posterior KL as the dynamics loss — a learned belief state; CEM in latent space; ~200× sample-efficiency over model-free from pixels.
+- **Dreamer**: actor-critic *in imagination* — λ-return critics + analytic policy gradients through the differentiable dream (short horizons + bootstrap contain compounding); V2's discrete latents beat humans on Atari on one GPU; **V3**'s normalization bundle (symlog, twohot, percentile scaling) mastered 150+ domains with one config (Minecraft diamonds; *Nature*); **DayDreamer** walked a real quadruped in an hour.
+- **TD-MPC/2**: no reconstruction — consistency/reward/value-shaped latents; MPPI short-horizon planning + TD long-horizon values; 317 tasks, one config, clean scaling. The live experiment on "what should models predict" (vs. Dreamer's reconstruction and MuZero's values-only).
+- **IRIS/DIAMOND**: transformer-token and diffusion-pixel dynamics — generative modeling's arsenal applied to the dynamics job; Atari-100k frontier; detail-fidelity vs. abstraction as the operative trade.
+- **Genie 1/2/3**: latent actions from unlabeled video → promptable, playable generated worlds (real-time, minutes-consistent by v3) — world models as foundation models of interaction, and candidate infinite training grounds for embodied agents. **DINO-WM**: frozen vision-foundation features + learned dynamics + inference-time goal planning — the modular thesis, zero-shot.
+- The through-line from Chapter 14 stands: every design is a treaty with compounding error and model exploitation; what changed is scale, and that prediction itself became the representation engine.
+
+## 11. Papers & Further Reading
+
+- **Ha & Schmidhuber, "World Models" (2018)** — [arxiv.org/abs/1803.10122](https://arxiv.org/abs/1803.10122) (interactive version: [worldmodels.github.io](https://worldmodels.github.io/)).
+- **Hafner et al., "Learning Latent Dynamics for Planning from Pixels" (ICML, 2019)** — [arxiv.org/abs/1811.04551](https://arxiv.org/abs/1811.04551). PlaNet/RSSM.
+- **Hafner et al., "Dream to Control: Learning Behaviors by Latent Imagination" (ICLR, 2020)** — [arxiv.org/abs/1912.01603](https://arxiv.org/abs/1912.01603); **"Mastering Atari with Discrete World Models" (ICLR, 2021)** — [arxiv.org/abs/2010.02193](https://arxiv.org/abs/2010.02193); **"Mastering Diverse Domains through World Models" (2023; Nature 2025)** — [arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104) / [doi.org/10.1038/s41586-025-08744-2](https://doi.org/10.1038/s41586-025-08744-2). DreamerV1/V2/V3.
+- **Wu, Escontrela, Hafner, Abbeel & Goldberg, "DayDreamer: World Models for Physical Robot Learning" (CoRL, 2022)** — [arxiv.org/abs/2206.14176](https://arxiv.org/abs/2206.14176).
+- **Hansen, Wang & Su, "Temporal Difference Learning for Model Predictive Control" (ICML, 2022)** — [arxiv.org/abs/2203.04955](https://arxiv.org/abs/2203.04955) — and **"TD-MPC2: Scalable, Robust World Models for Continuous Control" (ICLR, 2024)** — [arxiv.org/abs/2310.16828](https://arxiv.org/abs/2310.16828).
+- **Micheli, Alonso & Fleuret, "Transformers are Sample-Efficient World Models" (ICLR, 2023)** — [arxiv.org/abs/2209.00588](https://arxiv.org/abs/2209.00588). IRIS. — **Alonso et al., "Diffusion for World Modeling: Visual Details Matter in Atari" (NeurIPS, 2024)** — [arxiv.org/abs/2405.12399](https://arxiv.org/abs/2405.12399). DIAMOND.
+- **Bruce et al., "Genie: Generative Interactive Environments" (ICML, 2024)** — [arxiv.org/abs/2402.15391](https://arxiv.org/abs/2402.15391); **Genie 2** — [deepmind.google/discover/blog/genie-2-a-large-scale-foundation-world-model/](https://deepmind.google/discover/blog/genie-2-a-large-scale-foundation-world-model/); **Genie 3** — [deepmind.google/discover/blog/genie-3-a-new-frontier-for-world-models/](https://deepmind.google/discover/blog/genie-3-a-new-frontier-for-world-models/).
+- **Zhou, Sobal, LeCun & Pinto, "DINO-WM: World Models on Pre-trained Visual Features enable Zero-shot Planning" (2024)** — [arxiv.org/abs/2411.04983](https://arxiv.org/abs/2411.04983).
+
+## 12. Exercises
+
+**23.1 (understand)** Place each system on three axes — prediction target (pixels / tokens / features / values), control mechanism (imagination-trained policy / decision-time planning / hybrid), and latent type (continuous / discrete / none): World Models '18, PlaNet, DreamerV3, TD-MPC2, IRIS, DIAMOND, DINO-WM, MuZero (from Ch. 14). Which cell of this design space is *empty*, and is that absence principled or accidental?
+
+**23.2 (understand)** The RSSM's KL term pulls prior toward posterior *and* posterior toward prior. Explain what each direction of pressure buys, what pathology each ditch (posterior collapse / prior collapse) causes downstream in imagination training specifically, and why V2's KL balancing (asymmetric learning rates on the two directions) is the right shape of fix.
+
+**23.3 (derive)** Analytic vs. score-function gradients in a dream: for a one-step imagined objective $\E_{a\sim\pi_\theta}[\hat r(z, a)]$ with reparameterizable π and differentiable $\hat r$, write both estimators and show the analytic one's variance is independent of $\dim(a)$'s reward noise while REINFORCE's scales with it (extend Chapter 13, Exercise 13.3). Then add the model-bias term: if $\hat r = r + b$ with $\nabla_a b \ne 0$, characterize the fixed points the analytic gradient converges to — bias in, bias out, with no variance to warn you.
+
+**23.4 (derive)** λ-returns in imagination: Dreamer computes $G^\lambda$ over an H-step dreamed rollout with $v_\psi$ bootstrapping at the horizon. Adapt Chapter 7's telescoping identity to this finite-horizon, model-generated setting and derive the estimator's bias as a sum of (i) critic error at the bootstrap point discounted by $(\gamma\lambda)^H$-type factors and (ii) accumulated model reward/transition error along the dream (Exercise 14.2's bound slots in). Read off why increasing H trades error source (i) for (ii) — the quantitative version of "keep dreams short."
+
+**23.5 (understand)** Genie's latent action model learns discrete "actions" from unlabeled video. Explain the identifiability problem (many latent codes could explain frame deltas — camera motion, lighting, agent motion) and how the small discrete vocabulary + controllability objective biases toward *agent-like* factors. What does this suggest about which internet video is useful for robot-relevant world models — and what failure would you predict on video of mostly-static scenes with moving shadows?
+
+**23.6 (implement)** Run the micro-Dreamer. Log, per epoch, (a) imagined return (what the policy believes) and (b) real evaluation return. Plot both: the gap *is* model exploitation, live. Add an ensemble of 3 dynamics models and penalize imagined reward by their disagreement (Chapter 14/15's epistemic penalty); show the gap narrows and final real performance changes — report in which direction, and argue why either sign is defensible.
+
+**23.7 (implement)** The horizon ablation: H ∈ $\{5, 15, 50, 100\}$ on the micro-Dreamer, 5 seeds. Plot final real return vs. H and dreamed-vs-real gap vs. H. Then add a tiny critic (regress V on dreamed λ-returns; bootstrap the dream objective at H) and show it rescues H = 5 performance to near H = 15 levels — the critic is doing exactly what Section 4 says it does.
+
+**23.8 (implement)** Distractor tax, measured: append 8 dimensions of autocorrelated noise (an AR(1) process, unrelated to dynamics or reward) to Pendulum's observation. Retrain micro-Dreamer (whose model must predict all 11 dims) vs. a variant whose model is trained only on consistency + reward prediction in a learned 3-D latent (mini-TD-MPC). Compare real returns and model losses. You have reproduced the reconstruction-vs-task-latent axis of Section 5 in one afternoon.
+
+**23.9 (extend)** Dream-based exploration (Plan2Explore in miniature): using your 3-model ensemble from 23.6, replace the reward head's output with *ensemble disagreement* as the imagined objective, train the actor to seek it, run the resulting explorer in the real environment for 4,000 steps, then retrain the task policy on the enriched buffer. Compare against random-collection micro-Dreamer at equal real-step budgets. Where in the state space did the explorer's data concentrate, and did the task policy benefit?
+
+**23.10 (research)** The contact-fidelity gap: world models excel at locomotion and struggle where dynamics are stiff, discontinuous, and partially observed (in-hand manipulation — Chapter 22's Dactyl domain). Diagnose why each mainline design (RSSM-Gaussian, discrete tokens, diffusion frames, DINO features) is poorly matched to contact events, then propose one architectural commitment (hybrid discrete-continuous latents for contact modes? event-triggered time discretization? force-conditioned heads?) with a falsifiable prediction on a specific benchmark. Then survey what exists — tactile-conditioned world models are an active, thin literature — and note whether your proposal is taken.

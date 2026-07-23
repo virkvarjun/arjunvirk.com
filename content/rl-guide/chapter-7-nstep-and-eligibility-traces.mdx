@@ -1,0 +1,209 @@
+Chapters 5 and 6 built two ways of estimating value that sit at opposite ends of a spectrum. Monte Carlo waits for the whole return: unbiased, high variance, credit reaches back through an entire episode at once. TD(0) looks one step ahead and bootstraps: biased, low variance, credit crawls backward one state per visit. Framed that way, an obvious question writes itself: *why one step or all steps — why not $n$ steps?* And having asked it: *why any single $n$ — why not a weighted blend of all of them?*
+
+This chapter answers both questions. The first gives **n-step methods**, a dial between TD and MC whose optimal setting is almost never at either end — a fact with consequences all the way up to modern deep RL, where "multi-step returns" are a standard ingredient of Rainbow, R2D2, and MuZero. The second gives the **λ-return** and its beautiful computational twin, **eligibility traces**: a mechanism that achieves the blended forward-looking update by, instead, looking *backward* — marking recently visited states as eligible for credit and broadcasting each TD error to all of them at once. The forward and backward views are provably equivalent, and the equivalence is one of the most elegant results in classical RL.
+
+## 1. n-Step TD Prediction
+
+Define the **n-step return**: truncate the real reward sequence after $n$ steps and patch the tail with the current value estimate,
+
+$$
+G_{t:t+n} \;=\; R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n V_{t+n-1}(S_{t+n}),
+$$
+
+with the convention that if the episode ends before $t+n$, the return is just the ordinary full return (no bootstrap — there is nothing left to guess). The subscript on $V_{t+n-1}$ marks *which version* of the estimates supplies the bootstrap — the most recent one available. Special cases: $n = 1$ recovers the TD(0) target $R_{t+1} + \gamma V(S_{t+1})$; $n = \infty$ (or $n \ge T - t$) recovers the Monte Carlo target $G_t$. The **n-step TD** update is the template as always:
+
+$$
+V_{t+n}(S_t) \;=\; V_{t+n-1}(S_t) + \alpha \left[ G_{t:t+n} - V_{t+n-1}(S_t) \right].
+$$
+
+Read the timing honestly: the update for the state visited at time $t$ can only be made at time $t + n$, once the $n$ rewards are in hand. n-step methods are therefore $n$ steps *late* — a real cost at large $n$ (and the first appearance of a theme: better targets take longer to construct).
+
+Why would an intermediate $n$ ever beat both ends? Variance: each additional real reward folds another transition's noise into the target, so variance grows with $n$. Bias: the bootstrap term $\gamma^n V(S_{t+n})$ carries the current estimate's error, but *discounted by $\gamma^n$* — bias shrinks geometrically with $n$. Small $n$ = high bias, low variance; large $n$ = the reverse; the sweet spot balances them and depends on the problem, the amount of data, and how wrong $V$ currently is. There is also a guarantee worth knowing, the **error-reduction property**: the worst-case error of the *expected* n-step return is at most $\gamma^n$ times the worst-case error of the current estimate,
+
+$$
+\max_s \left| \E_\pi\left[ G_{t:t+n} \mid S_t = s \right] - V^\pi(s) \right|
+\;\le\;
+\gamma^n \max_s \left| V(s) - V^\pi(s) \right|,
+$$
+
+which follows by unrolling the Bellman operator $n$ times (it is the contraction property compounded — Exercise 7.3). Every $n$ works asymptotically; the fight is over finite-sample efficiency.
+
+The classic demonstration is the **19-state random walk** (S&B Example 7.1): states $1..19$ in a row, start at 10, moves left/right with equal probability, terminate off either end with reward $-1$ (left) or $+1$ (right), γ = 1, true values linear from $-0.9$ to $+0.9$. Sweep $n$ and α, run 10 episodes, measure value error. The result, reproduced by the code in Section 6: $n = 1$ learns too locally (information from the terminals crawls one state per episode), large $n$ thrashes with variance, and $n \approx 4$–$8$ wins decisively. Neither pure method is ever the right answer on this problem — the spectrum's interior is where the action is.
+
+## 2. n-Step Control and the Off-Policy Toll
+
+Control follows mechanically: define the n-step return on action values,
+
+$$
+G_{t:t+n} \;=\; R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n Q_{t+n-1}(S_{t+n}, A_{t+n}),
+$$
+
+and update $Q(S_t, A_t)$ toward it — **n-step SARSA**. The n-step advantage is often dramatic in control: after a single rewarding episode, one-step SARSA improves only the *last* action's value, while n-step SARSA lifts the last $n$ of them — credit reaches $n$ times deeper per episode.
+
+But now the bill that Q-learning dodged in Chapter 6 arrives. The n-step target contains actions $A_{t+1}, \dots, A_{t+n-1}$ *sampled from the behavior policy* — so learning off-policy about π from behavior $b$ requires the importance-sampling correction over exactly those steps:
+
+$$
+\rho_{t+1:t+n-1} \;=\; \prod_{k=t+1}^{t+n-1} \frac{\pi(A_k \mid S_k)}{b(A_k \mid S_k)},
+$$
+
+multiplying the update. Everything Chapter 5 taught about ratio products — variance compounding per step, zeroing when the behavior deviates — applies with $n$ in the exponent's role: mild at $n = 2$, painful at $n = 10$, and this is precisely why one-step methods dominate off-policy practice. The **tree-backup algorithm** (Precup, Sutton & Singh 2000) escapes ratios entirely by branching, at every intermediate step, over *all* actions weighted by π — an n-step generalization of Expected SARSA whose price is that the effective backup shrinks toward zero as π diverges from the data. (Deep-RL systems like Rainbow mostly just use *uncorrected* n-step returns off-policy — biased, technically unsound, empirically tolerable at small $n$; you should know that it is a shortcut, and know its name when it fails.)
+
+<Check q="Why does one-step Q-learning need no importance-sampling ratio, while 3-step Q-learning over off-policy data needs ratios for the middle actions but still not for the final max?">
+The correction is needed wherever the target's construction *sampled from the wrong policy*. A one-step target $R + \gamma \max_a Q(S', a)$ samples nothing downstream from any policy — the max is computed, not sampled. A 3-step target contains $R_{t+2}$ and $R_{t+3}$, which exist because the behavior chose $A_{t+1}$ and $A_{t+2}$; those choices tilt the data away from the target policy's distribution and must be reweighted (or handled by tree-backup's expectations). The final $\max_a$ is again computed, not sampled — no ratio.
+</Check>
+
+## 3. The λ-Return: Averaging All the n's
+
+Any weighted average of different n-step returns is also a valid target (a convex combination of estimators whose expectations all improve on $V$ is such an estimator too) — such blends are called **compound updates**. The **λ-return** is the compound update with geometric weights:
+
+$$
+G_t^\lambda \;=\; (1 - \lambda) \sum_{n=1}^{\infty} \lambda^{n-1}\, G_{t:t+n},
+$$
+
+with $\lambda \in [0, 1]$; the prefactor $(1-\lambda)$ normalizes the weights $\lambda^{n-1}$ to sum to 1. For an episodic task terminating at $T$, all terms with $n \ge T - t$ equal the full return $G_t$, so the tail collapses:
+
+$$
+G_t^\lambda \;=\; (1 - \lambda) \sum_{n=1}^{T-t-1} \lambda^{n-1}\, G_{t:t+n} \;+\; \lambda^{T-t-1}\, G_t .
+$$
+
+Boundary check: at $\lambda = 0$, only $n=1$ survives — TD(0). At $\lambda = 1$, only the final term survives — Monte Carlo. The λ-return interpolates the entire spectrum with one knob, and its "effective lookahead" is the mean of the geometric distribution, $\frac{1}{1-\lambda}$ steps ($\lambda = 0.9 \approx$ 10-step lookahead) — the same algebra as γ's effective horizon, which is not a coincidence: both are geometric attention envelopes over time.
+
+Why geometric weights rather than, say, uniform-up-to-$n$? Partly for the theory (geometric weighting is what makes the backward view of the next section exactly equivalent), but mostly for the computation: geometric decay is the unique choice that can be maintained *recursively* with $\mathcal{O}(1)$ state per learned parameter — you cannot incrementally maintain "uniform over the last 8 returns" without a buffer, but you can maintain a geometric one with a single decaying scalar. The **offline λ-return algorithm** — wait until episode end, compute every $G_t^\lambda$, update all states — performs on the random walk almost identically to the best n-step method at each equivalent setting, with λ subsuming the choice of $n$. But it is thoroughly non-incremental: every update waits for termination, worse even than MC in bookkeeping. Enter the algorithmic miracle.
+
+## 4. TD(λ): the Backward View
+
+The λ-return looks *forward* from each state, waiting for futures to arrive. **TD(λ)** produces the same total learning by looking *backward*: it maintains, for every state, an **eligibility trace** — a decaying memory of how recently and frequently the state was visited — and, at every step, broadcasts the current one-step TD error to *all* states in proportion to their eligibility.
+
+$$
+e_t(s) \;=\;
+\begin{cases}
+\gamma \lambda\, e_{t-1}(s) + 1 & \text{if } s = S_t \\
+\gamma \lambda\, e_{t-1}(s) & \text{otherwise,}
+\end{cases}
+\qquad\text{(accumulating traces; } e_0 \equiv 0\text{)}
+$$
+
+$$
+\delta_t \;=\; R_{t+1} + \gamma V(S_{t+1}) - V(S_t),
+\qquad
+V(s) \leftarrow V(s) + \alpha\, \delta_t\, e_t(s) \;\;\text{for all } s.
+$$
+
+Every state you touched recently is "eligible" for a share of today's surprise, with shares decaying by $\gamma\lambda$ per step of distance. λ = 0 zeroes all traces except the current state's — TD(0), hence the name. λ = 1 with γ = 1 keeps full credit forever — and indeed TD(1) is (an incremental, every-visit implementation of) Monte Carlo.
+
+**Why this equals the forward view.** The claim (exact in the offline/batch setting where updates are accumulated during the episode and applied at its end): the sum of TD(λ)'s increments to $V(s)$ over an episode equals the sum of forward-view increments $\alpha [G_t^\lambda - V(S_t)]$ over the visits to $s$. The engine of the proof is the telescoping identity that expands the λ-return error as a discounted sum of one-step errors. Compute, assuming $V$ held fixed during the episode:
+
+$$
+G_t^\lambda - V(S_t) \;=\; \sum_{k=t}^{T-1} (\gamma\lambda)^{k-t}\, \delta_k .
+$$
+
+(Derivation: write $G_t^\lambda = V(S_t) + \sum_k (\gamma\lambda)^{k-t}\delta_k$ by induction — substitute the recursion $G_t^\lambda = R_{t+1} + \gamma V(S_{t+1}) + \gamma\lambda\left[ G_{t+1}^\lambda - V(S_{t+1}) \right]$, which itself follows from splitting the defining sum; Exercise 7.5 walks every step.) So the forward update at $t$ is a $(\gamma\lambda)$-discounted sum of *future* one-step errors. Now swap the order of summation over the episode: instead of "each visit collects its future δ's," write "each δ pays out to past visits, discounted by distance" — and the payout schedule to state $s$ at time $k$ is exactly $\sum_{t \le k,\, S_t = s} (\gamma\lambda)^{k-t}$, which is precisely the accumulating trace $e_k(s)$. Forward and backward are the same double sum, sliced along the other axis. $\blacksquare$
+
+The backward view's virtues are entirely practical, and entirely decisive: it is **online** (learning at every step, not at episode end), **incremental** ($\mathcal{O}(\lvert \text{active traces} \rvert)$ per step), **causal** (never touches the future), and it works in continuing tasks where "episode end" never comes. It is one of the great algorithm-engineering moves in the field: an acausal specification implemented exactly by a causal mechanism.
+
+Two refinements you should know exist. **Replacing traces** reset a revisited state's trace to 1 instead of incrementing ($e \leftarrow 1$), taming the inflation that accumulating traces suffer on quick revisits (Singh & Sutton 1996 analyze when each wins). And exact *online* equivalence with the λ-return — the classical equivalence above is exact only offline — was achieved by **true online TD(λ)** (van Seijen & Sutton 2014), using "Dutch traces" and a slightly modified update; it is the theoretically clean modern form, at modest extra cost, and empirically a bit better than classical TD(λ) with function approximation.
+
+## 5. SARSA(λ)
+
+Control with traces: one trace per state–action pair, TD error from the SARSA target, broadcast as before.
+
+<Pseudocode title="SARSA(λ) with accumulating traces (tabular)">
+<L>Initialize $Q(s,a)$ arbitrarily; $e(s,a) \leftarrow 0$ for all $s, a$</L>
+<L>For each episode:</L>
+<L i={1}>Reset $e \leftarrow 0$; initialize $S$; choose $A$ from ε-greedy($Q$)</L>
+<L i={1}>For each step until terminal:</L>
+<L i={2}>Take $A$, observe $R, S'$; choose $A'$ from ε-greedy($Q$)</L>
+<L i={2}>$\delta \leftarrow R + \gamma Q(S', A') - Q(S, A)$ $\quad$ (target 0 at terminal)</L>
+<L i={2}>$e(S, A) \leftarrow e(S, A) + 1$</L>
+<L i={2}>For all $s, a$: $\;\; Q(s,a) \leftarrow Q(s,a) + \alpha\, \delta\, e(s,a)$; $\;\; e(s,a) \leftarrow \gamma \lambda\, e(s,a)$</L>
+<L i={2}>$S \leftarrow S'$; $A \leftarrow A'$</L>
+</Pseudocode>
+
+The payoff is the control version of the credit-depth argument. Picture the gridworld agent that wanders for 40 steps and finally reaches the goal. One-step SARSA improves the final action. n-step SARSA improves the last $n$. SARSA(λ) improves *every action of the episode*, each in proportion to $(\gamma\lambda)^{\text{steps-until-goal}}$ — a smooth exponential fade of credit along the whole trajectory, in one pass, online. For Watkins' Q(λ) — the off-policy version — traces must be *cut to zero* whenever the behavior takes a non-greedy action (the trajectory beyond that point is no longer evidence about the greedy policy), which in ε-greedy practice truncates traces every $\sim 1/\epsilon$ steps and blunts much of the benefit: the off-policy toll of Section 2, paid in a different currency.
+
+## 6. Worked Example: the 19-State Random Walk
+
+The spectrum, measured. This code runs n-step TD across $n$ and α (the λ version is Exercise 7.7):
+
+```python
+import numpy as np
+
+NS = 19                                  # states 1..19; 0 and 20 terminal
+TRUE_V = np.arange(-9, 10) / 10.0        # true values: -0.9 ... 0.9
+
+def run_nstep(n, alpha, episodes=10, seed=0):
+    rng = np.random.default_rng(seed)
+    V = np.zeros(NS + 2)                 # V[0], V[20] terminal = 0
+    for _ in range(episodes):
+        s, t, T = 10, 0, 10**9
+        states, rewards = [s], [0.0]
+        while True:
+            if t < T:
+                s2 = states[t] + (1 if rng.random() < 0.5 else -1)
+                r = 1.0 if s2 == 20 else (-1.0 if s2 == 0 else 0.0)
+                states.append(s2); rewards.append(r)
+                if s2 in (0, 20):
+                    T = t + 1
+            tau = t - n + 1              # time whose estimate updates now
+            if tau >= 0:
+                G = sum(rewards[tau + 1 : min(tau + n, T) + 1])   # gamma = 1
+                if tau + n < T:
+                    G += V[states[tau + n]]
+                if states[tau] not in (0, 20):
+                    V[states[tau]] += alpha * (G - V[states[tau]])
+            if tau == T - 1:
+                break
+            t += 1
+    return np.sqrt(np.mean((V[1:20] - TRUE_V) ** 2))
+
+for n in [1, 2, 4, 8, 16, 64]:
+    best = min((np.mean([run_nstep(n, a, seed=s) for s in range(100)]), a)
+               for a in np.linspace(0.1, 1.0, 10))
+    print(f"n={n:3d}  best alpha={best[1]:.1f}  RMS error={best[0]:.3f}")
+```
+
+Output (100 runs, 10 episodes each): $n=1$ lands at RMS error 0.21 (best α = 0.8), $n=2$ at 0.16, $n=4$ at 0.16, then errors climb — 0.19 at $n=8$, 0.23 at $n=16$, 0.41 at $n=64$ as the targets go full Monte Carlo. Notice also how the best α shrinks as $n$ grows (0.8 → 0.1): noisier targets demand smaller steps. The U-shape is the chapter's thesis in one table: **the interior of the spectrum wins**, and the deep-RL folklore of "use 3–5 step returns" (Rainbow's $n=3$, R2D2's $n=5$) is this table, rediscovered at scale with replay buffers attached.
+
+<Pitfall title="Common pitfalls — traces and multi-step targets">
+**Stale-value bias in the equivalence.** The forward-backward identity assumed $V$ fixed during the episode; real online TD(λ) updates as it goes, so the classical equivalence is approximate (true online TD(λ) restores it exactly). Practical consequence: with large α and λ near 1, the approximation degrades first. **Trace explosions.** Accumulating traces on states revisited faster than $1/(\gamma\lambda)$ grow beyond 1 and can destabilize learning — use replacing traces or lower λ. **Forgetting to reset traces between episodes** leaks credit across trajectories — a silent, ugly bug. **Uncorrected off-policy multi-step returns** (the deep-RL shortcut) have a fixed point that is *not* $Q^*$ when behavior and target diverge substantially; small $n$, and recency of the replayed data, are what keep the bias tolerable. **Cost.** Naive tabular TD(λ) touches every state per step; real implementations keep a short list of active traces (those above a tiny threshold), restoring $\mathcal{O}(1/(1-\gamma\lambda))$ cost.
+</Pitfall>
+
+## 7. Summary
+
+- The **n-step return** $G_{t:t+n}$ patches $n$ real rewards with a bootstrapped tail: $n=1$ is TD(0), $n=\infty$ is MC. Bias shrinks like $\gamma^n$ (error-reduction property); variance grows with $n$; intermediate $n$ wins in practice — the basis of multi-step returns throughout deep RL.
+- Off-policy n-step targets need importance ratios over the sampled intermediate actions (or tree-backup's expectations); this is where off-policy learning's variance toll is really paid.
+- The **λ-return** averages all n-step returns with geometric weights $(1-\lambda)\lambda^{n-1}$; effective lookahead $\frac{1}{1-\lambda}$; endpoints recover TD(0) and MC.
+- **TD(λ)** implements the forward-looking λ-return with a backward mechanism: eligibility traces $e \leftarrow \gamma\lambda e$ (+1 at visits) plus broadcast of each δ. Equivalence rests on the telescoping identity $G_t^\lambda - V(S_t) = \sum_k (\gamma\lambda)^{k-t} \delta_k$ — a double sum sliced two ways.
+- Variants: replacing traces (bounded), true online TD(λ) (exact online equivalence), SARSA(λ) (deep credit for control), Watkins' Q(λ) (traces cut at non-greedy actions).
+- One mental model to keep: γ sets how far *value* looks ahead; λ (or $n$) sets how far *credit* reaches back.
+
+## 8. Papers & Further Reading
+
+- **Sutton, "Learning to Predict by the Methods of Temporal Differences" (Machine Learning, 1988)** — [doi.org/10.1007/BF00115009](https://doi.org/10.1007/BF00115009). TD(λ) and traces are here from the start — the λ came before the 0.
+- **Sutton & Barto, Chs. 7 & 12** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). The n-step chapter and the full traces chapter (including the λ-return/trace equivalence done slowly, replacing traces, and Watkins' Q(λ)).
+- **Singh & Sutton, "Reinforcement Learning with Replacing Eligibility Traces" (Machine Learning, 1996)** — [doi.org/10.1007/BF00114726](https://doi.org/10.1007/BF00114726). When and why replacing beats accumulating, with the first-visit/every-visit MC connection.
+- **van Seijen & Sutton, "True Online TD(λ)" (ICML, 2014)** — [proceedings.mlr.press/v32/seijen14.html](https://proceedings.mlr.press/v32/seijen14.html). Exact online equivalence via Dutch traces; the modern default form of TD(λ).
+- **Precup, Sutton & Singh, "Eligibility Traces for Off-Policy Policy Evaluation" (ICML, 2000)** — [scholarworks.umass.edu (PDF)](https://scholarworks.umass.edu/cgi/viewcontent.cgi?article=1079&context=cs_faculty_pubs). Per-decision importance sampling and tree-backup: the off-policy side of this chapter.
+- **Munos, Stepleton, Harutyunyan & Bellemare, "Safe and Efficient Off-Policy Reinforcement Learning" (NeurIPS, 2016)** — [arxiv.org/abs/1606.02647](https://arxiv.org/abs/1606.02647). Retrace(λ): clipped importance weights making off-policy traces both convergent and low-variance — the modern synthesis of this chapter's two halves, used inside several deep agents.
+
+## 9. Exercises
+
+**7.1 (understand)** For γ = 1, λ = 0.5, write out the weights the λ-return places on the 1-, 2-, 3-step returns and (in an episode with $T - t = 4$) the final Monte Carlo return. Verify they sum to 1, and compute the effective lookahead $\frac{1}{1-\lambda}$.
+
+**7.2 (understand)** A robot's episodes last ~1,000 steps, rewards appear only at the end, and the state is nearly Markov. Argue from this chapter's bias/variance accounting for a concrete choice of λ (or $n$). How does your answer change if the reward is dense but the state representation is badly non-Markov?
+
+**7.3 (derive)** Prove the error-reduction property: $\max_s \lvert \E_\pi[G_{t:t+n} \mid S_t = s] - V^\pi(s) \rvert \le \gamma^n \max_s \lvert V(s) - V^\pi(s) \rvert$. *Hint: the expected n-step return is $(\mathcal{T}^\pi)^n V$ evaluated at $s$... almost — make the "almost" precise, then apply the contraction property $n$ times.*
+
+**7.4 (derive)** Derive the recursion $G_t^\lambda = R_{t+1} + \gamma V(S_{t+1}) + \gamma \lambda \left[ G_{t+1}^\lambda - V(S_{t+1}) \right]$ from the definition of $G_t^\lambda$ as the geometric mixture. (Split the sum over $n$ into the $n = 1$ term and the rest; reindex.)
+
+**7.5 (derive)** Using Exercise 7.4, prove by induction the telescoping identity $G_t^\lambda - V(S_t) = \sum_{k=t}^{T-1} (\gamma\lambda)^{k-t} \delta_k$ (values held fixed), then carry out the summation-order swap that establishes the offline forward–backward equivalence, identifying exactly where the accumulating-trace formula appears.
+
+**7.6 (derive)** Show that TD(1) with accumulating traces, applied offline, produces exactly the every-visit Monte Carlo updates (γ = 1 case). Where does the correspondence pick "every-visit" over "first-visit," and what trace variant would you need for first-visit behavior? (Cross-check with Singh & Sutton 1996.)
+
+**7.7 (implement)** Extend the random-walk code to (a) offline λ-return updates and (b) online TD(λ) with accumulating traces. Sweep λ ∈ $\{0, 0.4, 0.8, 0.9, 0.95, 1\}$ × α and reproduce the U-shape. How closely does TD(λ) track the offline λ-return at small vs. large α? (You are measuring the stale-value approximation directly.)
+
+**7.8 (implement)** Implement SARSA(λ) on cliff walking (Chapter 6's environment) with λ ∈ $\{0, 0.5, 0.9\}$. Compare episodes-to-solve against one-step SARSA and visualize, after the *first* successful episode, which state–action values changed — the exponential credit fade made visible.
+
+**7.9 (implement)** Implement Watkins' Q(λ) (cut traces at non-greedy actions) and naive Q(λ) (don't cut) on cliff walking with ε = 0.1. Compare final policies and stability, and explain any naive-Q(λ) bias you detect in terms of Section 2's uncorrected-return discussion.
+
+**7.10 (research)** Retrace(λ) multiplies traces by $\lambda \min(1, \rho_t)$ — clipped importance weights. Read Munos et al. (2016) and answer: what precisely is gained over (a) full IS ratios, (b) tree-backup, and (c) uncorrected returns — and what is the fixed point when the behavior policy is very far from the target? Sketch the variance/contraction trade-off their Theorem 1 formalizes.

@@ -1,0 +1,168 @@
+In late 2022, reinforcement learning — a field that had spent a decade being spectacular in simulators and marginal in products — abruptly became the finishing step of the most widely deployed AI systems ever built. The mechanism was not a new algorithm. It was a realization: a language model *is a policy* (states: the text so far; actions: the next token), "good response" is a reward too fuzzy to specify but easy to *judge*, and Chapter 12's PPO plus a learned reward model could close the gap between what next-token pretraining produces and what people actually want. InstructGPT's punchline made the economics undeniable: a 1.3B-parameter model tuned with human feedback was *preferred by humans* to the 175B-parameter base model it came from — a 100× parameter advantage erased by a training signal.
+
+This chapter teaches the full arc: reward modeling from pairwise preferences (Bradley–Terry), the RLHF/PPO recipe and the KL leash that keeps it honest, reward-model overoptimization (Goodhart's law with measured scaling laws), the elegant collapse of the whole pipeline into a single supervised loss (DPO — derived line by line), AI feedback (RLAIF, Constitutional AI), and the second act that reshaped the frontier: **RL with verifiable rewards** for reasoning — GRPO, DeepSeek-R1, and the discovery that a model rewarded only for *correct final answers* will teach itself to think longer. Every pathology in this chapter is one you have already met — reward hacking (Chapter 1), policy constraint against an anchor (Chapter 17), overoptimization of a learned model (Chapter 14) — now operating on the most capable models in existence.
+
+## 1. The Language Model as Policy
+
+Fix the MDP: a **prompt** $x$ initializes the state; each **action** is a token from a ~100k-symbol vocabulary; the state appends it; an episode is a completion $y = (y_1, \dots, y_T)$; the policy is exactly the autoregressive model $\pi_\theta(y_t \mid x, y_{1:t-1})$. Deterministic transitions (state = history), horizon a few hundred to a few thousand steps, and reward — in the classic setting — **only at the end**: a scalar judgment of the whole completion. Sparse terminal reward over a combinatorial action space: by Part III's standards, brutal. What makes it tractable is the initialization — pretraining hands you a policy already fluent in the action space, so RL here is never learning from scratch; it is *steering* a competent prior. Keep that framing; it explains most of what follows, including why the strongest regularizer in this chapter is "don't move far from where you started."
+
+Why is RL needed at all? Pretraining optimizes $\log p(\text{next token})$ on internet text — an objective that makes the model an excellent *simulator of the training distribution*, which is not the same as helpful, honest, or harmless (the distribution contains confident nonsense, and imitating the *average* author caps quality at mediocrity). Supervised fine-tuning (SFT) on demonstrations helps but inherits Chapter 16's limits: it clones demonstrators, it cannot express "this response is *better* than that one," and its loss penalizes all deviations equally when what we care about is a ranking. Preferences are the natural currency of "better" — and preferences need RL machinery (or its distilled equivalents) to optimize against.
+
+## 2. Reward Modeling: from Comparisons to a Scalar
+
+Humans are unreliable at scoring ("rate this 1–10") and reliable at *comparing* ("which is better?"). So the data is comparisons: for a prompt $x$, two completions, a label for the winner: $(x, y_w, y_l)$. The bridge from comparisons to a scalar is the **Bradley–Terry model** (1952): posit a latent reward $r_\phi(x, y)$ such that
+
+$$
+\Pr\left( y_w \succ y_l \mid x \right) \;=\; \frac{e^{r_\phi(x, y_w)}}{e^{r_\phi(x, y_w)} + e^{r_\phi(x, y_l)}} \;=\; \sigma\!\left( r_\phi(x, y_w) - r_\phi(x, y_l) \right),
+$$
+
+and fit by maximum likelihood — the **reward-model loss**:
+
+$$
+L_{\mathrm{RM}}(\phi) \;=\; -\,\E_{(x, y_w, y_l)}\left[ \log \sigma\!\left( r_\phi(x, y_w) - r_\phi(x, y_l) \right) \right].
+$$
+
+Architecturally $r_\phi$ is the language model itself with the token head swapped for a scalar head, initialized from SFT weights — judging is easier when you can read. Note two properties with consequences. The loss depends only on reward *differences*: $r_\phi$ is identified up to a per-prompt constant (harmless for ranking, but absolute magnitudes across prompts mean little — normalize before RL). And the Bradley–Terry likelihood assumes preference *transitivity and consistency* that human raters violate freely (typical inter-annotator agreement sits well below 80%); the reward model launders that noise into a smooth, confident scalar. A learned $r_\phi$ is a **model of a noisy judge, not an oracle** — Chapter 14's lesson (planners exploit model error preferentially) is about to apply verbatim, with the policy as the planner.
+
+## 3. RLHF: the InstructGPT Recipe
+
+The canonical three stages (Christiano et al. 2017 built the loop for control tasks; Stiennon et al. 2020 proved it on summarization; Ouyang et al. 2022 scaled it into InstructGPT and the modern default):
+
+1. **SFT**: fine-tune the pretrained model on human demonstrations of good behavior — the initialization and the reference.
+2. **RM**: train $r_\phi$ on comparisons of the SFT model's samples (Section 2).
+3. **RL**: optimize the policy against the reward model, with a KL penalty *to the reference*:
+
+$$
+\max_\theta\; \E_{x \sim \mathcal{D},\, y \sim \pi_\theta}\Big[ r_\phi(x, y) \;-\; \beta\, \log\frac{\pi_\theta(y \mid x)}{\pi_{\mathrm{ref}}(y \mid x)} \Big],
+$$
+
+implemented as per-token KL penalties folded into PPO's rewards (plus, in InstructGPT, a mixed-in pretraining loss to arrest capability regression). The optimizer is Chapter 12's PPO essentially unchanged — value head on the LM trunk, GAE, clipped ratios — with the sequence-level reward arriving at the final token.
+
+**The KL term is not a regularizer of convenience; it is the load-bearing wall**, doing three jobs at once. It is Chapter 17 in disguise: $r_\phi$ was trained on samples from (approximately) $\pi_{\mathrm{ref}}$, so the KL leash is an *offline-RL policy constraint* keeping queries to the reward model in-distribution — release it and the policy walks $r_\phi$ into regions where its scores are fiction. It preserves the prior (fluency, knowledge, calibration) that pretraining bought and that the thin preference signal could never re-teach. And it defines the actual objective: per Chapter 13's mathematics, the optimum of this KL-regularized problem is the Boltzmann tilt
+
+$$
+\pi^*(y \mid x) \;=\; \frac{1}{Z(x)}\, \pi_{\mathrm{ref}}(y \mid x)\, e^{\, r_\phi(x, y) / \beta},
+$$
+
+— RLHF, at optimum, *reweights the reference distribution* toward reward; it does not escape it. Hold this equation; DPO is one algebraic move away from it.
+
+**Overoptimization is the disease, measured.** Push PPO long enough and proxy reward $r_\phi$ climbs while *true* quality (gold judges) peaks and then falls — Goodhart's law with error bars. Gao, Schulman & Hilton (2023) quantified it with synthetic gold models: the true-reward peak follows smooth scaling laws in RM size and data (bigger RMs tolerate more optimization before the rot), and the divergence grows with the policy's KL from the reference — the leash length literally parameterizes the Goodhart curve. Practice therefore monitors KL like a vital sign, early-stops on gold evaluations, retrains RMs on fresh policy samples (the Dyna-flavored loop: model, optimize, re-collect, re-model), and ensembles or regularizes RMs. The result held up socially as well as technically: InstructGPT's 1.3B-over-175B preference win, and the pattern — *RL-tuned small model beats raw huge model* — replicated everywhere, making RLHF the cheapest capability multiplier in the stack.
+
+<Check q="Why does the KL penalty use the reference model rather than, say, an entropy bonus (Chapter 13) to keep the policy stochastic? What does the reference anchor provide that entropy cannot?">
+Entropy regularization pulls toward the *uniform* distribution over tokens — maximal randomness, which for language is gibberish; it encodes no knowledge of which of the 100k tokens are sensible. The KL-to-reference pulls toward a *specific, highly structured* distribution containing everything pretraining and SFT learned — grammar, facts, style. It is a prior, not a randomizer: the objective's optimum (the Boltzmann tilt) is "reference, reweighted," guaranteeing the policy stays a language model. Entropy would guarantee only that it stays random. (Same mathematics, different anchor — soft RL tilts uniform; RLHF tilts π_ref.)
+</Check>
+
+## 4. DPO: the Pipeline Collapses into a Loss
+
+Direct Preference Optimization (Rafailov et al., 2023) begins from the closed-form optimum above and performs one inversion. Solve the Boltzmann tilt for the reward:
+
+$$
+r(x, y) \;=\; \beta \log \frac{\pi^*(y \mid x)}{\pi_{\mathrm{ref}}(y \mid x)} \;+\; \beta \log Z(x).
+$$
+
+Substitute into the Bradley–Terry likelihood — and watch the intractable $Z(x)$ **cancel** in the difference (both completions share the prompt):
+
+$$
+L_{\mathrm{DPO}}(\theta) \;=\; -\,\E_{(x, y_w, y_l)} \left[ \log \sigma\!\left( \beta \log\frac{\pi_\theta(y_w \mid x)}{\pi_{\mathrm{ref}}(y_w \mid x)} \;-\; \beta \log\frac{\pi_\theta(y_l \mid x)}{\pi_{\mathrm{ref}}(y_l \mid x)} \right) \right].
+$$
+
+Read what happened: the policy itself is the reward model — its log-ratio against the reference is an "implicit reward" — and fitting preferences directly *is* solving the KL-regularized RL problem, at optimum, with no sampling, no reward network, no PPO, no value head. Four log-probabilities per example and a sigmoid. The gradient is instructive: it raises the likelihood of $y_w$ and lowers $y_l$, *weighted by how wrong the implicit reward currently is* — a confidence-weighted contrastive update, which is exactly where it differs from naive "SFT on winners, unlearn losers."
+
+The fine print, honestly stated. DPO optimizes on the *fixed preference dataset's* distribution — it is the offline, off-policy member of the family, and everything Chapter 17 taught applies: no fresh samples means no exploration of the policy's own failure modes, and the implicit reward is queried off-distribution as the policy drifts (one measurable symptom: DPO training often *lowers* the absolute likelihood of both $y_w$ and $y_l$ while widening their gap — the probability mass leaks somewhere unmonitored). Variants patch specific failure modes — IPO (a squared objective against overfitting confident preferences), KTO (binary desirable/undesirable labels instead of pairs), SimPO (reference-free, length-normalized) — and *iterated* DPO (sample fresh pairs from the current policy, judge, retrain) recovers much of the on-policy benefit at a fraction of PPO's complexity. The practical scoreboard, several years in: DPO-family dominates open-weight post-training (simplicity, stability, no RM serving); on-policy PPO-style RLHF retains the edge at the frontier where reward hacking pressure is highest and fresh-sample correction matters. The theoretical relationship, though, is settled and worth stating cleanly: **DPO is not an alternative to RLHF; it is RLHF's optimum, reparameterized.**
+
+## 5. RLAIF and Constitutional AI
+
+Human preference labels are the pipeline's scarcest input, and the judge is also its lowest-bandwidth component. **RLAIF** substitutes an LLM as the preference judge — feed the judge a rubric and two completions, harvest comparisons at machine scale — and works startlingly well (Lee et al., 2023, found AI labels roughly matching human labels for summarization RLHF), because judging is easier than generating (Chapter 25 returns to this asymmetry as "the verifier's advantage"). **Constitutional AI** (Bai et al., 2022) structures the judge: a written list of principles (the constitution) drives (1) a supervised phase — the model critiques and revises its own harmful outputs against the principles — and (2) an RLAIF phase with the constitution steering the AI judge. The appeal is legibility and scale (the values live in an auditable document, not in ten thousand rating sessions); the caveat is inheritance — the AI judge's biases (verbosity preference, sycophancy toward confident phrasing, self-preference) become the reward's biases, then the policy's, laundered through one more layer of indirection. Reward hacking does not disappear when the judge is a model; it gets a bigger attack surface.
+
+## 6. Verifiable Rewards and the Reasoning Turn
+
+The chapter's second act begins with a different reward source. For mathematics, code, and formal tasks, the reward needs no model and no judge: **check the answer** (unit tests pass; the boxed number equals the key). This is **RLVR** — RL with verifiable rewards — and it changes the game because the reward *cannot be hacked in the Goodhart sense*: it is ground truth (what remains hackable is its *coverage* — reward the final answer only, and unverifiable side effects like unreadable or lucky-guess reasoning go unpriced).
+
+**GRPO** — group relative policy optimization (Shao et al., 2024, DeepSeekMath) — is the algorithm that carried this regime to scale, and it is a pleasingly direct descendant of things you know. Drop PPO's learned critic entirely (for sparse terminal rewards over long token sequences, a value head is expensive and mediocre). Instead, for each prompt sample a **group** of $G$ completions and use the group's statistics as the baseline:
+
+$$
+\hat{A}_i \;=\; \frac{r_i - \mathrm{mean}\left( r_1, \dots, r_G \right)}{\mathrm{std}\left( r_1, \dots, r_G \right)},
+$$
+
+every token of completion $i$ inheriting $\hat A_i$, optimized under PPO's clipped ratio plus a KL term to the reference. Recognize the pieces: it is REINFORCE with a *sampled per-prompt baseline* (Chapter 11's variance reduction, implemented by Monte Carlo over a group rather than a learned $V$), wrapped in Chapter 12's trust-region clothing. The group baseline is exactly calibrated per prompt (easy prompts don't drown hard ones), costs no parameters, and fits the "many samples per prompt" regime that verifiable tasks invite.
+
+**DeepSeek-R1** (2025) supplied the era's headline scientific result. **R1-Zero**: take a strong base model, apply GRPO with *only* verifiable rewards (accuracy + format) — no SFT, no preference data, no process supervision — and watch, over training, the model *spontaneously lengthen its chain of thought*, develop verification and backtracking behaviors ("wait — let me re-examine this step"), and climb from 15.6% to 71% on AIME mathematics. Nobody rewarded thinking longer; longer thinking *pays* under an accuracy-only reward, and the optimizer found it — test-time compute emerging as a *learned resource allocation*, arguably the cleanest large-scale instance of RL discovering an unprogrammed strategy since move 37. (The deployable R1 wraps this in a multi-stage pipeline — cold-start SFT for readability, then reasoning RL, then general RLHF — because R1-Zero's raw traces mixed languages and read like scratch paper: capability and legibility are different rewards.) The same regime powers the o-series line of reasoning models and the open replications (Tülu 3's RLVR among them), and its live research questions are this book's questions in new denominations: outcome vs. **process** rewards (score the final answer, or each step? — sparse-vs-dense reward design, Chapter 1, with process reward models re-importing Goodhart); entropy collapse and diversity loss under heavy optimization (Chapter 13's concerns at token scale); and length bias (models discovering that *longer* correlates with reward — a shaping artifact, promptly hacked).
+
+One more honest frontier note: what does RL *add* to the base model? A running debate — sharpening-vs-discovery — asks whether RLVR mostly *concentrates probability* on solution paths the base model could already sample (pass@k for large k sometimes barely moves while pass@1 soars) or genuinely extends capability. The truth appears mixed and task-dependent, and the question matters for how much headroom this recipe has; it is a good paper-reading lens for whatever the frontier looks like when you read this.
+
+## 7. The DPO Loss, Verified in Miniature
+
+The chapter's one code block: DPO on synthetic logits, checking the two claims that matter — the gradient prefers winners, and β controls the leash:
+
+```python
+import torch
+import torch.nn.functional as F
+
+def dpo_loss(logp_w, logp_l, ref_w, ref_l, beta):
+    """logp_*: policy sum-log-probs of chosen/rejected; ref_*: reference's."""
+    margin = beta * ((logp_w - ref_w) - (logp_l - ref_l))
+    return -F.logsigmoid(margin).mean()
+
+# toy: 2 completions, 1 param per completion (log-prob directly learnable)
+torch.manual_seed(0)
+logp = torch.tensor([-5.0, -5.0], requires_grad=True)   # policy starts at ref
+ref  = torch.tensor([-5.0, -5.0])
+opt = torch.optim.SGD([logp], lr=0.5)
+
+for step in range(200):
+    loss = dpo_loss(logp[0], logp[1], ref[0], ref[1], beta=0.1)
+    opt.zero_grad(); loss.backward(); opt.step()
+
+iw = 0.1 * (logp - ref)          # implicit rewards
+print(f"implicit reward (winner, loser): {iw[0]:.2f}, {iw[1]:.2f}")
+print(f"P(win) under Bradley-Terry now: {torch.sigmoid(iw[0]-iw[1]):.3f}")
+```
+
+Run it and the implicit rewards separate symmetrically (±0.40 after 200 steps; Bradley–Terry win probability 0.69 and climbing). Now rerun with `beta=1.0`: a comparable preference fit (win probability 0.63) is reached with the log-probs having moved only ±0.26 from the reference — versus ±4.0 at β = 0.1 (divide the implicit reward by β to see the raw movement). Fifteen times less drift for the same ranking: β is the exchange rate between preference-fitting and leash-length, in four lines you can inspect.
+
+<Pitfall title="Common pitfalls — RL on language models">
+**KL is a vital sign, not a decoration**: track per-token KL to reference; a run whose KL grows without corresponding gold-eval gains is optimizing fiction (Section 3's Goodhart curves). **Length is the universal hack**: preference judges (human and AI) favor longer answers; unnormalized rewards teach bloat — length-control or normalize, then re-audit. **The RM's blind spots are the policy's playground**: adversarially probe reward models with policy samples throughout training, not just at RM-training time. **In DPO, monitor absolute log-probs** of both chosen and rejected — the gap widening while both collapse signals mass leaking to off-dataset behavior. **Verifiers have loopholes too**: unit tests that miss edge cases, answer-matching that accepts guessed formats — RLVR's "unhackable" reward is only as complete as its checker (special characters in the checker's parser are a classic). **Frozen judges drift**: an RLAIF judge fixed while the policy improves becomes an increasingly out-of-distribution evaluator — refresh it (the Dyna loop again). **And the oldest rule**: eval on held-out *human* judgment or ground truth, never on the signal you optimized.
+</Pitfall>
+
+## 8. Summary
+
+- An LLM is a policy over tokens; pretraining supplies a fluent prior; RL steers it. The steering signal: **preferences** (RM via Bradley–Terry), then PPO on $r_\phi - \beta \KL(\pi \| \pi_{\mathrm{ref}})$ — the InstructGPT recipe; a 1.3B tuned model out-preferred the 175B base.
+- The KL anchor is simultaneously: offline-RL-style constraint keeping the RM in-distribution, prior preservation, and the definition of the optimum — the Boltzmann tilt $\pi^* \propto \pi_{\mathrm{ref}} e^{r/\beta}$.
+- **Overoptimization is Goodhart with scaling laws** (Gao et al.): proxy up, gold down, divergence parameterized by KL; monitor, early-stop, refresh RMs.
+- **DPO**: invert the tilt, cancel $Z(x)$ in Bradley–Terry — preference fitting *is* the KL-regularized RL optimum; offline and off-policy with the corresponding caveats; the open-weights workhorse, with iterated/on-policy variants closing the gap to PPO.
+- **RLAIF / Constitutional AI**: models as judges — scale for bias-inheritance; the constitution makes values auditable.
+- **RLVR + GRPO**: ground-truth rewards (math/code) + critic-free group-relative advantages (REINFORCE with a per-prompt Monte Carlo baseline, PPO-clipped); DeepSeek-R1-Zero showed pure outcome-reward RL *discovering* long-form reasoning, verification, and backtracking — test-time compute as a learned strategy.
+- Every pathology is a renamed old friend: reward hacking (Ch. 1), constraint-to-anchor (Ch. 17), model exploitation (Ch. 14), entropy collapse (Ch. 13) — your Part 0–III instincts transfer intact.
+
+## 9. Papers & Further Reading
+
+- **Christiano, Leike, Brown, Martic, Legg & Amodei, "Deep Reinforcement Learning from Human Preferences" (NeurIPS, 2017)** — [arxiv.org/abs/1706.03741](https://arxiv.org/abs/1706.03741). The loop's debut (on Atari and MuJoCo — from ~900 bits of human feedback to backflips).
+- **Stiennon et al., "Learning to Summarize from Human Feedback" (NeurIPS, 2020)** — [arxiv.org/abs/2009.01325](https://arxiv.org/abs/2009.01325) — and **Ouyang et al., "Training Language Models to Follow Instructions with Human Feedback" (NeurIPS, 2022)** — [arxiv.org/abs/2203.02155](https://arxiv.org/abs/2203.02155). RLHF proved on summarization; InstructGPT.
+- **Bai et al., "Constitutional AI: Harmlessness from AI Feedback" (2022)** — [arxiv.org/abs/2212.08073](https://arxiv.org/abs/2212.08073) — and **Lee et al., "RLAIF: Scaling Reinforcement Learning from Human Feedback with AI Feedback" (2023)** — [arxiv.org/abs/2309.00267](https://arxiv.org/abs/2309.00267). AI-judged preference training.
+- **Gao, Schulman & Hilton, "Scaling Laws for Reward Model Overoptimization" (ICML, 2023)** — [arxiv.org/abs/2210.10760](https://arxiv.org/abs/2210.10760). Goodhart, quantified.
+- **Rafailov, Sharma, Mitchell, Ermon, Manning & Finn, "Direct Preference Optimization: Your Language Model is Secretly a Reward Model" (NeurIPS, 2023)** — [arxiv.org/abs/2305.18290](https://arxiv.org/abs/2305.18290). The derivation of Section 4.
+- **Shao et al., "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models" (2024)** — [arxiv.org/abs/2402.03300](https://arxiv.org/abs/2402.03300). GRPO's source.
+- **DeepSeek-AI, "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning" (2025)** — [arxiv.org/abs/2501.12948](https://arxiv.org/abs/2501.12948). R1-Zero, the emergent "aha," and the full production pipeline.
+- **Lambert et al., "Tülu 3: Pushing Frontiers in Open Language Model Post-Training" (2024)** — [arxiv.org/abs/2411.15124](https://arxiv.org/abs/2411.15124). RLVR and the complete modern post-training stack, open and documented end to end.
+
+## 10. Exercises
+
+**20.1 (understand)** Map the RLHF pipeline onto this book's vocabulary: identify the policy, the environment, the horizon, the reward's location (dense/sparse), the behavior-vs-target policy relationship in stage 3, and which of Chapter 17's four defense families the KL penalty instantiates. Which triad leg (Chapter 9) does PPO-RLHF stand on that DPO does not?
+
+**20.2 (understand)** Sycophancy — telling users what they want to hear — reliably emerges from preference optimization. Trace the causal chain from rater behavior through the Bradley–Terry fit to the policy gradient, and propose the point in the chain where an intervention is cheapest. What does this predict about RLAIF's sycophancy relative to RLHF's?
+
+**20.3 (derive)** Derive the Boltzmann-tilt optimum: maximize $\E_{y \sim \pi}[r(y)] - \beta \KL(\pi \| \pi_{\mathrm{ref}})$ over distributions π by calculus of variations (or Lagrange over the simplex) and obtain $\pi^* \propto \pi_{\mathrm{ref}} e^{r/\beta}$. Then complete the DPO derivation: invert, substitute into Bradley–Terry, and show the partition functions cancel. Where exactly does the derivation *require* both completions to share the same prompt?
+
+**20.4 (derive)** Compute the DPO gradient and show it has the form $-\beta\, \sigma(\hat r_l - \hat r_w) \left[ \nabla \log \pi(y_w) - \nabla \log \pi(y_l) \right]$ where $\hat r$ are implicit rewards: a contrastive update weighted by current wrongness. Compare with the gradient of naive "maximize $\log\pi(y_w) - \log\pi(y_l)$": which pathological solution does the naive version admit that DPO's weighting suppresses (and only partially — connect to the mass-leak monitoring pitfall)?
+
+**20.5 (derive)** GRPO's baseline: show that for $G$ i.i.d. samples per prompt, the group mean is (up to the $1/G$ self-inclusion term) an unbiased baseline, and quantify the leave-one-out correction. Then explain the *normalization by std*: which Chapter 11/12 practice does it correspond to, and what failure appears on prompts where all $G$ samples are correct (zero variance)? Propose the standard fix.
+
+**20.6 (implement)** Run the DPO toy; then extend it to 3 "tokens" per completion with a shared softmax head, and verify the mass-leak phenomenon: construct a case where the chosen-rejected margin grows while both completions' absolute probabilities fall (where does the mass go?). Log the implicit-reward accuracy vs. the absolute log-prob of $y_w$ over training.
+
+**20.7 (implement)** Simulate RM overoptimization without any language model: let true reward be $r^*(z) = -z^2$ over a 1-D "response space," fit a small MLP $\hat r$ on noisy samples of $r^*$ drawn from $z \sim \mathcal{N}(0, 1)$ (the "reference distribution"), then gradient-ascend $z$ against $\hat r$ with and without a penalty $\lambda z^2$ (the KL stand-in). Plot true reward along both ascent paths and reproduce the Goodhart curve: proxy monotone up, truth peaking then collapsing, peak location moving with λ.
+
+**20.8 (implement)** Build a tiny RLVR loop: a "model" that outputs random arithmetic expressions for a target value (sampling from a small grammar with learnable production probabilities), reward 1 iff the expression evaluates to the target, REINFORCE with a group-mean baseline (G = 16). Show learning; then introduce a buggy verifier (accepts any expression containing the target as a literal) and document the hack the optimizer finds. Patch, re-run, find the next hack. Two rounds of this is the RLVR practitioner's actual job description.
+
+**20.9 (extend)** Iterated DPO: on the toy from 20.6, implement the loop "sample pairs from current policy → label with a fixed true-reward oracle → DPO update," and compare against one-shot DPO on reference-sampled pairs, measuring final true reward and drift from reference. You are measuring the on-policy-ness gap of Section 4's scoreboard in the smallest possible system.
+
+**20.10 (research)** Design an experiment to distinguish *sharpening* from *discovery* in RLVR: specify the base model's pass@k curve measurement (k up to 10⁴), the matched-compute RL run, and the three possible outcome patterns with their interpretations — including the confound that RL changes the *sampling distribution's* diversity, not just its mode. Then read the current sharpening-vs-discovery literature and identify which of your three patterns the strongest published evidence shows, on which task families. (This is a genuinely open question; your design may be better than the published ones.)

@@ -1,0 +1,291 @@
+Chapter 3 left us facing a nonlinear system of equations — the Bellman optimality equations — and a promise: solve them and you have solved the MDP. This chapter keeps the promise, under one generous assumption: the dynamics $p(s', r \mid s, a)$ are *known*. That assumption converts reinforcement learning into **planning**, and the family of planning algorithms built on Bellman's equations is called dynamic programming (DP).
+
+Why spend a chapter on the case we said RL exists to avoid? Three reasons. First, DP is where the convergence mathematics lives: we will prove, completely, that the Bellman operators are contractions, and that theorem is the load-bearing wall under TD learning, Q-learning, and (morally) DQN. Second, every RL algorithm in this book is a way of doing DP *without* the model — Monte Carlo replaces expectations with sample averages, TD replaces full backups with sampled one-step backups — so you cannot see what those methods are approximating until you have seen the exact thing. Third, the chapter's closing idea, generalized policy iteration, is the master pattern of the entire field: nearly everything from SARSA to PPO is a variation on "evaluate a little, improve a little, repeat."
+
+## 1. Two Problems, One Tool
+
+DP addresses the two problems Chapter 3 defined, in order:
+
+- **Prediction (policy evaluation):** given π, compute $V^\pi$.
+- **Control:** compute $V^*$ and an optimal policy $\pi^*$.
+
+Both are characterized by Bellman equations; the DP idea is to turn each equation into an *update rule* — take the equation that the true value function uniquely satisfies, and repeatedly apply it as an assignment to an approximate value function until it stops changing. When it stops changing, it satisfies the equation, and satisfaction identifies it.
+
+Recall the operator notation, which makes everything crisp. For any $V \in \R^{\lvert \mathcal{S} \rvert}$, define the **Bellman expectation operator** $\mathcal{T}^\pi$ and the **Bellman optimality operator** $\mathcal{T}^*$:
+
+$$
+(\mathcal{T}^\pi V)(s) = \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma V(s') \right],
+$$
+
+$$
+(\mathcal{T}^* V)(s) = \max_a \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma V(s') \right].
+$$
+
+Chapter 3 established that $V^\pi$ is a fixed point of $\mathcal{T}^\pi$ and $V^*$ is a fixed point of $\mathcal{T}^*$. What we have not yet established: that these fixed points are *unique*, and that iterating the operators from an arbitrary starting point *converges* to them. That is the next section, and it is the theoretical heart of the chapter.
+
+## 2. The Contraction Theorem
+
+We work in the space of value functions $V \in \R^{\lvert \mathcal{S} \rvert}$ with the **sup-norm** (max-norm):
+
+$$
+\| V - W \|_\infty \;=\; \max_{s \in \mathcal{S}} \left| V(s) - W(s) \right|,
+$$
+
+the largest disagreement at any state. An operator $\mathcal{T}$ is a **γ-contraction** in this norm if applying it to two functions shrinks their largest disagreement by at least γ:
+
+$$
+\| \mathcal{T}V - \mathcal{T}W \|_\infty \;\le\; \gamma\, \| V - W \|_\infty .
+$$
+
+> **Theorem (contraction of the Bellman operators).** For $\gamma$ strictly below 1, both $\mathcal{T}^\pi$ and $\mathcal{T}^*$ are γ-contractions in $\| \cdot \|_\infty$.
+
+**Proof for $\mathcal{T}^\pi$.** Fix any state $s$ and two value functions $V, W$. The reward terms cancel:
+
+$$
+\begin{aligned}
+\left| (\mathcal{T}^\pi V)(s) - (\mathcal{T}^\pi W)(s) \right|
+&= \left| \gamma \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left[ V(s') - W(s') \right] \right| \\
+&\le \gamma \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left| V(s') - W(s') \right| \\
+&\le \gamma \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \, \| V - W \|_\infty
+\;=\; \gamma\, \| V - W \|_\infty,
+\end{aligned}
+$$
+
+using the triangle inequality, then bounding each $\lvert V(s') - W(s') \rvert$ by the max, then using that the probabilities sum to 1. Since this holds at every $s$, it holds at the maximizing $s$. $\blacksquare$
+
+**Proof for $\mathcal{T}^*$.** Same skeleton, plus one lemma to handle the max: for any functions $f, g$ over actions,
+
+$$
+\left| \max_a f(a) - \max_a g(a) \right| \;\le\; \max_a \left| f(a) - g(a) \right|.
+$$
+
+(Proof of the lemma: let $a^+ = \argmax_a f(a)$ and suppose without loss of generality $\max f \ge \max g$. Then $\max f - \max g = f(a^+) - \max_a g(a) \le f(a^+) - g(a^+) \le \max_a \lvert f - g \rvert$.) Applying the lemma with $f, g$ the one-step lookaheads under $V$ and $W$:
+
+$$
+\left| (\mathcal{T}^* V)(s) - (\mathcal{T}^* W)(s) \right|
+\;\le\; \max_a \left| \gamma \sum_{s', r} p(s', r \mid s, a)\left[ V(s') - W(s') \right] \right|
+\;\le\; \gamma \| V - W \|_\infty. \;\blacksquare
+$$
+
+Now the payoff, via the **Banach fixed-point theorem** (whose proof for our finite-dimensional case is Exercise 4.3): a contraction on a complete metric space has exactly one fixed point, and iterating the operator from *any* starting point converges to it geometrically. Unwinding the consequences:
+
+1. **Uniqueness.** $V^\pi$ is the *only* solution of the Bellman expectation equation; $V^*$ the only solution of the optimality equation. The equations do not merely describe the value functions — they pin them down.
+2. **Convergence with a rate.** Defining $V_{k+1} = \mathcal{T}^* V_k$ from any $V_0$:
+$$
+\| V_k - V^* \|_\infty \;\le\; \gamma^k \| V_0 - V^* \|_\infty .
+$$
+Each sweep multiplies the worst-case error by γ. With $\gamma = 0.9$, thirty sweeps shrink error by $0.9^{30} \approx 0.04$; with $\gamma = 0.99$, you need ~460 sweeps for the same factor — the effective horizon $\frac{1}{1-\gamma}$ shows up as computational cost, our first sighting of a trade-off that never goes away: *farsighted agents are harder to compute.*
+3. **A usable stopping rule.** If successive iterates are close, you are provably close to the answer: $\| V_k - V^* \|_\infty \le \frac{\gamma}{1 - \gamma} \| V_{k+1} - V_k \|_\infty$ (Exercise 4.4 derives this from the triangle inequality plus the contraction). Stop when the sweep-to-sweep change is tiny, and you have a certificate.
+
+<Check q="Where exactly does the proof for the expectation operator use that probabilities sum to 1, and what would break with 'probabilities' summing to 1.2?">
+In the final step: after bounding each state-difference by the sup-norm, the leftover factor is $\sum_a \pi \sum_{s',r} p = 1$, giving a clean bound of $\gamma \|V - W\|_\infty$. If the kernel summed to 1.2, the operator would only be a $(1.2\,\gamma)$-contraction — no contraction at all when γ exceeds $5/6$. This is not idle: in Chapter 9, off-policy TD with function approximation implicitly reweights transitions by importance ratios, breaking exactly this normalization, and divergence (Baird's counterexample) is the result. The innocuous-looking "sums to 1" is the whole ballgame.
+</Check>
+
+## 3. Iterative Policy Evaluation
+
+The prediction algorithm now writes itself: to compute $V^\pi$, iterate $\mathcal{T}^\pi$.
+
+<Pseudocode title="Iterative policy evaluation (in-place)">
+<L>Input: π, dynamics $p$, threshold $\theta$; initialize $V(s) \leftarrow 0$ for all $s$ ($V(\text{terminal}) = 0$ always)</L>
+<L>Repeat:</L>
+<L i={1}>$\Delta \leftarrow 0$</L>
+<L i={1}>For each $s \in \mathcal{S}$:</L>
+<L i={2}>$v \leftarrow V(s)$</L>
+<L i={2}>$V(s) \leftarrow \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a)\left[ r + \gamma V(s') \right]$</L>
+<L i={2}>$\Delta \leftarrow \max(\Delta, \lvert v - V(s) \rvert)$</L>
+<L>until $\Delta$ falls below $\theta$</L>
+</Pseudocode>
+
+One subtlety worth naming: the pseudocode updates $V$ **in place** — later states in the sweep see already-updated values of earlier states. The convergence theorem above was proved for the "two-array" version (compute all new values from all old ones); the in-place version also converges (it is a special case of asynchronous DP, Section 7) and usually faster, since fresh information propagates within a sweep. Run this on the 4×4 gridworld with the random policy and it reproduces Chapter 3's exactly-solved values $(0, -14, -20, -22, \dots)$ to within θ — the linear-algebra solution and the fixed-point iteration are two roads to the same unique answer, which is exactly what uniqueness promised.
+
+Each full sweep costs $\mathcal{O}(\lvert \mathcal{S} \rvert^2 \lvert \mathcal{A} \rvert)$ in the worst case (for each state, for each action, a sum over successor states). Compare the direct linear solve at $\mathcal{O}(\lvert \mathcal{S} \rvert^3)$: iteration wins when you need modest accuracy or when $P$ is sparse — and, decisively, it generalizes to the nonlinear control case where no linear solve exists.
+
+## 4. Policy Improvement
+
+Evaluation tells us how good π is. To do better, ask a local question at each state: *would deviating for one step, to action $a$, then resuming π, beat following π outright?* The deviation's value is exactly $Q^\pi(s, a)$. If some action beats $V^\pi(s)$, deviating helps at least once — and the following theorem says a one-step advantage everywhere compounds into a globally better policy.
+
+> **Policy improvement theorem.** Let π, π′ be deterministic policies with
+> $$
+> Q^\pi\left(s, \pi'(s)\right) \;\ge\; V^\pi(s) \qquad \text{for all } s.
+> $$
+> Then $V^{\pi'}(s) \ge V^\pi(s)$ for all $s$. If the first inequality is strict anywhere, so is the second.
+
+You proved this as Exercise 3.9; here is the telescoping argument in full, because it is short and instructive:
+
+$$
+\begin{aligned}
+V^\pi(s) \;\le\; Q^\pi(s, \pi'(s))
+&= \E\left[ R_{t+1} + \gamma V^\pi(S_{t+1}) \,\middle|\, S_t = s,\, A_t = \pi'(s) \right] \\
+&\le \E\left[ R_{t+1} + \gamma\, Q^\pi\left(S_{t+1}, \pi'(S_{t+1})\right) \,\middle|\, S_t = s,\, A_t = \pi'(s) \right] \\
+&= \E_{\pi'}\left[ R_{t+1} + \gamma R_{t+2} + \gamma^2 V^\pi(S_{t+2}) \,\middle|\, S_t = s \right] \\
+&\;\;\vdots \\
+&\le \E_{\pi'}\left[ R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots \,\middle|\, S_t = s \right] \;=\; V^{\pi'}(s).
+\end{aligned}
+$$
+
+Each line replaces one more step of π with π′, using the hypothesis to justify each swap; in the limit the $\gamma^k V^\pi$ correction vanishes and π has been replaced everywhere. $\blacksquare$
+
+The **greedy policy** takes the best one-step deviation at every state simultaneously:
+
+$$
+\pi'(s) \;=\; \argmax_a Q^\pi(s, a) \;=\; \argmax_a \sum_{s', r} p(s', r \mid s, a)\left[ r + \gamma V^\pi(s') \right],
+$$
+
+which satisfies the theorem's hypothesis by construction (the max over actions is at least the π-average). So greedification never hurts. And the stopping case is the punchline: if greedification changes nothing — $V^{\pi'} = V^\pi$ — then $V^\pi(s) = \max_a \sum_{s',r} p(s',r\mid s,a)[r + \gamma V^\pi(s')]$ for all $s$, which *is* the Bellman optimality equation, so $\pi$ was already optimal. Improvement stalls only at the top. (This argument also delivers the existence theorem Chapter 3 borrowed: the finite policy space plus strict improvement until optimality forces termination at an optimal deterministic policy.)
+
+## 5. Policy Iteration
+
+Alternate the two halves to convergence:
+
+$$
+\pi_0 \xrightarrow{\;\text{evaluate}\;} V^{\pi_0} \xrightarrow{\;\text{greedify}\;} \pi_1 \xrightarrow{\;\text{evaluate}\;} V^{\pi_1} \xrightarrow{\;\text{greedify}\;} \pi_2 \;\cdots\; \xrightarrow{\;\text{greedify}\;} \pi^*.
+$$
+
+<Pseudocode title="Policy iteration">
+<L>1. Initialize $V(s)$ arbitrarily and $\pi(s)$ arbitrarily</L>
+<L>2. Policy evaluation: run iterative policy evaluation for the current π (threshold θ)</L>
+<L>3. Policy improvement:</L>
+<L i={1}>$stable \leftarrow$ true</L>
+<L i={1}>For each $s$: $\; old \leftarrow \pi(s)$; $\;\pi(s) \leftarrow \argmax_a \sum_{s',r} p(s',r \mid s,a)[r + \gamma V(s')]$</L>
+<L i={2}>if $old \ne \pi(s)$: $stable \leftarrow$ false</L>
+<L>4. If $stable$: stop, return $V \approx V^*$, $\pi \approx \pi^*$; else go to 2</L>
+</Pseudocode>
+
+Since each round strictly improves the policy (until optimal) and there are finitely many deterministic policies ($\lvert \mathcal{A} \rvert^{\lvert \mathcal{S} \rvert}$), policy iteration terminates *exactly*, in practice astonishingly fast — for the 4×4 gridworld, greedifying the *random* policy's value function already yields an optimal policy (one round), a fact you can verify below. The expensive part is the inner evaluation loop; the next section deletes it.
+
+## 6. Value Iteration
+
+Truncate evaluation to a *single sweep*, fused with improvement — equivalently, iterate the optimality operator itself, $V_{k+1} = \mathcal{T}^* V_k$:
+
+$$
+V_{k+1}(s) \;=\; \max_a \sum_{s', r} p(s', r \mid s, a)\left[ r + \gamma V_k(s') \right].
+$$
+
+By the contraction theorem this converges to $V^*$ geometrically from any start — no policy is ever represented explicitly; the greedy policy is extracted once at the end. The stopping rule has a guarantee worth quoting precisely: if $\| V_{k+1} - V_k \|_\infty$ is below $\epsilon (1 - \gamma) / (2\gamma)$, then the greedy policy with respect to $V_{k+1}$ has value within ε of optimal in every state (Exercise 4.4 walks the proof). You do not need the value function to converge to act near-optimally — a theme that returns as "value error vs. policy error" in Chapter 21.
+
+Policy iteration and value iteration are the ends of a dial: PI runs evaluation to convergence between improvements; VI runs exactly one sweep; "modified policy iteration" runs $m$ sweeps. All converge; the best $m$ is a systems question, not a math question.
+
+Both algorithms, on the gridworld, in NumPy — with the `step` function from Chapter 3:
+
+```python
+import numpy as np
+
+N, TERMINAL = 4, {0, 15}
+ACTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+GAMMA = 1.0                                    # episodic gridworld
+
+def step(s, a):
+    if s in TERMINAL: return s, 0.0
+    r, c = divmod(s, N); dr, dc = ACTIONS[a]
+    nr, nc = r + dr, c + dc
+    if not (0 <= nr < N and 0 <= nc < N): nr, nc = r, c
+    return nr * N + nc, -1.0
+
+def lookahead(V, s):
+    """Q(s, a) for all a under the known model."""
+    return np.array([r + GAMMA * V[s2] for a in range(4)
+                     for s2, r in [step(s, a)]])
+
+def value_iteration(theta=1e-8):
+    V, sweeps = np.zeros(N * N), 0
+    while True:
+        delta = 0.0
+        for s in range(N * N):
+            if s in TERMINAL: continue
+            v_new = lookahead(V, s).max()
+            delta = max(delta, abs(v_new - V[s]))
+            V[s] = v_new                       # in-place
+        sweeps += 1
+        if delta < theta: break
+    pi = np.array([int(lookahead(V, s).argmax()) for s in range(N * N)])
+    return V, pi, sweeps
+
+def policy_iteration(theta=1e-8, max_eval_sweeps=500):
+    V = np.zeros(N * N)
+    pi = np.zeros(N * N, dtype=int)            # start: always move North
+    rounds = 0
+    while True:
+        # Evaluate pi. The sweep cap matters: with gamma = 1, an improper
+        # policy (e.g. "always North" self-loops along the top row) has
+        # V = -infinity and exact evaluation never terminates. Capping
+        # sweeps = modified policy iteration: looping states just become
+        # very negative, which is all greedification needs to route
+        # around them.
+        for _ in range(max_eval_sweeps):
+            delta = 0.0
+            for s in range(N * N):
+                if s in TERMINAL: continue
+                s2, r = step(s, pi[s])
+                v_new = r + GAMMA * V[s2]
+                delta = max(delta, abs(v_new - V[s])); V[s] = v_new
+            if delta < theta: break
+        stable = True                          # greedify
+        for s in range(N * N):
+            best = int(lookahead(V, s).argmax())
+            if best != pi[s]: pi[s] = best; stable = False
+        rounds += 1
+        if stable: return V, pi, rounds
+
+V_vi, pi_vi, sweeps = value_iteration()
+V_pi, pi_pi, rounds = policy_iteration()
+print(f"value iteration: {sweeps} sweeps");  print(V_vi.reshape(N, N))
+print(f"policy iteration: {rounds} rounds"); print(np.allclose(V_vi, V_pi))
+```
+
+Output: value iteration reaches the optimal values of Fig 3.1 — the $(0, -1, -2, -3)$ surface — in **4 sweeps** (information propagates one step per sweep, and the farthest cell is 3 moves from a terminal; the 4th sweep confirms $\Delta = 0$), and policy iteration agrees. Watching the sweeps is the best intuition for DP you can buy: after sweep 1, only cells adjacent to terminals are correct; each further sweep extends the solved frontier one step inward. *Value flows backward from the goal at one step per sweep.*
+
+<Pitfall title="Common pitfalls — small print that bites">
+Three classics. **Forgetting $V(\text{terminal}) = 0$:** if terminal states enter the max with nonzero values, the agent hallucinates post-terminal reward and values corrupt globally. **γ = 1 in continuing tasks:** the contraction theorem needs γ strictly below 1; with γ = 1 the fixed point can be non-unique or nonexistent (our gridworld survives because every policy reaches termination with probability 1 — a "proper policy" condition that substitutes for discounting; see Bertsekas for the stochastic-shortest-path theory). **Argmax ties:** floating-point noise can flip tie-broken greedy actions between sweeps, making "policy stable" oscillate forever even though the values converged — compare values with a tolerance, or break ties by fixed index order (as `argmax` does), never by comparing freshly recomputed floats to stale ones.
+</Pitfall>
+
+## 7. Generalized Policy Iteration and Asynchronous DP
+
+Step back from the two named algorithms and see the shape they share: two processes, one pulling the value function toward consistency with the current policy (evaluation), one pulling the policy toward greediness with respect to current values (improvement). The processes compete — each invalidates the other's fixed point — yet their joint fixed point is exactly $(V^*, \pi^*)$, and remarkably loose scheduling still gets there. Sutton & Barto call this scheme **generalized policy iteration (GPI)**, and it is the single most transferable idea in the book: SARSA is GPI with sampled evaluation; actor-critic is GPI with a neural evaluator and gradient-based improver; AlphaZero is GPI with tree-search improvement. When you meet a new algorithm, your first question should be: *where is the evaluation, where is the improvement?*
+
+The second relaxation is **asynchronous DP**: nothing requires systematic full sweeps. Update states one at a time, in any order, using whatever neighboring values currently exist — convergence to $V^*$ holds as long as every state continues to be updated (with γ below 1; Bertsekas & Tsitsiklis give the general theory, which tolerates even stale values from parallel processors). This matters for two reasons. Practically, it lets computation focus where it helps: prioritized sweeping (Chapter 8) updates states whose Bellman error is largest, first. Conceptually, it is the bridge to learning: an agent that updates the value of whichever state it happens to *visit* is doing asynchronous DP along its own trajectory — add sampling in place of expectation and you have invented TD learning three chapters early.
+
+## 8. The Curse of Dimensionality
+
+Now the honest accounting. Per sweep, DP costs $\mathcal{O}(\lvert \mathcal{S} \rvert^2 \lvert \mathcal{A} \rvert)$ — polynomial in the number of states, which sounds fine and is in fact catastrophic, because $\lvert \mathcal{S} \rvert$ is *exponential in the dimension of the state*. A robot with 20 joint angles, each coarsely discretized into 10 bins, has $10^{20}$ states; backgammon has ~$10^{20}$; Go has ~$10^{170}$; a 84×84×4 Atari screen has more states than atoms in the observable universe, squared. Bellman coined "the curse of dimensionality" for exactly this, in 1957, about his own algorithm.
+
+Three escapes structure the rest of the book: **sampling** — visit states the world actually presents rather than sweeping all of them (Monte Carlo, Chapter 5; TD, Chapter 6); **approximation** — represent $V$ by a parameterized function that generalizes across states instead of a table (Part II); and **focused search** — expand only the states reachable from *now* (MCTS, Chapter 8). Modern systems stack all three: MuZero is asynchronous, sampled, approximated, focused dynamic programming with a learned model. It is DP all the way down.
+
+## 9. Summary
+
+- With a known model, RL becomes planning, and Bellman equations become update rules.
+- Both Bellman operators are **γ-contractions in the sup-norm** — proved via triangle inequality, the sum-to-one of probabilities, and (for $\mathcal{T}^*$) the max-difference lemma. Banach then gives unique fixed points, geometric convergence $\gamma^k$ from any start, and computable stopping certificates.
+- **Policy improvement theorem:** a policy that one-step-dominates π everywhere is globally at least as good; proved by telescoping substitution. Greedification never hurts and stalls only at optimality.
+- **Policy iteration** = evaluate fully, greedify, repeat; terminates exactly in finitely many rounds. **Value iteration** = iterate $\mathcal{T}^*$ directly; converges geometrically; near-optimal policies emerge long before value convergence.
+- **GPI** — evaluation and improvement pushing against each other — is the pattern behind nearly every algorithm in this book. **Asynchronous DP** frees the update order and previews learning.
+- Cost per sweep is polynomial in $\lvert \mathcal{S} \rvert$, but $\lvert \mathcal{S} \rvert$ is exponential in state dimension: the curse of dimensionality. Sampling, approximation, and focused search are the three escapes.
+
+## 10. Papers & Further Reading
+
+- **Bellman, *Dynamic Programming* (Princeton UP, 1957)** — [press.princeton.edu/books/paperback/9780691146683/dynamic-programming](https://press.princeton.edu/books/paperback/9780691146683/dynamic-programming). The source: the principle of optimality, the functional equations, and the curse, all named here.
+- **Howard, *Dynamic Programming and Markov Processes* (MIT Press, 1960)** — policy iteration's debut, with the evaluation/improvement split this chapter is built on.
+- **Puterman, *Markov Decision Processes* (Wiley, 1994)** — [doi.org/10.1002/9780470316887](https://doi.org/10.1002/9780470316887). Chapter 6 has the contraction theory in full generality; also modified policy iteration and the linear-programming formulation we only mentioned.
+- **Bertsekas & Tsitsiklis, *Neuro-Dynamic Programming* (Athena Scientific, 1996)** — [athenasc.com/ndpbook.html](http://www.athenasc.com/ndpbook.html). Asynchronous convergence theory, stochastic shortest paths (the γ = 1 case), and the first rigorous bridge from DP to learning with function approximation — the book Chapter 9's theory leans on.
+- **Bertsekas, *Reinforcement Learning and Optimal Control* (Athena Scientific, 2019)** — [web.mit.edu/dimitrib/www/RLbook.html](https://web.mit.edu/dimitrib/www/RLbook.html). The modern control-theoretic retelling; its "one-step lookahead with approximate values" framing is the cleanest way to understand AlphaZero-style systems.
+- **Sutton & Barto, Ch. 4** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). GPI, the gridworld, Jack's car rental and gambler's problem — two worked DP examples this chapter omitted and Exercises 4.7–4.8 send you to.
+
+## 11. Exercises
+
+**4.1 (understand)** In the 4×4 gridworld, iterative policy evaluation of the random policy from $V_0 = 0$ gives $V_1(s) = -1$ for every non-terminal state. Compute $V_2$ for the cell adjacent to a terminal corner and for a center cell, by hand, and explain the phrase "value flows backward one step per sweep" in terms of your computation.
+
+**4.2 (understand)** Policy iteration on the gridworld converges in one improvement round from the *random* policy, but value iteration needs 4 sweeps from $V_0 = 0$. Reconcile: what does PI's inner evaluation loop buy that VI's single sweeps must accumulate?
+
+**4.3 (derive)** Prove the Banach fixed-point theorem for a γ-contraction $\mathcal{T}$ on $(\R^n, \| \cdot \|_\infty)$: (a) show the iterates form a Cauchy sequence via $\| V_{k+1} - V_k \| \le \gamma^k \| V_1 - V_0 \|$ and the geometric series; (b) conclude convergence to some $V^\dagger$ by completeness; (c) show $V^\dagger$ is a fixed point (contractions are continuous); (d) show uniqueness (two fixed points at distance $d$ force $d \le \gamma d$).
+
+**4.4 (derive)** Prove the two error bounds quoted in the chapter: (a) $\| V_k - V^* \|_\infty \le \frac{\gamma}{1-\gamma} \| V_{k+1} - V_k \|_\infty$; (b) if $\| V_{k+1} - V_k \|_\infty$ is below $\epsilon(1-\gamma)/(2\gamma)$ then the greedy policy π′ w.r.t. $V_{k+1}$ satisfies $\| V^{\pi'} - V^* \|_\infty \le \epsilon$. *Hint for (b): bound $\| V^{\pi'} - V^* \|$ by $\| V^{\pi'} - V_{k+1} \| + \| V_{k+1} - V^* \|$ and use that π′ is greedy w.r.t. $V_{k+1}$, so $\mathcal{T}^{\pi'} V_{k+1} = \mathcal{T}^* V_{k+1}$.*
+
+**4.5 (derive)** Show that $\mathcal{T}^*$ is *monotone*: if $V \le W$ componentwise then $\mathcal{T}^* V \le \mathcal{T}^* W$. Then show that if $V \le \mathcal{T}^* V$ (a "pessimistic, improvable" function), the iterates increase monotonically to $V^*$. Monotonicity + contraction is the pair of properties that all of approximate DP theory (Chapter 21) tries to preserve; knowing why they matter separately is worth the exercise.
+
+**4.6 (implement)** Instrument the value-iteration code to record $\| V_k - V^* \|_\infty$ per sweep (compute $V^*$ first with a tiny θ). Rerun the same gridworld with a $-1$-per-step reward but γ ∈ $\{0.5, 0.9, 0.99\}$ (note γ below 1 changes the optimal values — recompute each $V^*$). Plot log-error vs. sweep and read off the slope: does it match $\log \gamma$?
+
+**4.7 (implement)** Solve **Jack's car rental** (Sutton & Barto Example 4.2: two lots, Poisson demand, moving cars overnight costs $2, γ = 0.9) with policy iteration. Reproduce the sequence of policies; it converges in about 4 improvement rounds. This is the smallest problem where you can *feel* the evaluation cost dominating.
+
+**4.8 (implement)** Solve the **gambler's problem** (Sutton & Barto Example 4.3: coin with heads probability 0.4, stake any amount up to your capital, win at 100) with value iteration. Plot the optimal value function and the (in)famous spiky optimal policy. Investigate: is the spiky policy the *unique* optimum? Perturb tie-breaking and see what family of optimal policies emerges.
+
+**4.9 (extend)** Implement asynchronous VI on the gridworld with three update orders: (a) random states; (b) systematic sweeps; (c) "backward from terminals" (states sorted by distance to a terminal). Count total state-updates to reach $\| V - V^* \|_\infty$ below $10^{-6}$ under each order. Explain the ranking, and connect it to prioritized sweeping (Chapter 8).
+
+**4.10 (research)** Policy iteration's iteration count is famously hard to bound: each round is a strict improvement over a finite policy set, giving a trivial exponential bound, yet in practice a handful of rounds suffice, and Ye (2011) proved strongly polynomial bounds for fixed γ. Read up on the worst-case side: Fearnley's exponential lower bound for PI under a particular update rule. What feature of those adversarial MDPs defeats PI's usual "few rounds" behavior, and why do natural MDPs seem never to have it?

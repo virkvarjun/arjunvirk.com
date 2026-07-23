@@ -1,0 +1,248 @@
+Dynamic programming solved the MDP by cheating: it read the dynamics $p(s', r \mid s, a)$ off a card. Starting now, the card is gone. The agent knows nothing about the environment except what happens when it acts — and from this chapter to the end of the book, *experience replaces the model*.
+
+Monte Carlo methods are the most honest way to learn from experience: to know how good a state is, start from it, follow your policy to the end of the episode, and write down what you actually got. Average enough of those outcomes and the law of large numbers hands you the value function — no Bellman equation, no bootstrapping, no model, no bias. The price is patience (you must wait for episodes to finish) and variance (a single return bundles the noise of every action and transition it contains). This chapter builds the complete Monte Carlo toolkit: prediction, then control via generalized policy iteration, then the technique that unlocks learning about one policy from another's data — importance sampling — whose bias–variance mathematics will matter in every off-policy method for the rest of the book, DQN and offline RL included.
+
+## 1. Learning Without a Model
+
+What exactly did DP use the model *for*? Look inside the backup:
+
+$$
+V(s) \leftarrow \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma V(s') \right].
+$$
+
+The model appears as an expectation over next states — DP averages over *all possible futures, weighted by their probabilities*. Without $p$, we cannot enumerate futures. But we can *sample* them: run the policy, and the environment itself draws $s', r$ from the true $p$ for us, for free, with the correct probabilities. A sampled trajectory is an unbiased draw from exactly the distribution DP integrates over.
+
+Monte Carlo pushes this to the limit: sample the *entire* future. The return $G_t = R_{t+1} + \gamma R_{t+2} + \cdots$ observed from a visit to state $s$ is a random variable whose expectation is, by definition, $V^\pi(s)$. So:
+
+$$
+V^\pi(s) = \E_\pi\left[ G_t \mid S_t = s \right] \;\approx\; \frac{1}{n} \sum_{i=1}^{n} G^{(i)},
+$$
+
+the average of returns over $n$ visits. No approximation enters anywhere except finite $n$. Contrast every method from Chapter 6 onward, which will estimate values *from other estimated values*; Monte Carlo estimates each state's value from ground truth alone. This independence has a striking consequence: MC's estimate at one state does not depend on estimates anywhere else, so its accuracy is unaffected by the size of the state space or errors elsewhere — you can evaluate just the states you care about and ignore the rest, something neither DP nor TD can offer.
+
+The requirements: episodes must terminate (returns must be finite and observable), and for now we learn only at episode boundaries. Both restrictions are real, and both are what TD learning will remove.
+
+## 2. Monte Carlo Prediction
+
+One design decision arises immediately: a state may be visited several times within one episode. **First-visit MC** averages returns only from the first visit per episode; **every-visit MC** averages returns from all visits. First-visit is the cleaner statistical object — its returns are i.i.d. draws of $G_t$ given $S_t = s$ (each from an independent episode), so the estimate is *unbiased* with standard error shrinking as $1/\sqrt{n}$, and the analysis is textbook statistics. Every-visit's within-episode returns overlap (the return from the second visit is a suffix of the first's), introducing bias that vanishes asymptotically; it is slightly awkward in theory and slightly convenient in code, and both converge to $V^\pi$. We default to first-visit.
+
+<Pseudocode title="First-visit MC prediction, estimating V ≈ V^π">
+<L>Input: policy π; initialize $V(s)$ arbitrarily, $Returns(s) \leftarrow$ empty list, for all $s$</L>
+<L>Loop forever (per episode):</L>
+<L i={1}>Generate an episode following π: $S_0, A_0, R_1, S_1, \dots, S_{T-1}, A_{T-1}, R_T$</L>
+<L i={1}>$G \leftarrow 0$</L>
+<L i={1}>For $t = T-1, T-2, \dots, 0$:</L>
+<L i={2}>$G \leftarrow \gamma G + R_{t+1}$</L>
+<L i={2}>If $S_t$ does not appear in $S_0, \dots, S_{t-1}$:</L>
+<L i={3}>Append $G$ to $Returns(S_t)$; $\quad V(S_t) \leftarrow \text{average}(Returns(S_t))$</L>
+</Pseudocode>
+
+Note the backward loop: computing returns from the end of the episode makes each $G$ an $\mathcal{O}(1)$ update via $G \leftarrow \gamma G + R_{t+1}$ — our master recursion from Chapter 3, run in reverse. In practice the list-average is replaced by the incremental update $V(S_t) \leftarrow V(S_t) + \frac{1}{N(S_t)}[G - V(S_t)]$, or constant-α for nonstationary targets — the same estimator mathematics as Chapter 2, because *each state is a bandit whose "reward" is the return that follows it*.
+
+## 3. Worked Example: Blackjack
+
+Blackjack is the canonical MC showcase (Sutton & Barto Example 5.1) precisely because it humiliates DP: the dynamics are perfectly known in principle, but computing $p(s', r \mid s, a)$ — the distribution over dealer outcomes and card draws — is a combinatorial headache, while *simulating* a hand is ten lines of code. Model-free methods shine when the world is easy to sample and hard to integrate.
+
+The formulation: states are (player sum 12–21, dealer's showing card A–10, usable ace or not) — 200 states; actions are *hit* or *stick*; rewards are +1/0/−1 at the end of the hand; γ = 1. Sums below 12 are folded into the dynamics (you always hit — no decision to make).
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(0)
+
+def draw():
+    return min(rng.integers(1, 14), 10)          # A=1, face cards=10
+
+def play_dealer(showing):
+    total, ace = showing, (showing == 1)
+    while True:
+        s = total + 10 if (ace and total + 10 <= 21) else total
+        if s >= 17:
+            return s
+        c = draw(); total += c; ace = ace or (c == 1)
+
+def hand_value(total, ace):
+    """Best value of a hand: count one ace as 11 if it doesn't bust."""
+    return (total + 10, True) if (ace and total + 10 <= 21) else (total, False)
+
+def episode(policy):
+    """Play one hand under `policy`; return list of (state, action) and reward."""
+    total, ace = 0, False
+    while hand_value(total, ace)[0] < 12:        # auto-hit below 12
+        c = draw(); total += c; ace = ace or (c == 1)
+    showing = draw()
+    traj = []
+    while True:
+        psum, usable = hand_value(total, ace)
+        if psum > 21:
+            return traj, -1.0                    # bust
+        state = (psum, showing, usable)
+        a = policy(state)
+        traj.append((state, a))
+        if a == 0:                               # stick
+            d = play_dealer(showing)
+            if d > 21 or psum > d:  return traj, +1.0
+            if psum == d:           return traj,  0.0
+            return traj, -1.0
+        c = draw(); total += c; ace = ace or (c == 1)   # hit; hand_value
+        # handles ace demotion automatically (11 -> 1 when it would bust)
+
+# Evaluate the "stick on 20 or 21" policy with first-visit MC
+from collections import defaultdict
+V, N = defaultdict(float), defaultdict(int)
+policy = lambda s: 0 if s[0] >= 20 else 1        # 0 = stick, 1 = hit
+for _ in range(500_000):
+    traj, G = episode(policy)                    # gamma = 1, reward only at end
+    seen = set()
+    for (s, a) in traj:
+        if s not in seen:
+            seen.add(s)
+            N[s] += 1
+            V[s] += (G - V[s]) / N[s]            # incremental mean
+```
+
+Run it and the value surface reproduces the famous figure: values near +1 only at 20–21, a cliff along the dealer-ace column, and the usable-ace surface both higher and noisier — higher because the ace insures one hit, noisier because those states are rare, so their averages rest on fewer episodes. That unevenness *is* Monte Carlo: accuracy per state tracks visits per state, and nothing propagates from well-known states to rarely-seen neighbors.
+
+## 4. From Prediction to Control: the Exploration Problem Returns
+
+To improve a policy we need action values — greedification via $\pi'(s) = \argmax_a Q(s,a)$ needs $Q$, since without a model, state values alone cannot rank actions (Chapter 3, Section 4). So we estimate $Q^\pi(s, a)$ by averaging returns following visits to the *pair* $(s, a)$.
+
+And here the exploration problem, absent through two chapters of planning, storms back. If π is deterministic, every visit to $s$ takes the same action; every other action's returns list stays empty forever; greedification has nothing to compare. *You cannot improve on actions you never take.* The chapter offers three answers, in increasing order of realism:
+
+**Exploring starts (ES):** begin every episode at a uniformly random $(s, a)$ pair, following π only afterward. Every pair is visited infinitely often by fiat. It is an assumption about the environment (resettable to arbitrary states — true in simulators, false on robots), not an algorithm, but it cleanly isolates the control machinery from the exploration machinery.
+
+**ε-soft policies (Section 5):** keep the policy itself stochastic forever.
+
+**Off-policy learning (Sections 6–7):** let a different, exploratory policy gather the data.
+
+**Monte Carlo control with exploring starts** is GPI with sampled evaluation: after each episode, update $Q$ toward the observed returns, and greedify the policy *at the visited states only*. We do not wait for $Q$ to converge before improving — one episode's worth of evaluation between improvements, the value-iteration end of the GPI dial. On blackjack, MC-ES famously recovers the optimal strategy (hit on 17 vs. dealer ace even with no usable ace, etc.) from nothing but simulated hands — the first control result in this book obtained without a model.
+
+<Check q="Why does greedifying with respect to Q not require a model, when greedifying with respect to V does?">
+Greedy on V needs a one-step lookahead: $\argmax_a \sum_{s',r} p(s',r \mid s,a)[r + \gamma V(s')]$ — the argmax ranges over imagined futures, which only a model can supply. Greedy on Q is $\argmax_a Q(s,a)$: the lookahead was baked into Q during learning, because each return that trained $Q(s,a)$ already included the real consequences of taking $a$. Q converts planning into table lookup — the reason model-free control is possible at all.
+</Check>
+
+## 5. On-Policy Control with ε-Soft Policies
+
+Exploring starts is a lab luxury. The on-policy fix: never let the policy become fully greedy. A policy is **ε-soft** if $\pi(a \mid s) \ge \frac{\epsilon}{\lvert \mathcal{A}(s) \rvert}$ for every action — every action retains a floor of probability. The **ε-greedy** policy w.r.t. $Q$ is the ε-soft policy closest to greedy: probability $1 - \epsilon + \frac{\epsilon}{\lvert \mathcal{A} \rvert}$ on the argmax, $\frac{\epsilon}{\lvert \mathcal{A} \rvert}$ on each other action.
+
+Does GPI still work if improvement only ever reaches ε-greedy? Yes, with the guarantee softened correspondingly. The **ε-greedy improvement theorem**: if π is ε-soft and π′ is ε-greedy with respect to $Q^\pi$, then $V^{\pi'}(s) \ge V^\pi(s)$ everywhere. The proof is a pleasant computation:
+
+$$
+\begin{aligned}
+\sum_a \pi'(a \mid s)\, Q^\pi(s, a)
+&= \frac{\epsilon}{\lvert \mathcal{A} \rvert} \sum_a Q^\pi(s, a) + (1 - \epsilon) \max_a Q^\pi(s, a) \\
+&\ge \frac{\epsilon}{\lvert \mathcal{A} \rvert} \sum_a Q^\pi(s, a) + (1 - \epsilon) \sum_a \underbrace{\frac{\pi(a \mid s) - \frac{\epsilon}{\lvert \mathcal{A} \rvert}}{1 - \epsilon}}_{\text{weights: nonneg., sum to } 1} Q^\pi(s, a) \\
+&= \sum_a \pi(a \mid s)\, Q^\pi(s, a) \;=\; V^\pi(s),
+\end{aligned}
+$$
+
+where the inequality holds because a max dominates any convex combination — and the weights in the brace are a legitimate convex combination precisely because π is ε-soft (each weight is nonnegative). Then the policy improvement theorem (Chapter 4) upgrades the one-step dominance to $V^{\pi'} \ge V^\pi$ globally. Iterating, MC control with ε-greedy improvement converges (with the usual infinite-visits caveats) to the *best ε-soft policy* — within ε of optimal performance, the tax for never stopping exploration, exactly as in Chapter 2. Decay ε toward zero on a schedule and you approach true optimality; every deep-RL practitioner recognizes this ancestor of their ε-annealing code.
+
+## 6. Off-Policy Prediction via Importance Sampling
+
+Now the deep idea of the chapter. On-policy methods entangle two jobs in one policy: *behaving* (which needs exploration) and *being learned about* (which wants greedy optimality). Off-policy methods split them: a **behavior policy** $b$ generates episodes; a distinct **target policy** π is what we evaluate or optimize. The only requirement is **coverage**: $\pi(a \mid s)$ positive implies $b(a \mid s)$ positive — the behavior must give every action the target might take a chance to occur.
+
+The obstacle: returns collected under $b$ estimate $V^b$, not $V^\pi$. Trajectories that π favors are over- or under-represented in $b$'s data. **Importance sampling** corrects the misrepresentation by reweighting each return by how much more (or less) likely its trajectory would have been under π. For a trajectory segment from $t$ to termination, the probability ratio is
+
+$$
+\rho_{t:T-1} \;=\; \frac{\prod_{k=t}^{T-1} \pi(A_k \mid S_k)\, p(S_{k+1} \mid S_k, A_k)}{\prod_{k=t}^{T-1} b(A_k \mid S_k)\, p(S_{k+1} \mid S_k, A_k)}
+\;=\; \prod_{k=t}^{T-1} \frac{\pi(A_k \mid S_k)}{b(A_k \mid S_k)}.
+$$
+
+The unknown dynamics **cancel** — the single most fortunate cancellation in reinforcement learning. The correction depends only on the two policies, both of which we know. And the reweighted return is exactly unbiased:
+
+$$
+\E_b\left[ \rho_{t:T-1}\, G_t \,\middle|\, S_t = s \right] \;=\; V^\pi(s),
+$$
+
+(the ratio re-tilts $b$'s trajectory distribution into π's; Exercise 5.5 has you verify it by summing over trajectories). Two estimators build on this. With $\mathcal{T}(s)$ the set of (first) visits to $s$ across all episodes:
+
+**Ordinary importance sampling** — a plain average of weighted returns:
+
+$$
+V(s) \;=\; \frac{\sum_{t \in \mathcal{T}(s)} \rho_{t:T-1}\, G_t}{\lvert \mathcal{T}(s) \rvert}.
+$$
+
+**Weighted importance sampling** — a ratio estimate, normalizing by the weights themselves:
+
+$$
+V(s) \;=\; \frac{\sum_{t \in \mathcal{T}(s)} \rho_{t:T-1}\, G_t}{\sum_{t \in \mathcal{T}(s)} \rho_{t:T-1}}.
+$$
+
+Their trade-off is a classic of statistics and you should know it cold. **Ordinary IS is unbiased but can have enormous — even infinite — variance**: the ratios are products of per-step factors, so a trajectory of length 100 where π/b averages 1.1 per step carries weight $1.1^{100} \approx 13{,}800$; one such trajectory obliterates the average. Sutton & Barto's Example 5.5 exhibits a one-state MDP where the ordinary-IS estimator's variance is literally infinite and its estimate still lurches by orders of magnitude after millions of episodes. **Weighted IS is biased** (the estimate after one episode equals that episode's raw $G_t$, ratio canceled — pure $V^b$ flavor) **but consistent, and its variance is bounded**: each weighted return enters as a convex combination, so the estimate never leaves the range of observed returns. In practice weighted IS wins, essentially always, and its incremental form is what you implement: maintaining cumulative weight $C(s)$,
+
+$$
+V(s) \leftarrow V(s) + \frac{W}{C(s)}\left[ G - V(s) \right], \qquad C(s) \leftarrow C(s) + W,
+$$
+
+with $W$ the running product of ratios built backward through the episode.
+
+## 7. Off-Policy Monte Carlo Control
+
+Assembling the pieces: behavior $b$ = anything ε-soft (guaranteeing coverage); target π = greedy w.r.t. the current $Q$; weighted IS corrects the data.
+
+<Pseudocode title="Off-policy MC control (weighted importance sampling), target π → π*">
+<L>Initialize $Q(s,a)$ arbitrarily, $C(s,a) \leftarrow 0$; $\pi(s) \leftarrow \argmax_a Q(s,a)$</L>
+<L>Loop forever (per episode):</L>
+<L i={1}>Generate an episode with any ε-soft behavior $b$: $S_0, A_0, R_1, \dots, S_{T-1}, A_{T-1}, R_T$</L>
+<L i={1}>$G \leftarrow 0$; $\quad W \leftarrow 1$</L>
+<L i={1}>For $t = T-1$ down to $0$:</L>
+<L i={2}>$G \leftarrow \gamma G + R_{t+1}$</L>
+<L i={2}>$C(S_t, A_t) \leftarrow C(S_t, A_t) + W$</L>
+<L i={2}>$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \frac{W}{C(S_t, A_t)}\left[ G - Q(S_t, A_t) \right]$</L>
+<L i={2}>$\pi(S_t) \leftarrow \argmax_a Q(S_t, a)$</L>
+<L i={2}>If $A_t \ne \pi(S_t)$: exit the inner loop (proceed to next episode)</L>
+<L i={2}>$W \leftarrow W \cdot \frac{1}{b(A_t \mid S_t)}$</L>
+</Pseudocode>
+
+The two strange lines at the bottom are the algorithm's honest confession. Because the target is deterministic-greedy, $\pi(A_t \mid S_t)$ is 1 when the behavior happened to play greedily and 0 otherwise — so the moment the behavior deviates from the current greedy policy, the importance ratio for all *earlier* times becomes 0, and the episode has nothing more to teach about π (hence the early exit). The update $W \leftarrow W / b(A_t \mid S_t)$ is the ratio with $\pi = 1$ in the numerator.
+
+The confession's content: **this method learns only from the tails of episodes that happen to end greedily.** If nongreedy actions are common and episodes long, usable data is exponentially rare, and learning at early states is glacial. This is not a bug in the pseudocode; it is the fundamental cost of full-trajectory corrections, and it is the precise motivation — hold this thought across the chapter boundary — for *bootstrapping*: methods that update from one step of real experience plus an estimate, needing only a one-step ratio (or none at all: Q-learning's slick escape, Chapter 6). The variance of long IS products also returns as a central villain in offline RL (Chapter 17), where the "behavior policy" is a fixed dataset and nobody gets to collect more.
+
+<Pitfall title="Common pitfalls — Monte Carlo edition">
+**Averaging returns under a changing policy.** MC control updates π after every episode, so old returns in the running averages were generated by stale policies; strict theory wants fresh evaluation per policy. Practice uses constant-α updates so old returns decay — but if you use sample averages ($1/N$) with an improving policy, early garbage lingers forever with equal weight. **Discounting bugs in the backward loop.** $G \leftarrow \gamma G + R_{t+1}$ is correct; writing $G \leftarrow \gamma(G + R_{t+1})$ silently discounts the immediate reward and every value comes out γ-scaled. **Forgetting first-visit bookkeeping** double-counts correlated within-episode returns — usually harmless, occasionally a real bias in short loopy episodes. **Zero-probability behavior actions.** Coverage must hold: if $b$ assigns an action probability 0 but π takes it, the ratio divides by zero — and "b is ε-greedy w.r.t. the *same* Q that defines π" makes coverage automatic but couples the policies in ways that reintroduce staleness. Log any $W$ overflow: astronomically large weights are your variance alarm.
+</Pitfall>
+
+## 8. Where Monte Carlo Stands
+
+A scorecard, before TD learning redefines the terms of comparison. **For MC:** unbiased; conceptually irreducible (average what you observe); indifferent to Markov violations (it never bootstraps off a possibly-wrong state abstraction — its estimates are correct for whatever "states" you use, which matters enormously under partial observability); accuracy independent of state-space size; trivially parallelizable. **Against MC:** waits for episode end (useless for continuing tasks, slow for long episodes); return variance grows with horizon (every downstream action's randomness is bundled into the target); explores poorly at scale (no within-episode credit propagation — a single lucky sequence of 50 correct moves must occur *whole* before any of its states look good). TD learning will trade MC's zero bias for radically lower variance and per-step updates — and the entire spectrum between them, parameterized by $n$ and λ, is Chapter 7.
+
+## 9. Summary
+
+- Monte Carlo replaces DP's model-expectations with sampled full returns: $V^\pi(s)$ = average of observed $G_t$ from visits to $s$. Unbiased, model-free, needs terminating episodes.
+- **First-visit** MC gives i.i.d. returns per state (clean theory); **every-visit** is a consistent, slightly biased cousin. Both converge.
+- Each state is a bandit over returns: the incremental estimators, constant-α tracking, all of Chapter 2 transfers.
+- Control = GPI with sampled evaluation of **Q** (not V — no model for the lookahead). Exploration must be engineered: exploring starts, ε-soft policies, or off-policy data.
+- ε-greedy improvement provably improves among ε-soft policies (max dominates convex combinations); converges to the best ε-soft policy.
+- **Importance sampling** reweights behavior-policy returns by $\rho = \prod \pi/b$ — the dynamics cancel. Ordinary IS: unbiased, variance up to infinite. Weighted IS: biased, consistent, bounded — use it.
+- Off-policy MC control with a greedy target learns only from greedy trajectory tails — the variance/data-efficiency wall that motivates bootstrapping.
+
+## 10. Papers & Further Reading
+
+- **Sutton & Barto, Ch. 5** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). Blackjack, the racetrack exercise, and the infinite-variance Example 5.5 this chapter cited.
+- **Singh & Sutton, "Reinforcement Learning with Replacing Eligibility Traces" (Machine Learning, 1996)** — [doi.org/10.1007/BF00114726](https://doi.org/10.1007/BF00114726). Contains the first-visit vs. every-visit analysis (bias, variance, MSE) in careful detail — the definitive treatment of Section 2's design choice.
+- **Precup, Sutton & Singh, "Eligibility Traces for Off-Policy Policy Evaluation" (ICML, 2000)** — [scholarworks.umass.edu (PDF)](https://scholarworks.umass.edu/cgi/viewcontent.cgi?article=1079&context=cs_faculty_pubs). The per-decision importance sampling refinement (weight each reward by only the ratio-product up to it) and the bridge from MC corrections to traces — Chapter 7's off-policy half descends from this paper.
+- **Thomas, Theocharous & Ghavamzadeh, "High-Confidence Off-Policy Evaluation" (AAAI, 2015)** — [ojs.aaai.org/index.php/AAAI/article/view/9541](https://ojs.aaai.org/index.php/AAAI/article/view/9541). What it takes to turn IS estimates into *guarantees* — concentration bounds on weighted returns; the safety-critical face of this chapter's estimators, foundational for offline RL evaluation (Chapter 17).
+- **Metropolis & Ulam, "The Monte Carlo Method" (JASA, 1949)** — [doi.org/10.1080/01621459.1949.10483310](https://doi.org/10.1080/01621459.1949.10483310). The name and the manifesto: estimate integrals by sampling. RL's usage is a direct descendant.
+
+## 11. Exercises
+
+**5.1 (understand)** In the blackjack value surface for the stick-on-20 policy, values are near +1 at player sums 20–21 and sharply negative at 12–19. The policy *chose* to hit at 12–19 — so why are those values negative rather than reflecting good play? What exactly does $V^\pi$ evaluate? (This distinction — value of the policy vs. value of the best policy — is the prediction/control line.)
+
+**5.2 (understand)** Give a concrete environment where every-visit and first-visit MC give noticeably different finite-sample estimates (hint: a state that self-loops under π), and say which direction every-visit is biased in your example.
+
+**5.3 (understand)** Why must the *behavior* policy be soft for off-policy control, while the *target* may be deterministic-greedy — but not the reverse (deterministic behavior, stochastic target)? Point to the exact term in $\rho$ that breaks.
+
+**5.4 (derive)** Show that with constant step size α, the MC update $V(S_t) \leftarrow V(S_t) + \alpha[G_t - V(S_t)]$ is stochastic gradient descent on the loss $\frac{1}{2}\E_\pi[(G_t - V(S_t))^2]$, treating $V$ as a table of parameters. (This "MC = SGD on squared return error" framing is why MC + function approximation is the *stable* combination in Chapter 9's deadly-triad accounting.)
+
+**5.5 (derive)** Prove $\E_b[\rho_{t:T-1} G_t \mid S_t = s] = V^\pi(s)$: write the expectation as a sum over trajectory suffixes weighted by their probability under $b$, multiply in the ratio, and watch $b$'s factors cancel into π's. Where exactly is coverage ($b$ positive wherever π is) used?
+
+**5.6 (derive)** After a single episode, show that the weighted-IS estimate of $V(s)$ from that episode equals its raw return $G_t$ — the ratio cancels entirely — and hence that weighted IS is biased toward $V^b$ at small samples. Then argue consistency: as episodes accumulate, the bias vanishes. (Formally: ratio of sample means, law of large numbers on numerator and denominator separately.)
+
+**5.7 (derive)** Reconstruct the infinite-variance phenomenon (S&B Example 5.5): one nonterminal state, actions *left* (γ-free: terminates with reward +1 with prob. 0.1, else self-loops with reward 0) and *right* (terminates, reward 0); target π always takes *left*; behavior b is uniform. Show $\E_b[(\rho G)^2] = \infty$ by lower-bounding the contribution of length-$n$ self-loop trajectories. Ordinary IS never settles here; describe what weighted IS does instead.
+
+**5.8 (implement)** Implement first-visit MC prediction for blackjack and reproduce the value surfaces (usable/no-usable ace) after 10k and 500k episodes. Then implement MC control with exploring starts and compare your learned policy's hit/stick boundary to the optimal one in Sutton & Barto Figure 5.2. How many episodes until the boundary stabilizes?
+
+**5.9 (implement)** On the 4×4 gridworld with the random policy as behavior, evaluate the *optimal* policy (from Chapter 4) off-policy with both ordinary and weighted IS. Plot per-state mean-squared error vs. episodes for both estimators over 100 independent runs. Which states are worst, and why does trajectory length predict the ranking?
+
+**5.10 (implement, research-flavored)** Per-decision importance sampling (Precup et al.) weights each reward $R_{t+k+1}$ by only $\rho_{t:t+k}$ — the ratio up to that reward — rather than the full-episode product, and remains unbiased. Implement it for Exercise 5.9's setup and measure the variance reduction. Then try to prove its unbiasedness: which conditional-independence fact about the MDP makes truncating the ratio legal?

@@ -1,0 +1,259 @@
+A robot arm is not a joystick. Its action is a vector of seven torques, each a real number, and the set of possible actions is a continuum. Drop that into the machinery of Chapter 10 and the first thing that breaks is the innocent-looking $\max_a Q(s, a)$: with continuous actions there is no list to max over — every action selection is itself a nonconvex optimization problem. Chapter 11's stochastic policies handle continuous actions natively (output a Gaussian, sample), but on-policy PPO pays for each gradient step with fresh interaction — an unaffordable currency on hardware that wears out and breaks.
+
+This chapter builds the algorithms that dominate continuous control by combining the two families: **off-policy actor-critic** methods that keep DQN's replay buffer and add a policy network whose sole job is to *be* the argmax. The line of descent — DPG → DDPG → TD3 — is a study in one theorem plus accumulating stabilizers, several inherited directly from Chapters 6 and 10. Then the chapter changes lenses entirely: **maximum-entropy RL** re-derives the whole enterprise from a modified objective — reward *plus* randomness — and produces **SAC**, the algorithm that, more than any other, you will meet running on real robots throughout Part IV. Along the way we meet the reparameterization trick, the second great gradient estimator, whose contrast with Chapter 11's score function echoes across modern machine learning.
+
+## 1. The Deterministic Policy Gradient
+
+The escape from the argmax is to *learn* it: train a network $\mu_\theta(s)$ that outputs the action directly, and train it to output actions the critic scores highly. If $Q_\phi$ is differentiable in the action — and a neural critic is — the direction to improve the action is simply $\nabla_a Q_\phi(s, a)$: *ask the critic which way to bend the torques.* Chain rule through the actor:
+
+$$
+\nabla_\theta J(\theta) \;=\; \E_{s \sim \mu_{\text{data}}}\left[ \nabla_a Q_\phi(s, a)\big|_{a = \mu_\theta(s)}\; \nabla_\theta \mu_\theta(s) \right].
+$$
+
+The **deterministic policy gradient theorem** (Silver et al., 2014) certifies this: for a deterministic policy, the gradient of performance is exactly this expression (expectation under the policy's own state distribution; the theorem's proof mirrors Chapter 11's, with the sum over actions collapsing to a point). Two facts to hold. First, DPG is the **limit of the stochastic policy gradient as policy variance → 0** (Silver et al. prove this), so the two families are one family; but the deterministic form's estimator has *no sampling over actions at all* — the integral over actions is gone, and with it the dominant variance term of REINFORCE-style estimators. Second, the price of determinism is exploration: a deterministic policy proposes one action per state forever, so off-policy training is not optional but constitutive — behavior noise is bolted on (Gaussian perturbation in practice; the original's Ornstein–Uhlenbeck process is a historical flourish with little measured benefit), and the mismatch between noisy behavior and deterministic target is handled exactly the way Q-learning always handled it (Chapter 6: no ratios needed at one step).
+
+## 2. DDPG: DQN for Torques
+
+**DDPG** (Lillicrap et al., 2016) is the direct product of DQN and DPG: replay buffer, target networks for *both* actor and critic, and the two gradients:
+
+$$
+\text{critic:} \quad \min_\phi\; \hat\E\left[ \left( r + \gamma\, Q_{\phi'}\!\left( s', \mu_{\theta'}(s') \right) - Q_\phi(s, a) \right)^2 \right],
+\qquad
+\text{actor:} \quad \max_\theta\; \hat\E\left[ Q_\phi\!\left( s, \mu_\theta(s) \right) \right],
+$$
+
+with **soft target updates** $\phi' \leftarrow \tau \phi + (1-\tau)\phi'$ (τ ≈ 0.005) replacing DQN's periodic hard copies — a continuous drip of freshness that suits the continuously moving actor. Note what the target action is: $\mu_{\theta'}(s')$ — the *actor is the argmax*, exactly as promised.
+
+DDPG worked — solving ~20 simulated physics tasks from pixels or state, an early landmark — and became infamous for **brittleness**: performance curves that soar and then crater, extreme hyperparameter sensitivity, seed variance so large that published comparisons were routinely irreproducible (Henderson et al., 2018 made DDPG exhibit A in deep RL's reproducibility reckoning). The dominant failure has a familiar face: **critic overestimation**. The actor is an *optimizer of the critic* — it actively seeks out points where $Q_\phi$ errs high, then the TD targets $Q_{\phi'}(s', \mu_{\theta'}(s'))$ evaluate the critic precisely at those adversarially selected points, feeding the inflation back through the Bellman recursion. It is Chapter 6's maximization bias with the max replaced by a *learned, gradient-following maximizer* — strictly more dangerous, because the actor interpolates into regions no data supports.
+
+## 3. TD3: Three Fixes, Each Earned
+
+**Twin Delayed DDPG** (Fujimoto, van Hoof & Meger, 2018) diagnosed the failure quantitatively (their Figure 1 shows DDPG's value estimates detaching from true returns almost immediately) and prescribed three mechanisms:
+
+1. **Clipped double Q-learning.** Two critics $Q_{\phi_1}, Q_{\phi_2}$, independently initialized, both trained; targets use the *minimum*:
+$$
+y \;=\; r + \gamma \min_{i = 1, 2} Q_{\phi_i'}\!\left( s',\, \tilde{a}' \right).
+$$
+This is Chapter 6's Double Q-learning idea pushed one notch further: not just decorrelating selection from evaluation but taking the pessimistic envelope of two estimates. The min *underestimates* on average — deliberately: in the actor-critic loop, underestimation is self-limiting (the actor avoids the region; no feedback), while overestimation is self-amplifying (the actor exploits it; the loop feeds). The asymmetry of the two errors, not their magnitudes, is the design logic — and this "pessimism beats optimism when a policy optimizes against your estimate" principle becomes the *organizing idea of offline RL* (Chapter 17).
+2. **Delayed policy updates.** Update the actor (and targets) once per $d = 2$ critic updates: let the value estimate settle before the optimizer chases it — a two-timescale discipline (fast critic, slow actor) that Konda & Tsitsiklis' actor-critic theory (Chapter 11 readings) always demanded.
+3. **Target policy smoothing.** Compute the target action with clipped noise, $\tilde a' = \mu_{\theta'}(s') + \mathrm{clip}(\epsilon, -c, c)$, $\epsilon \sim \mathcal{N}(0, \sigma)$: a narrow spike of overestimated value at one action no longer dominates the target — the target evaluates a small *neighborhood*, regularizing the critic toward smoothness in exactly the dimension the actor exploits.
+
+Each fix costs a few lines; together they took DDPG's chassis from infamous to reliable, and TD3 remains a strong, simple baseline whenever you have a dense-reward continuous-control task and want determinism at deployment.
+
+<Check q="TD3's min-of-two-critics injects deliberate underestimation bias. Why is that acceptable here when Chapter 6 treated bias in either direction as a defect?">
+Because the estimate's consumer changed. In pure prediction, both error directions cost equally. Here the actor performs gradient ascent *on the estimate*: overestimation errors are actively sought out, visited, and amplified through bootstrapped targets (positive feedback), while underestimation merely makes the actor avoid a region, generating no reinforcing signal (negative feedback, self-correcting when real data arrives). Once a learned policy optimizes against your value function, the loss on value errors becomes asymmetric — pessimism is the cheap side. Offline RL (Chapter 17) is this observation industrialized.
+</Check>
+
+## 4. The Maximum-Entropy Objective
+
+Now the reframe. Standard RL maximizes reward alone; **maximum-entropy RL** maximizes reward *while remaining as random as possible*:
+
+$$
+J(\pi) \;=\; \sum_t \E_{(s_t, a_t) \sim \rho_\pi}\left[ r(s_t, a_t) + \alpha\, \mathcal{H}\!\left( \pi(\cdot \mid s_t) \right) \right],
+\qquad
+\mathcal{H}\left(\pi(\cdot \mid s)\right) = -\E_{a}\left[ \log \pi(a \mid s) \right],
+$$
+
+with **temperature** α pricing entropy against reward. This is not the entropy *bonus* of Chapter 11 — a regularizer bolted onto the gradient — but a changed *objective*, propagated through the values themselves. Why want it? Three compounding reasons: **exploration** that is state-dependent and value-aware (the policy stays broad exactly where Q is flat, commits where it is peaked); **robustness** (a policy forced to succeed with action noise cannot rely on knife-edge trajectories — max-ent policies transfer measurably better across perturbations, a property Part IV's sim-to-real chapters lean on); and **multimodality** (where two ways of doing a task score equally, the policy keeps both alive instead of collapsing arbitrarily — insurance against the world later breaking one of them). There is also a deep formal reading — RL as probabilistic inference, where the max-ent optimal policy is the posterior over actions given "success" (Levine's 2018 tutorial; the same mathematics as Chapter 16's max-ent IRL) — that we gesture at and move past.
+
+The Bellman machinery survives with one twist. Define the **soft Q-function** as expected return-plus-future-entropy; the entropy-augmented backup gives the **soft Bellman equation**:
+
+$$
+Q(s, a) \;=\; r(s, a) + \gamma\, \E_{s'}\left[ V(s') \right],
+\qquad
+V(s) \;=\; \E_{a \sim \pi}\left[ Q(s, a) - \alpha \log \pi(a \mid s) \right],
+$$
+
+and for a *fixed* policy the soft backup operator is a γ-contraction by exactly Chapter 4's argument (the entropy term is bounded and policy-fixed — Exercise 13.4). The improvement step also has a closed form: the policy minimizing the KL to the Boltzmann distribution of the current Q,
+
+$$
+\pi_{\text{new}}(\cdot \mid s) \;=\; \argmin_{\pi' \in \Pi} \KL\left( \pi'(\cdot \mid s) \,\middle\|\, \frac{\exp\left( Q(s, \cdot)/\alpha \right)}{Z(s)} \right),
+$$
+
+provably improves the soft objective (soft policy improvement — Haarnoja et al.'s Lemma 2, proved with the same telescoping pattern as Chapter 4's policy improvement theorem). Soft policy iteration — alternate soft evaluation and soft improvement — converges to the max-ent optimum in the tabular case. **SAC is soft policy iteration with neural networks standing in for both steps.**
+
+## 5. Soft Actor-Critic
+
+SAC (Haarnoja et al., 2018) instantiates the pieces for continuous actions:
+
+**Critics** (twin, per TD3's lesson): minimize soft Bellman residuals against targets
+
+$$
+y = r + \gamma \left( \min_i Q_{\phi_i'}(s', a') - \alpha \log \pi_\theta(a' \mid s') \right),
+\qquad a' \sim \pi_\theta(\cdot \mid s'),
+$$
+
+— note the target's action comes from the *current* policy (fresh sample, not a buffer action) and carries its entropy correction.
+
+**Actor**: a squashed Gaussian, $a = \tanh(u)$, $u \sim \mathcal{N}\left(m_\theta(s), \sigma_\theta(s)^2\right)$ — the tanh maps to bounded torques, and its Jacobian must be paid in the log-density,
+
+$$
+\log \pi(a \mid s) \;=\; \log \mathcal{N}(u; m, \sigma^2) \;-\; \sum_j \log\left( 1 - \tanh^2(u_j) \right)
+$$
+
+(forgetting this correction is the classic SAC implementation bug). The actor minimizes the KL objective above, i.e.
+
+$$
+L(\theta) \;=\; \E_{s \sim \mathcal{D}}\, \E_{a \sim \pi_\theta}\left[ \alpha \log \pi_\theta(a \mid s) - \min_i Q_{\phi_i}(s, a) \right].
+$$
+
+**The reparameterization trick** is what makes this loss trainable with low variance. The expectation is over the policy's own samples — score-function methods (Chapter 11) would work but reintroduce their variance. Instead, write the sample as a deterministic, differentiable function of θ and exogenous noise:
+
+$$
+a = f_\theta(s, \xi) = \tanh\left( m_\theta(s) + \sigma_\theta(s) \odot \xi \right),
+\quad \xi \sim \mathcal{N}(0, I)
+\;\;\Longrightarrow\;\;
+\nabla_\theta \E_{a \sim \pi_\theta}[g(a)] = \E_{\xi}\left[ \nabla_a g(a)\, \nabla_\theta f_\theta(s, \xi) \right].
+$$
+
+The gradient now flows *through the critic* into the actor — $\nabla_a Q$ appears, exactly as in DPG — but the policy stays stochastic. The two great estimators, side by side: the **score function** (REINFORCE) needs only the ability to *evaluate* $g$, uses none of its structure, and pays in variance; **reparameterization** needs $g$ differentiable and a reparameterizable distribution, exploits $\nabla_a g$, and typically enjoys orders-of-magnitude lower variance. SAC can use it because its "return" is a differentiable critic, not the environment. (The same fork — score function vs. reparameterization — is REINFORCE vs. VAEs in generative modeling; it is one of a handful of ideas you will reuse everywhere.)
+
+**Automatic temperature.** Fixed α is the objective's Achilles' heel — the right entropy price varies across tasks and across training. SAC v2 (Haarnoja et al., 2018b) reframes: maximize reward *subject to* a minimum average entropy $\bar{\mathcal{H}}$ (heuristic default: $-\dim(\mathcal{A})$), and solves the constrained problem by dual gradient descent on α:
+
+$$
+L(\alpha) \;=\; \E_{a \sim \pi_\theta}\left[ -\alpha \left( \log \pi_\theta(a \mid s) + \bar{\mathcal{H}} \right) \right]
+$$
+
+— α rises when the policy's entropy falls below target (making entropy expensive to ignore), and decays toward zero as the policy exceeds it. In practice this single mechanism removed the most sensitive hyperparameter in the family and is a large part of why SAC travels so well across tasks — and onto hardware: SAC learned quadrupedal walking on a real Minitaur in two hours, and manipulation from real-world pixels, results that made it the default starting point for real-robot RL (Chapter 22 picks up that thread).
+
+## 6. SAC in Code
+
+Pendulum-v1 (1-D torque, dense cost; good policies average above −200):
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+from collections import deque
+import random
+
+GAMMA, TAU, LR, BATCH, START, H_BAR = 0.99, 0.005, 3e-4, 256, 1_000, -1.0
+env = gym.make("Pendulum-v1")
+A_MAX = float(env.action_space.high[0])           # 2.0
+
+def mlp(i, o):
+    return nn.Sequential(nn.Linear(i, 256), nn.ReLU(),
+                         nn.Linear(256, 256), nn.ReLU(), nn.Linear(256, o))
+
+class Actor(nn.Module):
+    def __init__(self):
+        super().__init__(); self.net = mlp(3, 2)   # -> mean, log_std
+    def forward(self, s):
+        m, log_std = self.net(s).chunk(2, dim=-1)
+        log_std = log_std.clamp(-5, 2)
+        std = log_std.exp()
+        u = m + std * torch.randn_like(m)          # reparameterized sample
+        a = torch.tanh(u)
+        # log pi(a|s): Gaussian log-density minus tanh Jacobian
+        logp = (-0.5 * ((u - m) / std).pow(2) - log_std
+                - 0.5 * np.log(2 * np.pi)).sum(-1)
+        logp -= torch.log(1 - a.pow(2) + 1e-6).sum(-1)
+        return a * A_MAX, logp
+
+actor = Actor()
+q1, q2 = mlp(4, 1), mlp(4, 1)
+q1_t, q2_t = mlp(4, 1), mlp(4, 1)
+q1_t.load_state_dict(q1.state_dict()); q2_t.load_state_dict(q2.state_dict())
+opt_a = torch.optim.Adam(actor.parameters(), lr=LR)
+opt_q = torch.optim.Adam(list(q1.parameters()) + list(q2.parameters()), lr=LR)
+log_alpha = torch.zeros(1, requires_grad=True)
+opt_al = torch.optim.Adam([log_alpha], lr=LR)
+
+buf = deque(maxlen=100_000)
+s, _ = env.reset(seed=0)
+ep_ret, rets = 0.0, []
+
+for step in range(30_000):
+    if step < START:
+        a = env.action_space.sample()
+    else:
+        with torch.no_grad():
+            a, _ = actor(torch.as_tensor(s, dtype=torch.float32))
+        a = a.numpy()
+    s2, r, term, trunc, _ = env.step(a)
+    buf.append((s, a, r, s2, float(term)))
+    ep_ret += r; s = s2
+    if term or trunc:
+        rets.append(ep_ret); ep_ret = 0.0; s, _ = env.reset()
+
+    if len(buf) < BATCH: continue
+    S, A, R, S2, D = map(lambda x: torch.as_tensor(np.array(x), dtype=torch.float32),
+                         zip(*random.sample(buf, BATCH)))
+    alpha = log_alpha.exp().detach()
+
+    with torch.no_grad():                          # ---- critic targets
+        a2, logp2 = actor(S2)
+        q_t = torch.min(q1_t(torch.cat([S2, a2], -1)),
+                        q2_t(torch.cat([S2, a2], -1))).squeeze(-1)
+        y = R + GAMMA * (1 - D) * (q_t - alpha * logp2)
+    sa = torch.cat([S, A], -1)
+    loss_q = (q1(sa).squeeze(-1) - y).pow(2).mean() + \
+             (q2(sa).squeeze(-1) - y).pow(2).mean()
+    opt_q.zero_grad(); loss_q.backward(); opt_q.step()
+
+    a_new, logp = actor(S)                         # ---- actor (reparam)
+    sa_new = torch.cat([S, a_new], -1)
+    q_min = torch.min(q1(sa_new), q2(sa_new)).squeeze(-1)
+    loss_a = (alpha * logp - q_min).mean()
+    opt_a.zero_grad(); loss_a.backward(); opt_a.step()
+
+    loss_al = -(log_alpha.exp() * (logp.detach() + H_BAR)).mean()
+    opt_al.zero_grad(); loss_al.backward(); opt_al.step()
+
+    for q, qt in ((q1, q1_t), (q2, q2_t)):         # ---- soft target update
+        for p, pt in zip(q.parameters(), qt.parameters()):
+            pt.data.mul_(1 - TAU).add_(TAU * p.data)
+
+    if step % 2_000 == 0 and rets:
+        print(f"step {step:6d}  avg return {np.mean(rets[-10:]):8.1f}  "
+              f"alpha {float(alpha):.3f}")
+```
+
+Expect returns rising from ≈ −1,200 (random) into the −120 to −200 band within roughly 8–15k steps — minutes of CPU — with α decaying automatically from ~0.3 toward ~0.05 as the policy sharpens. One structural detail to notice: the buffer's stored action feeds only the critic loss, while every actor and target computation draws *fresh* samples from the current policy — off-policy data trains values; the current policy trains itself against those values. That division of labor is the whole off-policy actor-critic pattern in one sentence.
+
+<Pitfall title="Common pitfalls — continuous-control edition">
+**The tanh Jacobian** (worth repeating: symptoms are entropy estimates going positive-infinite or the policy saturating at action bounds). **Action scaling**: environments expect actions in [low, high]; a policy emitting ±1 into a ±2 environment silently learns a truncated skill (scale by A_MAX, as above). **Update-to-data ratio**: SAC defaults to 1 gradient step per env step; cranking it for "sample efficiency" without regularization overfits the critic to early replay — the high-UTD literature (REDQ, DroQ) exists precisely to fix this with ensembles and dropout. **Q-loss watching**: soft targets include $-\alpha \log\pi$; when α auto-tunes, target magnitudes drift — a slowly climbing critic loss can be α moving, not divergence. **Evaluate with the mean action**, not a sample: stochastic evaluation understates learned competence, especially early. **Seeds**: the DDPG-era reproducibility lessons (Henderson et al.) still bind — five seeds minimum, always.
+</Pitfall>
+
+## 7. Choosing Within the Family
+
+A working decision rule, honest to current practice. **PPO** (Chapter 12): interaction cheap, simulation parallelizable, reward dense-ish, want robustness with minimal tuning — or the policy must be recurrent/enormous (RLHF). **TD3**: dense-reward continuous control, want a deterministic final controller, value simplicity. **SAC**: the default for sample-limited continuous control — robots above all — where its entropy-driven exploration, replay reuse, and auto-α earn their complexity; also the common backbone for offline-to-online fine-tuning (Chapter 17) and the model-free learner inside model-based methods (Chapter 14's MBPO trains SAC on model rollouts). All three meet again in Part IV wearing work clothes.
+
+## 8. Summary
+
+- Continuous actions kill the argmax; the fix is a learned maximizer. **DPG**: $\nabla_\theta J = \E\left[\nabla_a Q\, \nabla_\theta \mu\right]$ — the critic's action-gradient steers the actor; deterministic limit of the stochastic PG; exploration must be added exogenously.
+- **DDPG** = DPG + DQN machinery (replay, targets, soft τ-updates); worked, but brittle — the actor adversarially harvests critic overestimation (Chapter 6's bias with a gradient-following maximizer).
+- **TD3**: clipped double-Q (pessimistic min — asymmetry of error costs), delayed actor updates (two timescales), target smoothing (evaluate neighborhoods, not spikes). Reliability restored.
+- **Max-ent RL** changes the objective: reward + α·entropy, propagated through soft values ($V = \E[Q - \alpha\log\pi]$); the soft Bellman operator still contracts; soft policy iteration provably converges; benefits: value-aware exploration, robustness, multimodality.
+- **SAC** = neural soft policy iteration: twin critics with entropy-corrected fresh-sample targets, squashed-Gaussian actor trained by **reparameterization** (low-variance gradients *through* the critic; mind the tanh Jacobian), automatic temperature via dual descent on an entropy constraint. The workhorse of sample-limited continuous control and real-robot RL.
+- Score function vs. reparameterization: evaluate-only vs. differentiate-through; high vs. low variance — one of the field's fundamental estimator forks.
+
+## 9. Papers & Further Reading
+
+- **Silver, Lever, Heess, Degris, Wierstra & Riedmiller, "Deterministic Policy Gradient Algorithms" (ICML, 2014)** — [proceedings.mlr.press/v32/silver14.html](https://proceedings.mlr.press/v32/silver14.html). The DPG theorem and the stochastic-limit connection.
+- **Lillicrap et al., "Continuous Control with Deep Reinforcement Learning" (ICLR, 2016)** — [arxiv.org/abs/1509.02971](https://arxiv.org/abs/1509.02971). DDPG.
+- **Fujimoto, van Hoof & Meger, "Addressing Function Approximation Error in Actor-Critic Methods" (ICML, 2018)** — [arxiv.org/abs/1802.09477](https://arxiv.org/abs/1802.09477). TD3: the overestimation diagnosis and the three fixes.
+- **Haarnoja, Zhou, Abbeel & Levine, "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor" (ICML, 2018)** — [arxiv.org/abs/1801.01290](https://arxiv.org/abs/1801.01290) — and **"Soft Actor-Critic Algorithms and Applications" (2018)** — [arxiv.org/abs/1812.05905](https://arxiv.org/abs/1812.05905). The algorithm, the soft-policy-iteration theory, and (second paper) automatic temperature plus the real-robot results.
+- **Levine, "Reinforcement Learning and Control as Probabilistic Inference: Tutorial and Review" (2018)** — [arxiv.org/abs/1805.00909](https://arxiv.org/abs/1805.00909). The inference view that makes max-ent RL a theorem rather than a hack; also the bridge to max-ent IRL (Chapter 16).
+- **Henderson, Islam, Bachman, Pineau, Precup & Meger, "Deep Reinforcement Learning that Matters" (AAAI, 2018)** — [arxiv.org/abs/1709.06560](https://arxiv.org/abs/1709.06560). The reproducibility audit this family made necessary.
+- **Chen, Wang, Zhou & Ross, "Randomized Ensembled Double Q-Learning: Learning Fast Without a Model" (ICLR, 2021)** — [arxiv.org/abs/2101.05982](https://arxiv.org/abs/2101.05982). REDQ: the high-update-ratio frontier — ensembles let model-free SAC match model-based sample efficiency.
+
+## 10. Exercises
+
+**13.1 (understand)** Why does DDPG need added exploration noise while SAC does not? And why does SAC's *target* computation sample a fresh action from the current policy instead of using the buffer's stored next action, when SARSA (Chapter 6) used the stored one? Trace both answers to the on-policy/off-policy status of each quantity.
+
+**13.2 (understand)** TD3's target smoothing adds noise to the *target* action; DDPG's exploration adds noise to the *behavior* action. These look similar and do entirely different jobs — state each mechanism's purpose and what would go wrong if you swapped them.
+
+**13.3 (derive)** Derive the DPG theorem for the one-step (bandit) case: $J(\theta) = \E_{s}\left[ Q(s, \mu_\theta(s)) \right]$, show $\nabla_\theta J$ directly, then compare with the score-function gradient of a Gaussian policy with mean $\mu_\theta(s)$ and variance $\sigma^2$, and prove the latter's expectation converges to the former as σ → 0 while its *variance* diverges like $1/\sigma^2$. (This computation is the cleanest way to feel why reparameterization/DPG-style gradients win.)
+
+**13.4 (derive)** Prove the soft Bellman operator for a fixed policy, $(\mathcal{T}^\pi_{\text{soft}} Q)(s,a) = r + \gamma \E_{s'}\E_{a' \sim \pi}\left[ Q(s',a') - \alpha \log\pi(a' \mid s') \right]$, is a γ-contraction in the sup-norm. (The entropy term is a policy-dependent offset per state — show it cancels in the difference, and Chapter 4's proof goes through.)
+
+**13.5 (derive)** Soft policy improvement: show that the Boltzmann policy $\pi_{\text{new}} \propto \exp\left(Q^{\pi_{\text{old}}}/\alpha\right)$ satisfies $Q^{\pi_{\text{new}}} \ge Q^{\pi_{\text{old}}}$ pointwise for the soft objective. Follow Haarnoja et al.'s Lemma 2: start from the KL optimality of $\pi_{\text{new}}$, conclude $\E_{\pi_{\text{new}}}\left[Q^{\text{old}} - \alpha\log\pi_{\text{new}}\right] \ge V^{\text{old}}$, and telescope through the soft Bellman equation.
+
+**13.6 (derive)** Derive the tanh log-density correction from the change-of-variables formula, including the numerically stable form $\log\left(1 - \tanh^2 u\right) = 2\left( \log 2 - u - \mathrm{softplus}(-2u) \right)$ used in production implementations (why is the naive form dangerous at large u?). Then justify the entropy-target heuristic: for a d-dimensional squashed Gaussian, why is $-d$ a sensible floor?
+
+**13.7 (implement)** Run the SAC code; plot returns and α over training. Then ablate over 5 seeds each: (a) single critic instead of the min; (b) fixed α ∈ $\{0.05, 0.2, 1.0\}$ instead of auto-tuning; (c) no tanh Jacobian correction. Match each degradation to its mechanism.
+
+**13.8 (implement)** Implement TD3 by modifying your SAC code (deterministic actor + behavior noise σ = 0.1, target smoothing σ = 0.2 clipped at 0.5, delay d = 2, no entropy anywhere). Compare TD3 vs. SAC on Pendulum and on a sparse-reward variant (reward only when the pole is within 0.1 rad of upright): which gap widens, and why does the max-ent objective predict that?
+
+**13.9 (implement)** Log both critics' values and the true discounted returns (roll out the current policy) at fixed probe states through training, for SAC, TD3, and a DDPG ablation (single critic, no smoothing). Reproduce in miniature Fujimoto et al.'s Figure 1: DDPG's estimates detach upward; the twin-min tracks truth from below. Report the average signed bias of each.
+
+**13.10 (research)** SAC's entropy target $-\dim(\mathcal{A})$ is a heuristic with no per-state adaptivity: a grasp's approach phase and its contact phase plausibly want different entropy. Design a state-dependent temperature scheme — specify the parameterization, the constraint that replaces the global one, and the failure modes you'd watch (hint: what stops α(s) from collapsing to zero exactly where exploration is hardest?). Compare your design against the literature on learned-temperature and metagradient approaches after writing it down.

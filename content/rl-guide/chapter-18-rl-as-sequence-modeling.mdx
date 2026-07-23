@@ -1,0 +1,178 @@
+By 2021, one architecture had eaten natural language processing, then vision, then protein folding: the transformer, trained by the dumbest imaginable objective — predict the next token — at the largest affordable scale. A heretical question followed: is reinforcement learning, with its Bellman equations, its bootstrapped critics, its deadly triads and delicate stabilizers, *also* just a sequence modeling problem? A trajectory $(s_0, a_0, r_1, s_1, a_1, \dots)$ is, after all, a sequence. What if you simply... modeled it?
+
+This chapter takes the heresy seriously, because the field did. Decision Transformer showed that a GPT trained to predict actions *conditioned on desired return* matches strong offline RL baselines with no value function anywhere. Trajectory Transformer showed a sequence model can *be* the dynamics model, with beam search as the planner. Diffuser showed a diffusion model can generate entire trajectories at once — planning as sampling. And then the honest accounting: precise results now delineate when return-conditioning provably fails (stochasticity, stitching), and the debate — Bellman machinery versus scaled-up supervised learning — is not settled but *sharpened*, which is better. The stakes run through Part IV: the action heads of modern robot policies (Chapter 24's Diffusion Policy, π0's flow matching) are this chapter's direct descendants.
+
+## 1. The Reframe
+
+Offline RL (Chapter 17) fought extrapolation error with constraints, penalties, and pessimism — all machinery for controlling what happens when *Bellman backups* query beyond the data. The sequence-modeling program deletes the Bellman backup instead. Three moves define it:
+
+1. **Trajectories are token streams.** Serialize $(\hat{R}_0, s_0, a_0, \hat{R}_1, s_1, a_1, \dots)$ — states, actions, and (crucially) *returns-to-go* $\hat{R}_t = \sum_{k \ge t} r_{k+1}$ — into a sequence a causal transformer can model.
+2. **Training is supervised.** Maximum likelihood on the dataset. No TD targets, no bootstrapping, no max over actions — the entire deadly triad (Chapter 9) is simply absent, and with it the instability that half this book has been managing. Training is as stable as training GPT, because it *is* training GPT.
+3. **Control is conditioning.** At test time, *prompt* the model with what you want — a high return, a goal state — and let it autoregressively generate the actions that its training distribution associates with such outcomes.
+
+The move should feel familiar from two directions at once: it is Chapter 16's behavioral cloning, upgraded with conditioning ("clone the behavior *of the successful*"), and it is the "upside-down RL" idea (Schmidhuber, 2019) — don't predict returns from actions; predict **actions from returns**.
+
+## 2. Decision Transformer
+
+The canonical instantiation (Chen et al., 2021). Architecture: a small GPT (causal transformer) over interleaved tokens $(\hat R_t, s_t, a_t)$, each modality linearly embedded plus a timestep embedding; context window of $K$ recent triples. Training: sample length-$K$ windows from the offline dataset; predict each $a_t$ from the tokens up to it; cross-entropy or MSE on actions only (predicting states and returns adds little). Inference: set $\hat R_0$ to a **target return** — the knob replacing all of policy optimization — generate $a_0$, step the environment, subtract the realized reward ($\hat R_{t+1} = \hat R_t - r_{t+1}$), append, repeat.
+
+What the model learns is a conditional policy $\pi(a \mid s, \hat{R})$: *the action distribution of dataset trajectories that achieved this much return from here*. On D4RL and Atari suites, DT matched or beat CQL-era baselines on many tasks — a genuinely shocking result for a method with no value function, delivered with transformer-grade training stability and none of Chapter 17's hyperparameter agony. Two more properties earned attention: long-context conditioning helps in sparse-reward and partially observed settings (the transformer performs credit assignment by *attention* over its window rather than by TD propagation), and the recipe inherits the scaling toolbox of language modeling wholesale — bigger models, more data, better tokenizers, all plug in directly. That inheritance, more than any benchmark number, is the strategic content of the paper.
+
+**What it is not.** DT does no planning, no stitching, no optimization. It is **return-conditioned behavioral cloning** — a retrieval-flavored interpolation over the dataset's competence. Ask it for a return the dataset never exhibits and you are prompting outside the training distribution: sometimes graceful extrapolation, often silent failure. The follow-up literature ("RvS" — RL via supervised learning; Emmons et al., 2022) showed even the transformer is negotiable: a two-layer MLP conditioned on (state, outcome) matches DT on most benchmarks. The load-bearing element is the *conditioning*, not the attention.
+
+## 3. Where Outcome-Conditioning Breaks: the Honest Mathematics
+
+Two failure modes, both now theorems (Brandfonbrener et al., 2022; Paster et al., 2022).
+
+**Stochasticity: conditioning on outcomes confuses luck with skill.** The lottery counterexample: a state with two actions — *buy a ticket* (reward 1,000 with probability 0.001, else 0) or *work* (reward 10 always). Condition the model on return 1,000 and it recommends... buying tickets: among dataset trajectories achieving 1,000, ticket-buyers dominate, *because only they can*. The conditional $p(a \mid s, R = 1000)$ is a perfectly correct statistical object and a terrible policy: it selects actions that *co-occur with* the outcome, not actions that *cause* it in expectation. Formally: return-conditioned supervised learning recovers near-optimal policies only when the environment is (near-)deterministic, so that achieved return is a function of actions rather than a lottery over them. Q-learning does not have this problem — the expectation in the Bellman equation *is* the causal average over environment randomness. This is the cleanest known separation between the two programs, and it is not an edge case: robot dynamics are noisy exactly where tasks are hard (contacts).
+
+**No stitching.** Chapter 17's benchmark capability — compose the good first half of one trajectory with the good second half of another — requires *value propagation across trajectories*: some mechanism must notice that state $s$ appears in both. A sequence model trained on whole trajectories has no such mechanism; conditioning on a return no single training trajectory achieved is extrapolation, not synthesis. On D4RL's maze datasets (built to require stitching), DT-style methods lag value-based offline RL decisively — measured, repeatedly. Hybrids retrofit the missing piece: Q-learning Decision Transformer relabels returns-to-go with a learned Q; Elastic DT adapts history length to enable recombination — each an admission of exactly which organ was amputated.
+
+<Check q="A dataset contains trajectories from a windy gridworld: half the runs, wind pushed the agent onto the goal regardless of its actions. What policy does return-conditioned BC learn near states where the wind sometimes helps, and what would Q-learning learn?">
+Conditioned on high return, the model imitates whatever the *lucky* trajectories did there — including actions that merely coincided with helpful gusts (heading into the wind's push, standing still). It learns the behavior of winners, gusts included. Q-learning averages over the wind inside its expectation: $Q(s,a)$ scores each action by its mean outcome across windy and calm realizations, and the greedy policy takes the action that helps *in expectation*. Whenever the environment can hand out returns the policy didn't earn, outcome-conditioning inherits superstitions; Bellman expectations are the debiasing device.
+</Check>
+
+## 4. Trajectory Transformer: the Sequence Model as World Model
+
+Janner, Li & Levine (2021), same year, opposite philosophy within the same architecture. Discretize *every dimension* of state, action, and reward into per-dimension vocabulary tokens; train a GPT to model the **entire joint sequence** — not just actions. The model now answers "what happens next?" — it *is* a dynamics model (Chapter 14), with the transformer's long context replacing the compounding single-step rollout of one-step models: prediction quality on long horizons dramatically outlasts one-step ensembles because errors are conditioned away by attention over the true prefix.
+
+Control is then **planning**: beam search through token space, scoring candidate sequences by their predicted cumulative reward plus a learned value estimate at the leaves — literally the decoding algorithm of machine translation with return in place of log-likelihood, with the search implicitly staying on-distribution because every candidate token must be plausible under the model (an organic, softer version of BCQ's fence). TT matched contemporary offline RL across D4RL, including sparse-reward settings, at real computational cost (a beam search per action). Its position in the taxonomy matters more than its scores: **DT amortizes control into conditioning; TT keeps explicit search** — the model-free/model-based fork (Chapter 14's background vs. decision-time planning), rebuilt inside sequence modeling. The fork survives to Part IV: VLAs amortize; world-model agents search.
+
+## 5. Diffuser: Planning as Denoising
+
+Both DT and TT generate autoregressively — step by step, left to right, errors compounding exactly as Chapter 14 taught. **Diffuser** (Janner et al., 2022) changes the generative substrate: a **diffusion model** over *entire trajectories*. Represent a plan as a 2-D array (time × state-action dims); train a denoiser to reverse a Gaussian corruption process over full arrays; at test time, start from noise and iteratively denoise a *complete trajectory at once*.
+
+The properties fall out of the substrate, and each answers an old complaint:
+
+- **Global temporal consistency.** Every denoising step refines all timesteps *jointly* — the plan's end constrains its beginning as much as vice versa. No left-to-right compounding; long-horizon coherence is the default rather than the achievement.
+- **Conditioning as inpainting.** Want the trajectory to end at a goal? *Clamp* the final state's entries during denoising and let the model fill in the rest — goal-conditioned planning as constraint satisfaction, no retraining. Waypoints, obstacles-at-time-t, start states: all clamps.
+- **Reward as guidance.** Sample from $\tilde p(\tau) \propto p(\tau)\, e^{J(\tau)}$ by adding the gradient of a learned return predictor to each denoising step — classifier guidance, imported verbatim from image generation. The data distribution is the prior (staying in-support for free — Chapter 17's constraint, enforced by the generative substrate itself); reward tilts it.
+- **Multimodality.** Diffusion represents many-moded distributions natively — the mean-collapse pathology of Gaussian BC (Chapter 16's pitfall) simply doesn't arise.
+
+Diffuser excelled precisely where autoregression struggled — long-horizon maze stitching (the *composition* happens in trajectory space: the sampler can denoise its way into recombinations of dataset segments), sparse rewards, multi-task flexibility — at the price of iterated denoising per plan (slow), and with MPC-style replanning to handle stochasticity. Its descendants split the same way this chapter always splits: Decision Diffuser (condition on returns/skills/constraints, skip the value gradient) toward the amortized pole — and, decisively for this book, **Diffusion Policy** (Chapter 24): drop trajectory-level planning, use the diffusion substrate as a *policy head* generating short action chunks conditioned on observations. That design — diffusion for multimodality, chunking against compounding error — currently sits inside most frontier robot manipulation systems, and you now know both of its parents.
+
+## 6. The Scorecard, and the Bet
+
+Where the two programs actually stand:
+
+**Sequence models win on:** training stability (supervised losses; no triad); scaling behavior (LLM toolbox transfers — and Chapter 24's multi-embodiment datasets are exactly the "more data" this recipe monetizes); multimodal action distributions; long-context credit assignment under partial observability; unified conditioning (returns, goals, language — one interface).
+
+**Value-based methods win on:** stochastic environments (expectations debias luck); stitching/recombination from mediocre data; sample-efficiency per datum (TD extracts more from each transition than likelihood does); test-time compute per action (a feedforward policy vs. beam search/denoising — though this gap is closing from both sides).
+
+The deeper reading: the programs are converging rather than competing. Q-functions are being used to relabel and filter sequence-model training data; sequence models supply the priors and action heads inside value-based fine-tuning (Chapter 25's synthesis); and the field's live bet — visible in every Part IV system — is that **supervised sequence modeling carries you to broad competence, and RL machinery (values, search, or online correction) buys the last, hardest increment**. Hold that sentence; it is the thesis of the rest of the book.
+
+## 7. Worked Example: Return-Conditioning in Sixty Lines
+
+The core mechanism, stripped of the transformer (per RvS, the conditioning is the load-bearing part): an MLP policy $\pi(a \mid s, \hat R)$ trained by supervised learning on a mixed-quality CartPole dataset, then *prompted* with different target returns:
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+
+env = gym.make("CartPole-v1")
+rng = np.random.default_rng(0)
+
+# ---- Dataset: episodes from experts of varying corruption (mixed quality)
+def noisy_expert(s, p_good):
+    good = int(s[2] + 0.5 * s[3] > 0)
+    return good if rng.random() < p_good else 1 - good
+
+episodes = []
+for _ in range(300):
+    p_good = rng.uniform(0.55, 0.95)          # skill varies per episode
+    s, _ = env.reset(seed=int(rng.integers(10**6)))
+    traj, done = [], False
+    while not done:
+        a = noisy_expert(s, p_good)
+        s2, r, term, trunc, _ = env.step(a)
+        traj.append((s, a, r)); s, done = s2, term or trunc
+    episodes.append(traj)
+
+rets = [sum(r for _, _, r in ep) for ep in episodes]
+print(f"dataset returns: mean {np.mean(rets):.0f}, best {max(rets):.0f}")
+
+# ---- Serialize with returns-to-go
+S, A, RTG = [], [], []
+for ep in episodes:
+    rtg = sum(r for _, _, r in ep)
+    for (s, a, r) in ep:
+        S.append(s); A.append(a); RTG.append(rtg)
+        rtg -= r
+
+S_t  = torch.as_tensor(np.array(S), dtype=torch.float32)
+A_t  = torch.as_tensor(A)
+G_t  = torch.as_tensor(RTG, dtype=torch.float32)[:, None] / 500.0  # scale
+
+# ---- pi(a | s, R̂): supervised, no values, no bootstrapping
+net = nn.Sequential(nn.Linear(5, 128), nn.ReLU(),
+                    nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 2))
+opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+X = torch.cat([S_t, G_t], dim=1)
+for _ in range(4_000):
+    idx = torch.randint(len(X), (256,))
+    loss = nn.functional.cross_entropy(net(X[idx]), A_t[idx])
+    opt.zero_grad(); loss.backward(); opt.step()
+
+# ---- Control by prompting: condition on a target return, decrement as we go
+def run(target, episodes_n=20):
+    total = 0.0
+    for ep in range(episodes_n):
+        s, _ = env.reset(seed=10_000 + ep)
+        rtg, done = target, False
+        while not done:
+            x = torch.as_tensor(
+                np.concatenate([s, [rtg / 500.0]]), dtype=torch.float32)
+            a = int(net(x).argmax())
+            s, r, term, trunc, _ = env.step(a)
+            rtg -= r; total += r; done = term or trunc
+    return total / episodes_n
+
+for target in [100, 200, 400, 500]:
+    print(f"prompt R̂={target:3d}  ->  achieved {run(target):6.1f}")
+```
+
+The signature result: achieved return *tracks the prompt* — conditioning on 100 produces mediocre balancing, conditioning on 400–500 produces returns well above the dataset mean, approaching its best trajectories. One network, one supervised loss, and the "policy improvement" happened at *inference time*, by asking. You should also find the ceiling: prompts far beyond the dataset's best do not conjure competence that was never demonstrated — extrapolation is a courtesy of smoothness, not a capability. Both behaviors — the tracking and the ceiling — are the chapter in two printed lines.
+
+<Pitfall title="Common pitfalls — sequence-model RL">
+**Prompting beyond the data** fails silently — always plot achieved-vs-target and find your model's ceiling before trusting a number. **Return scaling/tokenization details dominate**: normalize returns-to-go, and in discrete-token schemes, quantile-based bins beat uniform ones (returns are heavy-tailed). **Context length is a hyperparameter with teeth**: too short re-introduces partial observability (the model can't see what it's compensating for), too long dilutes credit; DT's K matters most exactly in sparse-reward tasks. **Stochastic environments**: expect superstition (Section 3); mitigations condition on *expected*-outcome statistics or environment-independent quantities rather than realized return. **Evaluation asymmetry**: sequence methods look best on expert-heavy, deterministic benchmarks — check the dataset regime (Chapter 17's lesson) before crediting the architecture. **Test-time cost**: beam search and diffusion sampling per action are real latencies on real robots — measure control-loop budget before committing the architecture (Chapter 24's systems engineer around exactly this).
+</Pitfall>
+
+## 8. Summary
+
+- The reframe: trajectories are sequences; train by maximum likelihood; control by conditioning. No TD, no bootstrapping, no triad — RL's stability problems traded for supervised learning's.
+- **Decision Transformer**: GPT over (return-to-go, state, action) tokens; prompt with desired return; decrement as rewards realize. It is return-conditioned BC — competence interpolation, not optimization; the conditioning (not the transformer) is load-bearing (RvS).
+- **The two theorems of failure**: outcome-conditioning confuses luck with skill in stochastic environments (lottery counterexample — Bellman expectations debias; conditionals don't), and whole-trajectory likelihood cannot stitch (no cross-trajectory value propagation) — measured on maze benchmarks, patched by Q-hybrid variants.
+- **Trajectory Transformer**: model *everything*, plan by beam search — the model-based pole of the program; long-horizon prediction via attention beats compounding one-step rollouts; search stays on-distribution by construction.
+- **Diffuser**: diffusion over whole trajectories — joint refinement (no left-to-right compounding), goals as inpainting, reward as guidance, multimodality native; ancestor of Chapter 24's Diffusion Policy.
+- The bet the field is running: sequence modeling for broad competence, RL machinery for the hard increment — the organizing thesis of Part IV.
+
+## 9. Papers & Further Reading
+
+- **Chen, Lu, Rajeswaran, Lee, Grover, Laskin, Abbeel, Srinivas & Mordatch, "Decision Transformer: Reinforcement Learning via Sequence Modeling" (NeurIPS, 2021)** — [arxiv.org/abs/2106.01345](https://arxiv.org/abs/2106.01345). The reframe's flagship.
+- **Janner, Li & Levine, "Offline Reinforcement Learning as One Big Sequence Modeling Problem" (NeurIPS, 2021)** — [arxiv.org/abs/2106.02039](https://arxiv.org/abs/2106.02039). Trajectory Transformer.
+- **Janner, Du, Tenenbaum & Levine, "Planning with Diffusion for Flexible Behavior Synthesis" (ICML, 2022)** — [arxiv.org/abs/2205.09991](https://arxiv.org/abs/2205.09991). Diffuser. (Conditional successor: Ajay et al., "Is Conditional Generative Modeling All You Need for Decision-Making?", 2023 — [arxiv.org/abs/2211.15657](https://arxiv.org/abs/2211.15657).)
+- **Schmidhuber, "Reinforcement Learning Upside Down" (2019)** — [arxiv.org/abs/1912.02875](https://arxiv.org/abs/1912.02875). Predict actions from commands; the idea's earliest clean statement.
+- **Emmons, Eysenbach, Kostrikov & Levine, "RvS: What is Essential for Offline RL via Supervised Learning?" (ICLR, 2022)** — [arxiv.org/abs/2112.10751](https://arxiv.org/abs/2112.10751). MLPs match DT: conditioning is the ingredient.
+- **Brandfonbrener, Bietti, Buckman, Laroche & Bruna, "When does return-conditioned supervised learning work for offline reinforcement learning?" (NeurIPS, 2022)** — [arxiv.org/abs/2206.01079](https://arxiv.org/abs/2206.01079) — and **Paster, McIlraith & Ba, "You Can't Count on Luck: Why Decision Transformers and RvS Fail in Stochastic Environments" (NeurIPS, 2022)** — [arxiv.org/abs/2205.15967](https://arxiv.org/abs/2205.15967). The failure theorems.
+- **Yamagata, Khalil & Santos-Rodríguez, "Q-learning Decision Transformer" (ICML, 2023)** — [arxiv.org/abs/2209.03993](https://arxiv.org/abs/2209.03993). Stitching retrofitted via value relabeling — the hybrid direction.
+
+## 10. Exercises
+
+**18.1 (understand)** Classify each as amortized-conditioning or explicit-search within the sequence program, and name its closest classical relative from Chapters 8–17: Decision Transformer; Trajectory Transformer; Diffuser with reward guidance; Diffuser with goal inpainting; QDT.
+
+**18.2 (understand)** Why does DT decrement the return-to-go prompt by realized rewards during a rollout, rather than holding it fixed? Construct the specific inconsistency that a fixed prompt creates midway through a partially successful episode, and predict the behavioral symptom.
+
+**18.3 (derive)** The lottery, formally: one state, actions *ticket* (return 1000 w.p. ε, else 0) and *work* (return 10). Dataset: N trajectories per action. Compute $p(a = \text{ticket} \mid R = 1000)$ and the expected return of the policy "condition on the dataset's best observed return" as a function of ε and N. Show it is dominated by *work*'s for all small ε — and identify the exact conditional-vs-interventional distinction (in do-notation if you like) that Q-learning's expectation implements.
+
+**18.4 (derive)** Stitching as an identifiability claim: construct two datasets over the same MDP with identical *trajectory-level* return distributions but different *transition-level* overlap, such that value-based offline RL recovers the optimal policy from one and only sequence-level likelihood is identical on both. What does this say about which sufficient statistic each program consumes?
+
+**18.5 (derive)** Diffusion guidance: starting from the reverse-process mean update of DDPM, show that adding $\sigma_t^2 \nabla_\tau J(\tau)$ (gradient of a return model) to each denoising step targets the tilted distribution $\tilde p(\tau) \propto p(\tau) e^{J(\tau)}$ to first order — and explain why the *data-distribution prior* term is doing Chapter 17's "stay in support" work automatically.
+
+**18.6 (implement)** Run the Section 7 code. Plot achieved-vs-prompted return across prompts $\{50, 100, \dots, 700\}$; identify the tracking region and the ceiling. Then bias the dataset: drop all episodes with return above 300 and retrain — where does the ceiling move? (You are measuring the "no competence conjured" claim directly.)
+
+**18.7 (implement)** Add stochasticity: with probability 0.15 per step, the environment ignores the chosen action and applies a random one (and this is *not* recorded in the dataset). Retrain the return-conditioned policy and a Double-DQN on the same buffer (Chapter 17's harness). Compare achieved returns and verify the predicted separation. Then log what the conditioned policy does in states where lucky trajectories dominated — find one concrete superstition.
+
+**18.8 (implement)** Context ablation on a memory task: modify CartPole observations to hide velocities (partially observed). Train the conditioned policy with input windows of 1, 4, and 16 past states (concatenated — no transformer needed). Show the monotone improvement, and compare against a window-1 policy with a learned recurrent state. Which of DT's advertised advantages have you isolated?
+
+**18.9 (extend)** Implement a minimal trajectory-level diffusion planner on a 2-D pointmass maze dataset (denoise (x, y) sequences of length 64; goal-condition by clamping the final position; no reward model). Demonstrate one capability from Section 5 (waypoint clamping or recombination of dataset segments) that your Section 7 conditioned policy cannot exhibit, and show it side by side.
+
+**18.10 (research)** The convergence thesis: design an experiment that cleanly attributes a robot-manipulation system's performance between "sequence-model prior" and "value-based selection" — e.g., a diffusion policy whose samples are filtered/reranked by a learned Q, ablated four ways (prior alone, Q alone, both, neither) on tasks varying in stochasticity and required stitching. Predict the interaction pattern from this chapter's scorecard, then compare your design against the Q-filtering literature (e.g., value-guided action selection in recent VLA fine-tuning work, Chapter 25) and note what they measured that you didn't.

@@ -1,0 +1,201 @@
+Chapter 4's agents planned with a model they were given; Chapters 5–7's agents learned from experience with no model at all. Framing those as opposites is a habit this chapter exists to break. A model is just something that answers "what would happen if…" — and nothing says you must be *given* it. Learn the model from experience, then plan with what you learned, and every simulated step is experience your robot never had to live. The unification runs deeper: planning and learning turn out to be *the same computation* — value backups — applied to experience of different provenance, real or imagined. An agent can mix them freely, and the best agents do.
+
+This chapter builds the unified picture in tabular form, where every idea is transparent: the Dyna architecture (learn and plan in one loop), what happens when the model is wrong (it will be), prioritized sweeping (plan where it matters), the expected-vs-sample-update economics that explain *why* sampling wins in big problems, and finally decision-time planning — rollouts and Monte Carlo Tree Search, the algorithm that carried this chapter's ideas to Go and, in Chapter 14, to MuZero. Part IV's world models are this chapter with the table swapped for a recurrent network; learn the skeleton here.
+
+## 1. Models and Simulated Experience
+
+A **model** is anything the agent can query with a state–action pair and receive a prediction of what follows. Two grades of service:
+
+- A **distribution model** returns the full distribution $p(s', r \mid s, a)$ — what DP required. Strictly stronger, much harder to learn and represent.
+- A **sample model** returns one sample $s', r$ drawn from that distribution — exactly what you need to *simulate*, and vastly easier to build (any code that can generate an outcome is a sample model; you need never write down a probability).
+
+In the tabular deterministic case the two coincide and the learned model is embarrassingly simple: a table mapping $(s, a) \mapsto (s', r)$, filled in by remembering what happened last time. (Stochastic worlds keep counts and empirical frequencies — the certainty-equivalence model that Chapter 6 showed TD implicitly computes.)
+
+**Planning**, in this book's usage, is any process that consumes a model and produces a better policy or value function. The key observation — worth italics — is that *simulated experience can drive exactly the same updates as real experience.* Q-learning does not inspect the provenance of the tuple $(S, A, R, S')$ it updates on. Feed it real transitions, it learns from the world; feed it model samples, it plans. One update rule, two data sources. This is **background planning**: improving the global value function ahead of need. (Section 6 takes up the alternative — planning launched at decision time, for the state you are actually in.)
+
+## 2. Dyna: Learning and Planning in One Loop
+
+Sutton's **Dyna** architecture (1990) makes the mixture concrete and almost embarrassingly simple. Each real step yields a transition that is used **three ways**: (1) *direct RL* — a Q-learning update, exactly Chapter 6; (2) *model learning* — write the transition into the model table; (3) *planning* — perform $n$ additional Q-learning updates on transitions **sampled from the model** (random previously-seen state, random previously-taken action, model-predicted outcome).
+
+<Pseudocode title="Tabular Dyna-Q">
+<L>Initialize $Q(s,a)$ and $Model(s,a)$ for all $s, a$</L>
+<L>Loop forever:</L>
+<L i={1}>$S \leftarrow$ current state; $\;A \leftarrow$ ε-greedy$(S, Q)$</L>
+<L i={1}>Take $A$; observe $R, S'$</L>
+<L i={1}>$Q(S,A) \leftarrow Q(S,A) + \alpha\left[ R + \gamma \max_a Q(S', a) - Q(S,A) \right]$ $\quad$ (a: direct RL)</L>
+<L i={1}>$Model(S,A) \leftarrow (R, S')$ $\quad$ (b: model learning; deterministic world)</L>
+<L i={1}>Repeat $n$ times: $\quad$ (c: planning)</L>
+<L i={2}>$\tilde{S} \leftarrow$ random previously visited state; $\;\tilde{A} \leftarrow$ random action previously taken in $\tilde{S}$</L>
+<L i={2}>$\tilde{R}, \tilde{S}' \leftarrow Model(\tilde{S}, \tilde{A})$</L>
+<L i={2}>$Q(\tilde{S},\tilde{A}) \leftarrow Q(\tilde{S},\tilde{A}) + \alpha\left[ \tilde{R} + \gamma \max_a Q(\tilde{S}', a) - Q(\tilde{S},\tilde{A}) \right]$</L>
+</Pseudocode>
+
+The planning loop is doing something intuitively powerful: **replaying remembered experience through the current value function.** A transition experienced long ago, useless at the time because its successor's value was still zero, becomes informative *retroactively* once value has flowed near it — and planning revisits it without the robot moving. Where one-step Q-learning waits for physical revisits to propagate value backward, Dyna propagates it at silicon speed between steps.
+
+The canonical demonstration (S&B Example 8.1, reproduced in Section 7's code): a 6×9 maze, reward +1 only at the goal. Pure Q-learning ($n = 0$) needs ~25 episodes to reach a near-optimal path; Dyna-Q with $n = 50$ planning steps per real step gets there in ~3–5. Second-episode behavior shows why: Q-learning has improved exactly one state–action pair (the one before the goal); Dyna has already back-chained a long corridor of values from the same single success. Same data, same update rule; the model let the agent *wring the data dry*. If you have ever wondered why sample efficiency and "replay" are near-synonyms in deep RL — DQN's experience replay (Chapter 10) is Dyna's planning loop with the learned model replaced by a buffer of raw memories, a distinction with surprisingly little practical difference in deterministic worlds (Exercise 8.9 probes when they diverge).
+
+## 3. When the Model Is Wrong
+
+Learned models are wrong two ways: **incompletely** (unvisited pairs — Dyna handles this by only sampling visited ones) and **incorrectly**, because the world changed after the model was learned. Incorrectness splits into a benign case and a poisonous one, and the asymmetry is instructive.
+
+**The world got worse** (a shortcut closed; S&B's "blocking maze"): the agent plans a path through the now-blocked passage, walks it, fails, experiences the truth, corrects the model, replans. Optimistic errors are *self-correcting* — the plan marches the agent straight into the disconfirming evidence.
+
+**The world got better** (a new shortcut opened): the model says the old path is best; the agent follows it, succeeds adequately, and *never visits the region where the model errs*. Pessimistic errors are **self-sealing** — nothing in greedy planning ever generates the disconfirming experience. This is the exploration problem wearing planning clothes, and it needs an explicit fix. **Dyna-Q+** adds a curiosity bonus *inside the planning updates*: for a pair untried for $\tau$ steps, planning uses reward $\tilde{R} + \kappa\sqrt{\tau}$. Long-neglected corners of the model accrue imagined value, plans begin routing "pointless" reconnaissance through them, and the shortcut is eventually found. Mark this move — *optimism injected via the model, so that planning itself schedules exploration* — it is the seed of the optimism-based deep exploration of Chapter 15, and of exploration via world-model disagreement in Chapter 23.
+
+<Check q="Why is the exploration bonus in Dyna-Q+ added in the planning updates rather than only in the acting policy (e.g., an optimistic ε)?">
+Because the problem is a coordinated, multi-step detour: reaching the neglected region requires a *sequence* of actions the greedy policy would never begin. A bonus inside planning inflates the neglected pairs' values, and planning then propagates that inflation backward until the detour looks worthwhile from the agent's current position — the model assembles the whole expedition. Random action-level dithering (ε) must stumble through the entire detour by luck, which takes exponentially long. Planning converts optimism into directed behavior.
+</Check>
+
+## 4. Prioritized Sweeping
+
+Dyna samples planning updates *uniformly* from remembered pairs — democratic and mostly wasteful, since early in learning almost all values are already (locally) consistent and updating them changes nothing. Planning should go **where value is changing.** Run the propagation backward: when the value of some state changes appreciably, the states that *lead into it* are exactly the ones whose Bellman equations just broke. Maintain a priority queue over pairs, keyed by each pair's absolute expected update (its Bellman error magnitude):
+
+<Pseudocode title="Prioritized sweeping (deterministic model)">
+<L>After each real step $(S, A, R, S')$: update model; $\;P \leftarrow \left| R + \gamma \max_a Q(S',a) - Q(S,A) \right|$</L>
+<L>If $P$ exceeds threshold θ: insert $(S,A)$ into queue with priority $P$</L>
+<L>Repeat $n$ times while queue nonempty:</L>
+<L i={1}>$(S,A) \leftarrow$ pop max-priority; $\;(R, S') \leftarrow Model(S,A)$; do the Q-learning update on $(S,A)$</L>
+<L i={1}>For each $(\bar{S}, \bar{A})$ predicted by the model to lead to $S$:</L>
+<L i={2}>$P \leftarrow \left| \bar{R} + \gamma \max_a Q(S, a) - Q(\bar{S},\bar{A}) \right|$; insert if above θ</L>
+</Pseudocode>
+
+The effect on goal-reward mazes is dramatic: after the first success, the queue *is* the expanding wavefront of value, swept outward from the goal in priority order — asynchronous DP with an ordering oracle (your Exercise 4.9 measured exactly this win by hand). Moore & Atkeson (1993) and Peng & Williams (1993) introduced it independently; speedups of 10–100× over uniform Dyna are routine in tabular mazes. Its descendant in deep RL is prioritized experience *replay* (Chapter 10) — same queue, same |δ| priority, buffer instead of model — which inherits both the speedup and a subtlety: sampling by priority distorts the update distribution, which a learned-value method must correct for (there, with importance weights; the tabular version is exact and needs none).
+
+## 5. The Economics of Backups: Expected vs. Sample, and Where to Aim Them
+
+Two design axes govern any planning computation, and their economics explain the field's drift toward sampling.
+
+**Expected vs. sample updates.** An expected (full-width) update — DP's backup — branches over all $b$ possible successors: cost $\propto b$, result exact given the model. A sample update costs 1 and carries sampling error that shrinks as more samples land. The right question (Sutton & Barto §8.5): given a budget of successor-evaluations, one expected update or $b$ sample updates? For large $b$, sample updates win *decisively*: their error falls like $\sqrt{(b-1)/(bt)}$ after $t$ samples — most of the expected update's benefit at a fraction of its cost — **and** each sample update improves the estimate immediately, making subsequent updates (which bootstrap from it) better in a way the all-or-nothing expected update cannot. In a world of large branching factors, you sample. This, in miniature, is why the field left DP.
+
+**The distribution of updates.** Uniform sweeps (DP) spend equally on all states, including the astronomically many that no sensible policy visits. **Trajectory sampling** — generating simulated trajectories under the current policy and updating along them — concentrates effort on the *on-policy distribution*: the states that actually occur. Sutton & Barto's experiments show trajectory sampling dominates early (it burrows straight toward relevant values) and can stall late (it stops refreshing rarely visited states whose staleness eventually leaks back). **RTDP** — real-time dynamic programming (Barto, Bradtke & Singh, 1995) — is the principled version: asynchronous value iteration whose update order is given by (simulated or real) greedy trajectories from the start states, with convergence guarantees to the optimal *partial* policy on the relevant states, provably without ever touching most of the state space. The slogan for the whole section: **plan under the distribution you will act under.** Its deep echo: a world model in Chapter 23 is only ever trained and queried on the trajectory distribution the policy induces — with all the compounding-error dangers that implies.
+
+## 6. Decision-Time Planning and Rollouts
+
+Everything so far was background planning: polish $Q$ ahead of time, act by table lookup. The alternative allocates *all* computation to the state you are standing in: **decision-time planning** — plan now, for here, discard the plan after moving. Chess players do not maintain a value table over all positions; they search from *this* one. The trade: background planning amortizes across the whole space and acts instantly; decision-time planning focuses depth exactly where it pays but must fit inside the action deadline. Robotics knows this split as "policy" vs. "MPC," and Chapter 23's TD-MPC is named for straddling it.
+
+The simplest decision-time planner is the **rollout algorithm**: from the current state, for each candidate action, simulate many trajectories that take that action then follow a fixed **rollout policy** π (even random); average the returns; act on the best estimate. This is Monte Carlo estimation of $Q^\pi(s, a)$ — of the *rollout policy's* values, not $Q^*$ — and acting greedily on it is one step of policy improvement over π (Chapter 4's theorem, applied at a single state, on demand). A good rollout policy begets a much better acted policy; Tesauro's backgammon "rollouts" (the word's origin) beat the raw network that guided them. But one step of improvement is all you get — the rollout policy never improves itself. To go further, the search must *accumulate* what its simulations learn and reinvest it. That is exactly MCTS.
+
+## 7. Monte Carlo Tree Search
+
+MCTS (Coulom 2006; UCT variant, Kocsis & Szepesvári 2006) grows an asymmetric search tree from the current state, one simulation at a time, reinvesting every simulation's outcome into steering the next. Each simulation has four phases:
+
+1. **Selection.** Walk from the root through the existing tree, choosing at each node the action maximizing the **UCT** rule — Chapter 2's UCB1 transplanted onto tree nodes:
+$$
+a \;=\; \argmax_a \left[ \bar{Q}(s, a) + c \sqrt{\frac{\ln N(s)}{N(s, a)}} \right],
+$$
+with $\bar{Q}$ the average return of simulations through $(s,a)$, $N$ the visit counts. Each node is a bandit; the tree is bandits all the way down.
+2. **Expansion.** On reaching a leaf, add one (or more) child node to the tree.
+3. **Simulation.** From the new node, run the cheap rollout policy to a terminal state (no tree structure built here).
+4. **Backup.** Propagate the outcome up the visited path, updating every $\bar{Q}$ and count.
+
+When the budget expires, act — greedily by value or robustly by visit count — then advance the root and recycle the relevant subtree.
+
+Why it works so well: the UCT rule makes the tree grow *asymmetrically*, exploring all moves shallowly but extending promising lines dozens of plies deep — search effort allocated by the bandit mathematics of Chapter 2, with its logarithmic-regret pedigree (UCT converges to the optimal action as simulations → ∞, by an inductive application of UCB's guarantee level by level, though its finite-time behavior can be badly slowed by adversarial "trap" positions — Coquelin & Munos 2007). It needs only a sample model — a game simulator, not transition probabilities. It reads as this chapter's synthesis: decision-time Dyna, with prioritized (bandit-guided) sampling, values accumulated by Monte Carlo, on the on-policy distribution of its own growing plan.
+
+Its limits set up the sequel. Vanilla MCTS's rollouts are weak evaluators in games with long horizons and sparse structure; its per-move budget is spent from scratch. **AlphaGo** (Chapter 14) replaced the rollout evaluation with a learned value network and biased the selection rule with a learned policy prior,
+$$
+a = \argmax_a \left[ \bar{Q}(s,a) + c\, P(a \mid s) \frac{\sqrt{N(s)}}{1 + N(s,a)} \right],
+$$
+and **AlphaZero** closed the loop: the search's improved decisions become training targets for the very networks that guide the search — generalized policy iteration where *MCTS is the improvement operator*. Keep that phrase; it is the cleanest modern instance of this book's central pattern.
+
+## 8. Worked Example: Dyna-Q on the Maze
+
+```python
+import numpy as np
+
+# 6x9 maze from S&B Example 8.1: S start, G goal, # walls
+GRID = ["........G",
+        "..#....#.",
+        "S.#....#.",
+        "..#......",
+        ".....#...",
+        "........."]
+H, W = len(GRID), len(GRID[0])
+START = (2, 0); GOAL = (0, 8)
+WALLS = {(r, c) for r in range(H) for c in range(W) if GRID[r][c] == "#"}
+ACTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+def step(s, a):
+    dr, dc = ACTIONS[a]
+    nr, nc = s[0] + dr, s[1] + dc
+    if not (0 <= nr < H and 0 <= nc < W) or (nr, nc) in WALLS:
+        nr, nc = s
+    done = (nr, nc) == GOAL
+    return (nr, nc), (1.0 if done else 0.0), done
+
+def dyna_q(n_plan, episodes=50, alpha=0.1, gamma=0.95, eps=0.1, seed=0):
+    rng = np.random.default_rng(seed)
+    Q = {(r, c): np.zeros(4) for r in range(H) for c in range(W)}
+    model, steps_per_ep = {}, []
+    for _ in range(episodes):
+        s, done, steps = START, False, 0
+        while not done:
+            if rng.random() < eps:
+                a = int(rng.integers(4))
+            else:
+                a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+            s2, r, done = step(s, a)
+            target = 0.0 if done else Q[s2].max()
+            Q[s][a] += alpha * (r + gamma * target - Q[s][a])   # direct RL
+            model[(s, a)] = (r, s2, done)                        # model learning
+            for _ in range(n_plan):                              # planning
+                (ps, pa), (pr, ps2, pdone) = list(model.items())[
+                    rng.integers(len(model))]
+                ptarget = 0.0 if pdone else Q[ps2].max()
+                Q[ps][pa] += alpha * (pr + gamma * ptarget - Q[ps][pa])
+            s, steps = s2, steps + 1
+        steps_per_ep.append(steps)
+    return steps_per_ep
+
+for n in [0, 5, 50]:
+    eps_curve = np.mean([dyna_q(n, seed=s) for s in range(10)], axis=0)
+    print(f"n={n:2d}: episode 2: {eps_curve[1]:6.0f} steps, "
+          f"episode 10: {eps_curve[9]:5.1f}, episode 50: {eps_curve[49]:4.1f}")
+```
+
+(The `list(model.items())[...]` line trades speed for brevity; keep a parallel list of keys in real code.) Measured result — steps per episode, averaged over 10 seeds: at episode 2, the three conditions take ≈ 358, 111, and 30 steps; by episode 10, pure Q-learning still needs ≈ 119 steps while both planning conditions sit at ≈ 13.5 — the optimal path plus exploration noise. The optimal path is 14 steps; watch how many *episodes* each condition needs to find it, and remember that in real experience all three conditions saw identical data per episode. Planning is free sample efficiency — bounded only by compute and by the model's fidelity.
+
+<Pitfall title="Common pitfalls — planning with learned models">
+**Model staleness in changing worlds** (Section 3): schedule re-visits or bonuses, or your planner will confidently optimize a fiction. **Planning from unvisited pairs**: sampling $(s,a)$ the model has never seen returns garbage; Dyna's "previously visited" filter is load-bearing. **Terminal handling in the model**: store the `done` flag; bootstrapping through a remembered terminal transition (as if the goal led somewhere) silently inflates values near the goal — the maze code above stores and respects it. **Over-planning under uniform sampling**: past a point, extra uniform planning steps re-update already-consistent pairs; prioritized sweeping is the fix, not a bigger $n$. **In stochastic worlds, a deterministic model table is wrong**: it memorizes one outcome per pair; keep counts and sample, or you plan against a hallucinated determinism (the tabular ancestor of Chapter 23's stochasticity-modeling problem, which sank naive video-prediction world models).
+</Pitfall>
+
+## 9. Summary
+
+- A model answers "what if": distribution models give probabilities, sample models give draws — and sample models are both easier to get and sufficient for planning-by-simulation.
+- Planning and learning are the same backups on differently sourced experience. **Dyna** interleaves them: each real step feeds direct RL, model learning, and $n$ model-sampled planning updates — collapsing real-experience requirements by an order of magnitude in the maze.
+- Wrong models: optimistic errors self-correct (plans meet reality); pessimistic errors self-seal (plans avoid the evidence). **Dyna-Q+**'s planning-time optimism bonus makes exploration a planned activity.
+- **Prioritized sweeping** replaces uniform planning with a Bellman-error priority queue — the value wavefront, swept in order; ancestor of prioritized replay.
+- Economics: at branching factor $b$, sample updates beat expected updates; trajectory-sampled (on-policy) update distributions beat uniform sweeps early. Plan under the distribution you will act under.
+- Decision-time planning: **rollouts** = one policy-improvement step at the current state; **MCTS/UCT** = rollouts that accumulate, with UCB allocating search — bandits all the way down. AlphaGo/AlphaZero = MCTS with learned value/policy networks; MCTS as GPI's improvement operator.
+
+## 10. Papers & Further Reading
+
+- **Sutton, "Integrated Architectures for Learning, Planning, and Reacting Based on Approximating Dynamic Programming" (ICML, 1990)** — [doi.org/10.1016/B978-1-55860-141-3.50030-4](https://doi.org/10.1016/B978-1-55860-141-3.50030-4). Dyna: the paper that fused planning and learning into one loop.
+- **Moore & Atkeson, "Prioritized Sweeping: Reinforcement Learning with Less Data and Less Time" (Machine Learning, 1993)** — [doi.org/10.1007/BF00993104](https://doi.org/10.1007/BF00993104). The priority queue over Bellman error (with Peng & Williams' independent variant the same year).
+- **Barto, Bradtke & Singh, "Learning to Act Using Real-Time Dynamic Programming" (Artificial Intelligence, 1995)** — [doi.org/10.1016/0004-3702(94)00011-O](https://doi.org/10.1016/0004-3702(94)00011-O). RTDP: trajectory-driven asynchronous DP with convergence on the relevant states only.
+- **Coulom, "Efficient Selectivity and Backup Operators in Monte-Carlo Tree Search" (Computers and Games, 2006)** — [doi.org/10.1007/978-3-540-75538-8_7](https://doi.org/10.1007/978-3-540-75538-8_7). MCTS named and framed.
+- **Kocsis & Szepesvári, "Bandit Based Monte-Carlo Planning" (ECML, 2006)** — [doi.org/10.1007/11871842_29](https://doi.org/10.1007/11871842_29). UCT: UCB1 as the tree policy, with the convergence analysis.
+- **Browne et al., "A Survey of Monte Carlo Tree Search Methods" (IEEE TCIAIG, 2012)** — [doi.org/10.1109/TCIAIG.2012.2186810](https://doi.org/10.1109/TCIAIG.2012.2186810). The canonical MCTS reference: dozens of variants, enhancements, applications.
+- **Sutton & Barto, Ch. 8** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). The mazes, the expected-vs-sample analysis, and trajectory sampling experiments this chapter compressed.
+
+## 11. Exercises
+
+**8.1 (understand)** Classify each as background or decision-time planning, and as using a distribution or sample model: (a) value iteration; (b) Dyna-Q's planning loop; (c) MCTS; (d) a chess engine's alpha-beta search with a handcrafted evaluation; (e) DQN's replay updates (careful — is a buffer a model?).
+
+**8.2 (understand)** In the blocking-maze experiment, Dyna-Q recovers when the short path closes but fails to exploit a newly opened shortcut, while Dyna-Q+ finds it. Explain both behaviors via the self-correcting/self-sealing asymmetry, and predict what happens to Dyna-Q+'s *steady-state* performance in a permanently static world (there is a cost — name it).
+
+**8.3 (derive)** For the κ√τ bonus of Dyna-Q+: show that in a static world the expected planning-time value inflation of a never-revisited pair grows without bound, and hence that Dyna-Q+ revisits every reachable pair infinitely often (a GLIE-like property obtained through planning). What does κ trade off?
+
+**8.4 (derive)** Sample vs. expected updates: with $b$ equiprobable successors whose current values have unit variance, show the RMS error of the sample-update estimate of the expected target after $t$ samples is $\sqrt{\frac{b-1}{b\,t}}$, and conclude that $t = b$ samples achieve error $\sqrt{(b-1)/b^2} \approx 1/\sqrt{b}$ — compare to the expected update's 0 error at the same cost, and argue when "immediately usable partial progress" outweighs exactness (bootstrapping chains).
+
+**8.5 (derive)** UCT applies UCB1 at every node, but the returns feeding an internal node's statistics are *nonstationary* (children improve as their subtrees grow), violating UCB1's i.i.d. assumption. Read Kocsis & Szepesvári's fix (drifting bandit analysis) and summarize: what property of the drift makes the argument go through, and what do Coquelin & Munos's trap examples exploit?
+
+**8.6 (implement)** Reproduce the maze experiment with $n \in \{0, 5, 50\}$ and plot steps-per-episode. Then run the *blocking maze*: after 1,000 steps, close the short path and open a long one; compare Dyna-Q and Dyna-Q+ (κ ≈ 0.001) cumulative reward. Then the *shortcut maze* (a better path opens late) — the self-sealing failure should appear on cue.
+
+**8.7 (implement)** Implement prioritized sweeping on the maze (θ = 1e-4) and compare with uniform Dyna at equal planning-update budgets: total updates until the greedy policy is optimal. Instrument *which* states get updated in the first 200 planning updates after the first success, and visualize the wavefront.
+
+**8.8 (implement)** Build UCT for tic-tac-toe with a uniform-random rollout policy: (a) verify it never loses as either player against random and optimal opponents at 10k simulations/move; (b) plot first-move visit counts across simulation budgets and watch the search's opinion sharpen; (c) replace rollouts with the true game-theoretic value (you can compute it) and measure how many fewer simulations reach the same play strength — a miniature of what AlphaGo's value network bought.
+
+**8.9 (extend)** Dyna's model vs. DQN-style replay buffer: in a *deterministic* world they generate identical planning transitions, but in a *stochastic* one they differ subtly. Construct a two-state stochastic MDP where planning from (a) a frequency-count model and (b) uniform replay of the raw buffer produce different expected updates for the same total budget, and identify which is unbiased for the Bellman target. (This innocent question — buffer or model? — resurfaces as MBPO vs. model-free replay in Chapter 14.)
+
+**8.10 (research)** MCTS assumes the simulator can be reset to arbitrary states cheaply — false on robots. Sketch two architectures that preserve decision-time search without a resettable world: (a) search inside a *learned* model (state the compounding-error risk precisely), and (b) amortize search into a policy trained offline (state what is lost at decision time). You have just derived the design space between TD-MPC and AlphaZero-style distillation; compare against Chapters 14 and 23 when you get there.

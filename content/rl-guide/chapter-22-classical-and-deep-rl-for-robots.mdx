@@ -1,0 +1,162 @@
+Part IV is where the book's two title words finally collide. Everything in Parts 0–III assumed an environment that is cheap to query, safe to fail in, resettable on command, and fully observed if we say so. A robot honors none of these. This chapter is the story of the decade (roughly 2015–2020) in which deep RL was made to work on physical machines anyway — and it is told **through the primary sources**: guided policy search, QT-Opt, domain randomization, and OpenAI's Dactyl. Each system is a different answer to the same question — *where do a million trials come from, when reality charges full price for every one?* — and together they form the pre-foundation-model playbook whose gaps explain everything Chapters 23–25 build.
+
+Read this chapter with Part III's tools consciously in hand. QT-Opt is Chapter 6's Q-learning plus Chapter 14's CEM at fleet scale; domain randomization is Chapter 19's meta-RL wearing overalls; Dactyl's recurrent policy *is* RL²; and the sample-efficiency crisis that motivates everything is Chapter 21's $(1-\gamma)^{-3}$, invoiced in motor wear and graduate-student hours.
+
+## 1. The Five Walls
+
+Why robotics is RL's hardest customer, stated precisely:
+
+1. **Sample cost.** SAC needs ~10⁵–10⁶ steps for a single MuJoCo skill (Chapter 13); PPO needed ~10⁸–10⁹ for hard tasks (Chapter 12). A real robot at 10 Hz collects ~10⁵ steps per *day* of continuous flawless operation — and operation is neither continuous nor flawless. The arithmetic is the field's first fact: **naive online deep RL and physical hardware differ by two to four orders of magnitude in data appetite.**
+2. **Safety and wear.** Exploration means visiting bad states; on hardware, bad states are collisions, burned motors, snapped tendons. Worse, Chapter 15 taught that exploration must be *aggressive* to be efficient — the theory's demand and the hardware's tolerance point in opposite directions.
+3. **Resets.** Every episodic algorithm silently assumes a magic button that restores the world. A robot that flings the block off the table needs a human (or a second robot, or a cleverly designed rig) to continue training. Reset engineering is unglamorous and decisive; reset-free RL remains an active subfield.
+4. **Partial observability and noise.** Cameras don't see occluded geometry, contact forces, or object masses; sensors lag and alias. The Markov state of Chapter 3 is a fiction — everything real is a POMDP, and the fixes (frame stacks, recurrence, learned state — Chapters 3, 10, 23) stop being optional.
+5. **The sim-to-real gap.** Simulation solves walls 1–3 at silicon prices — and then the policy meets real friction, real latency, real light, and fails. The gap is not one error but a distribution shift in *every* channel at once: dynamics (contact models are approximations), perception (rendered pixels are not photographs), and time (real control loops jitter). Crossing it is this chapter's recurring plot.
+
+Three coping strategies organize the era's systems: **make simulation transfer** (Sections 4–5), **make real data go further** (Sections 2–3), and **use demonstrations** (Chapter 16's tools, threaded throughout). Every project below is a weighted blend.
+
+## 2. Guided Policy Search: Optimal Control as the Teacher
+
+**The paper:** Levine, Finn, Darrell & Abbeel, "End-to-End Training of Deep Visuomotor Policies" (JMLR 2016) — the first system to train vision-to-torque neural policies on a physical robot (a PR2 screwing caps on bottles, hanging hangers, inserting blocks into shape sorters), and the intellectual bridge from classical optimal control into deep robot learning.
+
+**The problem it solves:** policy-gradient RL from pixels needs Chapter 12-scale samples; a robot has Chapter-1-of-this-section budgets. But *trajectory optimization* — classical control's gift — can solve a **single instance** of a task (one start state, known-ish local dynamics) with startling sample efficiency, by fitting time-varying linear dynamics around the current trajectory and running LQR-style updates (iLQG): tens of rollouts, not tens of thousands. The catch: the resulting controller is a local, instance-specific object — time-indexed gains, no perception, no generalization.
+
+**The method:** let trajectory optimization *teach* a neural network. GPS alternates: (1) for each of a handful of training conditions (block positions, target poses), improve a local controller $p_i(\tau)$ by fitted-dynamics trajectory optimization — these controllers may use privileged state (object poses from motion capture) unavailable at test time; (2) train the global policy $\pi_\theta(a \mid o)$ — a convnet from raw pixels — by *supervised regression* onto the local controllers' actions; (3) — the part that makes it more than fancy behavioral cloning — **constrain the local controllers to stay near the policy** (a KL/ADMM-style penalty coupling the two optimizations), so the teachers only teach trajectories the student can actually represent and reproduce from its own observations. The alternation provably (in its idealized form) converges to a local optimum of the policy objective; practically, it converts an RL problem into a sequence of easy control problems plus supervised learning — the two things 2015-era tooling was good at.
+
+**Why it mattered, and its limits:** GPS demonstrated end-to-end *visuomotor* learning — the same network mapping pixels to torques, with the spatial-feature convnet architecture becoming standard — at real-robot sample costs (hours, not months). Its DNA is everywhere in this book's later systems: *train a deployable student on a privileged teacher* is now the default pattern of sim-to-real locomotion (teacher with ground-truth state in sim, student from proprioception — the "learning by cheating" lineage). Its limits were the teachers': trajectory optimization needs smooth-ish local dynamics and known low-dimensional state during training, and each new condition needs new local solves — competence interpolates between training conditions rather than generalizing broadly.
+
+## 3. QT-Opt: the Fleet as the Algorithm
+
+**The paper:** Kalashnikov et al., "QT-Opt: Scalable Deep Reinforcement Learning for Vision-Based Robotic Manipulation" (CoRL 2018) — Google's answer to wall #1: if one robot cannot collect enough data, *use seven for four months*, and build the algorithm around total reuse of every transition ever collected.
+
+**The problem:** grasping *arbitrary unseen objects* from a monocular over-the-shoulder RGB camera — no depth, no object models, no calibration — specified only by a sparse binary reward (did the gripper come up holding something?). This is closed-loop grasping: the policy sees images *during* the reach and can regrasp, nudge, and reposition — where the era's grasping systems predicted one open-loop grasp pose and hoped.
+
+**The method,** three deliberate choices. (1) **Off-policy Q-learning, no actor:** everything Chapter 17 will later systematize is here in embryo — 580,000 real grasps collected across seven robots over months, by *many different policies* (scripted explorers early, improving Q-policies later), all funneled into one replay corpus that off-policy learning can digest; on-policy methods would have discarded almost all of it. (2) **The argmax is CEM:** actions are 7-D (gripper pose displacement + open/close); instead of an actor network (Chapter 13's route), QT-Opt evaluates $\max_a Q(s,a)$ by running two iterations of cross-entropy method over 64 sampled actions at *every* decision — Chapter 14's planner, used not to plan trajectories but to *be* the policy. No actor means no actor-critic coupling instabilities: one network, trained with (clipped double-Q) Bellman targets. (3) **Distributed everything:** a thousand simulated + real transitions per second flowing through Bellman-target computation farms into distributed training.
+
+**Results and the behaviors money can't script:** 96% success on unseen objects (vs. 78% for the prior open-loop system), and — the part worth remembering — *emergent* closed-loop strategies: singulating a target from clutter before grasping, regrasping after slips detected visually, gently probing to reorient awkward objects, all discovered because the sparse reward paid only for outcomes and the Q-function priced intermediate situations accordingly (Chapter 1's "say what, not how," vindicated on hardware). **Limitations:** one task family (top-down bin grasping), one embodiment, hero-scale infrastructure, and months of collection per task — the exact cost structure that makes "a foundation model per task" absurd and motivates Chapter 24's *shared* robot datasets. (Add HER — Chapter 19 — to this section's mental model: relabeling gave sparse-reward manipulation its other data-multiplication lever, and the combination "off-policy + relabeling + fleet logs" is the ancestral form of today's robot-data flywheels.)
+
+<Check q="QT-Opt deleted the actor network and computes argmax-by-CEM at every control step. Given Chapter 13's actor-critic machinery, what did this buy and what did it cost?">
+Bought: total off-policy freedom (no actor whose staleness/coupling to the critic must be managed — months-old data trains the same lone Q-network; the deadly triad is confronted with one moving part instead of two), and an argmax that *searches* rather than amortizes — CEM can find sharp, multimodal optima a unimodal actor would average over (Chapter 16's mean-collapse, dodged). Cost: ~128 Q-evaluations per control decision (latency and compute at deployment), no reusable "policy object" to distill or condition, and CEM's limits in higher-dimensional action spaces (7-D is near the comfortable ceiling; a 24-DoF hand would choke it — one reason Dactyl went PPO+actor instead).
+</Check>
+
+## 4. Domain Randomization: Make Reality Just Another Sample
+
+**The paper:** Tobin, Fong, Ray, Schneider, Zaremba & Abbeel, "Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World" (IROS 2017) — the disarmingly simple idea that reframed sim-to-real.
+
+**The problem:** a perception network trained on rendered images fails on real ones — the *reality gap* as a visual distribution shift. The era's default remedy was fidelity: make renders photorealistic (expensive, never quite enough).
+
+**The method — anti-fidelity:** train on *thousands of low-fidelity renders whose nuisance parameters are randomized* — textures, colors, lighting, camera pose, distractor objects — so aggressively that no single render looks real. Train an object-position detector on this circus. **Result:** the detector localizes real objects to ~1.5 cm from the *first real image it ever sees* — zero real training data — sufficient to drive real grasping. **Why it works,** two complementary readings you should both keep: (a) *coverage* — with enough randomization, reality falls inside (or near) the training distribution: the real world is just one more weird render; (b) *invariance* — the only features predictive across all randomizations are those tied to the task-relevant geometry, so the network is *forced* to learn texture-and-lighting-invariant representations (randomization as a causal filter — nuisance factors are decorrelated from labels by construction). Peng et al. (2018) transplanted the idea from pixels to physics — **dynamics randomization**: train a (recurrent) policy across randomized masses, frictions, latencies, motor strengths; deploy on a real arm never explicitly modeled. The recurrent policy's hidden state, trained across the ensemble, learns to *infer the current dynamics from recent history and compensate* — read that twice and you will recognize Chapter 19's RL²: **domain randomization turns sim-to-real into meta-RL**, with "which world am I in?" as the task variable. That reading is the conceptual spine of the next section.
+
+**The cost:** randomization buys robustness with *conservatism* — the policy must work across the whole ensemble, so it hedges (slower, stiffer, larger margins than a policy tuned to the one true world), and choosing the randomization ranges is black art: too narrow misses reality; too wide makes the task unsolvable or the policy uselessly timid. Making that curriculum automatic is precisely Dactyl-era OpenAI's contribution.
+
+## 5. Dactyl and the Rubik's Cube: the Playbook at Maximum Volume
+
+**The papers:** OpenAI et al., "Learning Dexterous In-Hand Manipulation" (2018) and "Solving Rubik's Cube with a Robot Hand" (2019) — the era's moonshot: a 24-DoF Shadow Hand reorienting a cube in-hand (2018), then solving a Rubik's cube one-handed under physical harassment (2019).
+
+**The problem:** in-hand dexterity is everything hard at once — high-dimensional actions (24 actuated DoF), rich contact dynamics no simulator gets right, occluded state (fingers hide the cube), long horizons (a cube solve is ~40 rotations, each ~a few seconds of fine control). No algorithm from Parts II–III touches this on hardware directly; the data cost would be decades.
+
+**The method — everything this chapter has, stacked:** train *entirely in simulation* with **PPO** (Chapter 12 — chosen precisely for wall-clock scalability across ~thousands of CPU cores; the 2018 system consumed roughly a hundred years of simulated experience, the 2019 system ~13,000 years) on **randomized dynamics and visuals** (95 randomized parameter categories in 2019: masses, frictions, tendon gains, gravity, cube size...), with an **LSTM policy** whose recurrence is the meta-learning organ — over the first seconds of real deployment its hidden state implicitly identifies the actual hand-and-cube physics and adapts, the RL²-mechanism of Section 4 operating live (OpenAI verified this directly: perturb the physics mid-episode and the hidden state visibly re-converges; freeze the hidden state and performance collapses). Perception: separate vision networks predicting cube pose from three randomized-render-trained cameras (Tobin's recipe); privileged-state teachers and asymmetric actor-critic (the *critic* sees ground-truth sim state — legal because only the actor deploys, GPS's privileged-teacher trick in critic form).
+
+**The 2019 addition — Automatic Domain Randomization (ADR):** the randomization ranges themselves are a curriculum, expanded automatically: start every parameter at its nominal value; whenever the policy's success rate exceeds a threshold, *widen* whichever ranges it is currently succeeding under; the distribution's entropy ratchets up exactly as fast as competence allows. ADR is Section 4's black-art knob turned into a feedback controller — and a curriculum in the Chapter 19 sense, generated by the agent's own performance (compare HER's manufactured goals and self-play's matched opponents: the era's third instance of "the agent's competence defines its next problem").
+
+**Results, honestly reported:** the 2018 system achieved a median of ~13 consecutive cube reorientations on the real hand (50 max, vision-only); the 2019 system solved the Rubik's cube 60% of the time on moderate scrambles and **20% on maximally hard ones** — while shrugging off interventions the simulator never contained: a rubber glove on the hand, taped fingers, a plush giraffe resting on the cube, pen prods. That robustness-to-the-never-simulated is ADR's signature exhibit (train across enough worlds and the policy's adaptation machinery covers worlds outside the ensemble too). **Limitations, equally honest:** one hand, one object class, months of engineering per task, compute measured in simulator-millennia, success rates far from product-grade, and — the deepest one — *nothing transfers*: the next task starts the pipeline over. Dactyl is simultaneously the proof that the sim+DR+scale playbook reaches astonishing physical competence, and the clearest evidence of its per-task economics.
+
+## 6. Worked Example: Domain Randomization You Can Run
+
+The Section 4 phenomenon in miniature: CartPole's dynamics depend on pole length; a linear policy (4 weights) trained by CEM on a *fixed* length overfits it, while the same optimizer trained across a *randomized* ensemble transfers to lengths neither saw:
+
+```python
+import numpy as np, gymnasium as gym
+
+def make_env(length):
+    env = gym.make("CartPole-v1")
+    env.reset(seed=0)
+    env.unwrapped.length = length          # half-pole length (default 0.5)
+    env.unwrapped.polemass_length = env.unwrapped.masspole * length
+    return env
+
+def rollout(w, env, seed):
+    s, _ = env.reset(seed=seed)
+    total = 0.0
+    for _ in range(500):
+        a = int(np.dot(w, s) > 0)
+        s, r, term, trunc, _ = env.step(a)
+        total += r
+        if term or trunc:
+            break
+    return total
+
+def cem_train(lengths, iters=20, pop=64, elite=8, seed=0):
+    """CEM over 4 linear-policy weights; fitness = mean return over `lengths`."""
+    rng = np.random.default_rng(seed)
+    mu, sigma = np.zeros(4), np.ones(4)
+    envs = [make_env(L) for L in lengths]
+    for it in range(iters):
+        ws = mu + sigma * rng.standard_normal((pop, 4))
+        fit = [np.mean([rollout(w, e, 100 + it) for e in envs]) for w in ws]
+        idx = np.argsort(fit)[-elite:]
+        mu, sigma = ws[idx].mean(0), ws[idx].std(0) + 1e-3
+    return mu
+
+w_fixed = cem_train([0.5])                            # nominal only
+w_rand  = cem_train([0.25, 0.4, 0.55, 0.7, 0.85])     # randomized ensemble
+
+print(f"{'test len':>9} {'fixed-trained':>14} {'DR-trained':>11}")
+for L in [0.3, 0.5, 1.0, 1.5, 2.0]:                   # 1.0-2.0: outside both
+    env = make_env(L)
+    f = np.mean([rollout(w_fixed, env, 200 + i) for i in range(10)])
+    d = np.mean([rollout(w_rand,  env, 200 + i) for i in range(10)])
+    print(f"{L:9.2f} {f:14.0f} {d:11.0f}")
+```
+
+Measured result (seeds as in the listing): both policies score a perfect 500 at every length up to 1.5 — linear CartPole controllers are forgiving — and then, at length 2.0 (4× nominal, outside *both* training ranges), the fixed-trained policy collapses to **19** while the DR-trained policy still scores **500**. The failure is a cliff, not a slope, and the DR policy's cliff is simply somewhere further out: training across an ensemble bought extrapolation margin beyond anything it saw — Section 4's invariance reading, measurable in a four-parameter policy. (Rerun with a wider test sweep to find the DR policy's own cliff; every robust policy has one, which is why Dactyl's harassment tests, not its training range, were the honest evaluation.)
+
+<Pitfall title="Common pitfalls — RL on hardware">
+**Latency is dynamics**: a 40 ms perception-to-action delay changes the MDP (your action applies to a future state) — measure it, simulate it, randomize it, or watch sim policies oscillate on the robot; action-history observations and latency randomization are the standard armor. **The reward instrument lies**: real-world reward comes from sensors (did the grasp lift? force spikes, vision flicker) — a 2% false-positive success detector caps your policy's true success and teaches detector-hacking (Chapter 1, with a camera). **Time limits and resets** (Chapters 3, 10, again): robot episodes end for safety/timeout constantly; mislabeling truncation as termination poisons values exactly where safety behavior matters. **Randomize what you cannot identify, identify what you can**: DR over parameters you could simply *measure* (link masses) wastes capacity on conservatism; system-identify the measurable, randomize the residual. **Safety layers change the data**: action clamps, workspace fences, and E-stops make the *executed* action differ from the *commanded* one — log both, train on what executed, or your off-policy data quietly lies about the dynamics. **And the meta-pitfall**: per-task heroics don't amortize — before rebuilding QT-Opt for your task, price Chapter 24's pretrained generalists first; that comparison is the next three chapters.
+</Pitfall>
+
+## 7. The Playbook, and Its Gaps
+
+The era's synthesis, as a decision recipe: **(i)** if the task can be simulated with meaningful fidelity → train in sim at scale (PPO for wall-clock, SAC for sample-sensitivity), randomize aggressively (ADR if you can afford the machinery), use recurrence for online adaptation, asymmetric critics for privileged state, and distill teachers into deployable students; **(ii)** if it cannot (contacts too rich, materials too weird) → off-policy value learning on real fleet data (QT-Opt pattern), with demonstrations and relabeling (Chapters 16, 19) multiplying every hour of robot time; **(iii)** in all cases, engineer the resets, instrument the reward honestly, and budget more for infrastructure than for the algorithm.
+
+And the gaps that ended the era: **per-task cost** (every skill re-pays the full pipeline — nothing accumulates), **generalization** (QT-Opt grasps *from its bin*, Dactyl manipulates *its cube*; a new object category, camera angle, or instruction restarts the science), and **specification** (rewards for "set the table" resist writing — Chapter 16's opening problem, still unpaid). The field's response was a bet imported from NLP and vision: *stop training per-task policies; pretrain on everything, then adapt* — world models that make simulation itself learned (Chapter 23), and generalist vision-language-action policies over pooled multi-robot data (Chapter 24). The playbook of this chapter did not become obsolete; it became the *fine-tuning stage* of what came next (Chapter 25).
+
+## 8. Summary
+
+- The five walls: sample cost (2–4 orders of magnitude vs. sim appetites), safety/wear, resets, partial observability, and the sim-to-real gap — every robot-RL system is a strategy against several at once.
+- **GPS**: trajectory optimization (cheap, local, privileged) teaches a pixels-to-torques student under a stay-close constraint — first real-robot visuomotor learning; ancestor of every privileged-teacher/deployable-student pipeline.
+- **QT-Opt**: fleet-scale off-policy Q-learning, argmax by CEM, no actor — 580k grasps, 96% on unseen objects, emergent regrasping/singulation; proof that logged robot data can be an asset rather than exhaust, at hero-infrastructure prices.
+- **Domain randomization**: train across deliberately unreal ensembles; reality becomes in-distribution and invariance is forced. Dynamics randomization + recurrence = meta-RL: the policy identifies its world online.
+- **Dactyl / Rubik's cube**: sim + PPO + DR/ADR + LSTM at simulator-millennia scale reached in-hand dexterity and never-simulated robustness (the giraffe test) — 60%/20% solve rates, per-task economics, zero transfer.
+- The gaps — per-task cost, generalization, specification — are the design requirements of Chapters 23–25.
+
+## 9. Papers & Further Reading
+
+- **Levine, Finn, Darrell & Abbeel, "End-to-End Training of Deep Visuomotor Policies" (JMLR, 2016)** — [jmlr.org/papers/v17/15-522.html](https://www.jmlr.org/papers/v17/15-522.html). GPS and the first pixels-to-torques robot.
+- **Kalashnikov et al., "QT-Opt: Scalable Deep Reinforcement Learning for Vision-Based Robotic Manipulation" (CoRL, 2018)** — [arxiv.org/abs/1806.10293](https://arxiv.org/abs/1806.10293). The fleet, the CEM-argmax, the 96%.
+- **Tobin et al., "Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World" (IROS, 2017)** — [arxiv.org/abs/1703.06907](https://arxiv.org/abs/1703.06907) — and **Peng, Andrychowicz, Zaremba & Abbeel, "Sim-to-Real Transfer of Robotic Control with Dynamics Randomization" (ICRA, 2018)** — [arxiv.org/abs/1710.06537](https://arxiv.org/abs/1710.06537). Visual and dynamics randomization.
+- **OpenAI et al., "Learning Dexterous In-Hand Manipulation" (2018)** — [arxiv.org/abs/1808.00177](https://arxiv.org/abs/1808.00177) — and **"Solving Rubik's Cube with a Robot Hand" (2019)** — [arxiv.org/abs/1910.07113](https://arxiv.org/abs/1910.07113). Dactyl; ADR and the harassment tests.
+- **Haarnoja et al., "Learning to Walk via Deep Reinforcement Learning" (RSS, 2019)** — [arxiv.org/abs/1812.11103](https://arxiv.org/abs/1812.11103). SAC walking a real Minitaur in two hours — the real-data-efficiency pole, from Chapter 13's authors.
+- **Ibarz, Tan, Finn, Kalakrishnan, Pastor & Levine, "How to Train Your Robot with Deep Reinforcement Learning: Lessons We Have Learned" (IJRR, 2021)** — [arxiv.org/abs/2102.02915](https://arxiv.org/abs/2102.02915). The era's honest post-mortem by its practitioners; the five walls, from the trenches.
+- **Zhao, Queralta & Westerlund, "Sim-to-Real Transfer in Deep Reinforcement Learning for Robotics: a Survey" (2020)** — [arxiv.org/abs/2009.13303](https://arxiv.org/abs/2009.13303). The transfer-technique map around Section 4.
+
+## 10. Exercises
+
+**22.1 (understand)** For each system — GPS, QT-Opt, Dactyl — identify which of the five walls it primarily attacks, which it pays full price on, and which Part 0–III chapter supplies its core algorithm. (One sentence per cell; the 3×3 grid is the chapter.)
+
+**22.2 (understand)** QT-Opt used off-policy Q-learning; Dactyl used on-policy PPO. Both choices were correct. Reconstruct the reasoning from each project's constraint structure (where the data came from, what compute was abundant, action dimensionality) — and say which choice you'd revisit today given Chapter 17's machinery.
+
+**22.3 (derive)** Latency as MDP surgery: a policy observes $s_t$ but its action executes at $t + d$ (delay d). Show the delayed problem is an MDP over the augmented state $(s_t, a_{t-d}, \dots, a_{t-1})$, compute the augmented state dimension for a 24-DoF hand at d = 3 control steps, and explain why an LSTM policy handles this *without* explicit augmentation — connecting to which Dactyl design choice?
+
+**22.4 (derive)** DR's conservatism, formalized in one state: a one-step problem where the optimal action under known parameter θ is $a^*(\theta)$ and reward is $-(a - a^*(\theta))^2$; the robust policy must pick one $a$ for θ ~ Uniform[−w, w] with $a^*(\theta) = \theta$. Compute the randomized-training optimum and its regret vs. the oracle as a function of w; then show a policy that observes two recent transitions (enough to identify θ) recovers the oracle. You have derived, in miniature, why recurrence turns DR's tax into meta-RL's rebate.
+
+**22.5 (understand)** ADR expands randomization ranges when success exceeds a threshold. Explain: (a) why expanding *only the currently-succeeding* dimensions matters (what goes wrong with uniform expansion?); (b) ADR's relationship to HER and self-play as "competence-driven curricula" (Chapter 19); (c) the failure mode when one parameter's difficulty is discontinuous in its range (a cliff, not a slope) — and which of Chapter 15's diagnoses that resembles.
+
+**22.6 (implement)** Run the DR experiment. Then add the meta-RL layer: give the policy two extra inputs — the previous action and an exponential moving average of recent |pole angular acceleration| (a crude dynamics fingerprint) — retrain both conditions, and show the DR+context policy recovers most of the nominal-length performance the plain DR policy sacrificed. (You have reproduced Peng et al.'s core finding with six parameters.)
+
+**22.7 (implement)** Reward-instrument corruption: in your CartPole DR setup, make the "success sensor" report survival with a 5% per-step false-negative rate during training (episodes end early spuriously). Quantify the policy degradation, then implement the standard mitigation — train a small classifier on (state, sensor) history to filter terminations — and report recovery. Which pitfall-section entry have you just lived?
+
+**22.8 (implement)** Asymmetric actor-critic in miniature: on Pendulum with observation = angle only (angular velocity hidden — partially observed), train SAC three ways: (a) actor and critic both see angle only; (b) both see full state (oracle); (c) *critic* sees full state, actor sees angle + previous two observations. Compare final returns. Explain why giving the critic privileged state is legal (it never deploys) and what it buys the actor's gradient — GPS's trick, quantified.
+
+**22.9 (extend)** Design (on paper, fully specified) the QT-Opt-style data engine for a new task — dish loading — under a budget of two robot-arms for eight weeks: the scripted bootstrap policy, the reward instrumentation (sensors + classifier), the reset story, the replay/relabeling scheme (which of HER's strategies applies to "dish placed in rack slot g"?), and the off-policy learner (justify Q-with-CEM vs. SAC vs. IQL-on-logs using Chapters 13 and 17). Identify the single component you expect to consume the most engineering time, and why it isn't the RL algorithm.
+
+**22.10 (research)** The playbook's transfer failure is quantitative, not just anecdotal: propose a *transfer matrix* methodology for the pre-foundation-model era — a set of K manipulation tasks, systems trained per-task, evaluated on all K — and the two summary statistics that would have measured "nothing transfers." Then specify the minimal intervention from this chapter's toolkit (shared visual encoder? shared dynamics randomization? shared replay?) you'd predict moves those statistics most, and check your prediction against the multi-task sections of the RT-1 and Open X-Embodiment papers in Chapter 24 — which effectively ran your experiment at scale.

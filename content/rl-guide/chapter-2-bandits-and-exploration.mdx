@@ -1,0 +1,271 @@
+Chapter 1 ended with an agent pulling slot-machine arms, and a knob — ε — that we tuned by hand and by vibes. This chapter replaces the vibes with theory. The multi-armed bandit is the reinforcement learning problem with everything removed except the exploration–exploitation dilemma: one state, no credit assignment, no dynamics. That austerity is what makes it solvable — and the solutions it yields (optimism in the face of uncertainty, posterior sampling) are not toy tricks. They are the intellectual ancestors of the exploration bonuses in DQN variants, the UCB term inside AlphaGo's tree search (Chapter 8), and the curiosity signals of Chapter 15. Bandits are also a serious field in their own right: ad placement, clinical-trial design, and recommendation engines are bandit problems running at planetary scale.
+
+By the end of this chapter you will be able to define regret and prove why it is the right yardstick, derive UCB from a concentration inequality, derive the gradient-bandit algorithm as stochastic gradient ascent, implement Thompson sampling, and say precisely — with the Lai–Robbins bound — how good any exploration strategy can possibly be.
+
+## 1. The k-Armed Bandit Problem
+
+You face $k$ actions ("arms," from the one-armed bandits of casino slang). At each step $t = 1, 2, \dots, T$ you select an action $A_t \in \{1, \dots, k\}$ and receive a reward $R_t$ drawn from a fixed but unknown distribution attached to that arm. Each arm $a$ has a true expected payoff
+
+$$
+q_*(a) = \E\left[ R_t \mid A_t = a \right],
+$$
+
+and if you knew the $q_*(a)$ you would trivially always pull $a^* = \argmax_a q_*(a)$. You don't. Everything that follows is about acting well while estimating them.
+
+Note what has been deleted from the full RL problem of Chapter 1: there is no state (every pull faces the same situation), rewards are immediate (no credit assignment), and your actions do not change the environment (arm $a$ pays the same tomorrow regardless of what you pull today). Only the evaluative-feedback problem remains: you learn about an arm only by pulling it, and every pull of an uncertain arm is a pull not spent on the best-known one.
+
+**Measuring performance: regret.** Total reward is an awkward yardstick — it depends on the arm distributions, so a lucky problem instance flatters a bad algorithm. The standard fix is to measure what you *lost* relative to omniscience. Define the per-arm gap $\Delta_a = q_*(a^*) - q_*(a)$, the expected shortfall of arm $a$. The **(expected) cumulative regret** after $T$ steps is
+
+$$
+\mathcal{L}_T \;=\; T\, q_*(a^*) \;-\; \E\!\left[ \sum_{t=1}^{T} R_t \right] \;=\; \sum_{a=1}^{k} \Delta_a \, \E\!\left[ N_T(a) \right],
+$$
+
+where $N_T(a)$ counts pulls of arm $a$ up to time $T$. The second equality (Exercise 2.2) is the useful one: **regret is gap times pull count, summed over suboptimal arms.** An algorithm is good precisely to the extent that it keeps $\E[N_T(a)]$ small for every arm with $\Delta_a$ large — while still pulling each arm enough to be *sure* its gap is large. The whole dilemma is now one sentence.
+
+Two regimes matter. If regret grows linearly in $T$, the algorithm never stops making mistakes at a constant rate — this is what fixed ε-greedy does, as we will see. If regret grows like $\log T$, mistakes become vanishingly rare; the algorithm has, for practical purposes, solved the problem. The gold standard is:
+
+> **Lai–Robbins lower bound (1985).** For any algorithm that is "consistent" (sub-polynomial regret on every problem instance) and Bernoulli rewards, the regret on any instance satisfies
+> $$
+> \liminf_{T \to \infty} \frac{\mathcal{L}_T}{\log T} \;\ge\; \sum_{a\,:\,\Delta_a > 0} \frac{\Delta_a}{\KL\!\left( p_a \,\|\, p_{a^*} \right)},
+> $$
+> where $\KL(p_a \| p_{a^*})$ is the KL divergence between arm $a$'s reward distribution and the optimal arm's.
+
+Read it as an exchange rate: distinguishing arm $a$ from the best arm requires information, information costs pulls (about $\log T / \KL$ of them), and each pull costs $\Delta_a$. No cleverness beats it — $\Omega(\log T)$ regret is the floor, and the algorithms of Sections 4 and 6 achieve it up to constants. That an $\mathcal{O}(\log T)$ ceiling meets an $\Omega(\log T)$ floor is a rare and beautiful thing; almost nowhere else in this book is a problem so completely closed.
+
+## 2. Estimating Action Values
+
+The estimation half is ordinary statistics. The **sample-average** estimate after arm $a$ has been pulled $n$ times with rewards $R_1, \dots, R_n$ is $Q_n = \frac{1}{n}\sum_i R_i$, computed incrementally (Chapter 1, Exercise 1.4) as
+
+$$
+Q_{n+1} = Q_n + \frac{1}{n}\left( R_n - Q_n \right).
+$$
+
+By the law of large numbers, $Q_n \to q_*(a)$ — *if* the arm keeps getting pulled, and *if* $q_*(a)$ holds still.
+
+The second "if" fails often in practice (user tastes drift; an opponent adapts), and the fix is the **constant step size** $\alpha \in (0, 1]$:
+
+$$
+Q_{n+1} = Q_n + \alpha \left( R_n - Q_n \right) \;=\; (1-\alpha)^n Q_1 + \sum_{i=1}^{n} \alpha (1-\alpha)^{n-i} R_i,
+$$
+
+an exponential recency-weighted average: recent rewards dominate, ancient ones decay geometrically, and the estimate never stops adapting. The price is that $Q_n$ no longer converges — it fluctuates forever with variance proportional to $\alpha$ — which is exactly the right behavior when the target itself moves. Classical stochastic-approximation theory (Robbins & Monro, 1951) gives the precise conditions on a decaying step-size sequence for convergence:
+
+$$
+\sum_{n=1}^{\infty} \alpha_n = \infty
+\qquad \text{and} \qquad
+\sum_{n=1}^{\infty} \alpha_n^2 < \infty,
+$$
+
+satisfied by $\alpha_n = 1/n$, violated (second condition) by constant α. File these conditions away: they return verbatim as the convergence conditions for TD learning in Chapter 6, and deep RL violates them on purpose, everywhere, for the nonstationarity reason above.
+
+## 3. ε-Greedy and Optimistic Initialization
+
+**ε-greedy**, from Chapter 1: exploit with probability $1 - \epsilon$, explore uniformly with probability ε. Its virtue is total indifference to assumptions; its flaw is that exploration never *targets* anything and never *stops*. Every suboptimal arm — including ones known to be terrible for a thousand pulls — receives probability $\epsilon / k$ forever, so regret grows linearly: $\mathcal{L}_T \ge \frac{\epsilon}{k} \sum_a \Delta_a \, T$. Decaying ε on a schedule can recover logarithmic regret in theory (Auer et al. analyze $\epsilon_t \propto k/(d^2 t)$), but the schedule constants depend on the unknown gaps, which is why practitioners either tune by hand or use the methods below.
+
+**Optimistic initialization** is the first appearance of the deepest idea in exploration. Initialize every estimate far above any plausible payoff — say $Q_1(a) = +5$ when rewards are $\mathcal{N}(q_*, 1)$ with $q_* \sim \mathcal{N}(0,1)$ — then act *purely greedily* with a constant step size. Whatever arm the agent pulls first will disappoint it ($R \ll 5$), the estimate drops, some other still-optimistic arm becomes the greedy choice, and the agent is marched systematically through every arm several times before optimism burns off. Exploration emerges from greed plus a lie.
+
+The trick is elegant and limited: it is a burst of exploration at the start, encoded in initial conditions. In a nonstationary problem the burst is ancient history by the time the world changes, and the agent has no mechanism to re-explore (Exercise 1.8). The permanent lesson is not the trick but the principle: **uncertainty should look attractive.** The next section makes the principle quantitative.
+
+## 4. Upper Confidence Bounds
+
+Optimism, done right, means being optimistic in *proportion to uncertainty*. For each arm maintain not just an estimate $Q_t(a)$ but a confidence interval around it, and act greedily with respect to the interval's *upper* end. Uncertain arms get big intervals, hence inflated upper bounds, hence pulls; each pull shrinks the interval; certainty disarms optimism automatically.
+
+The width comes from a concentration inequality. **Hoeffding's inequality**: for i.i.d. rewards in $[0,1]$ with true mean $q$, the sample mean $Q_n$ of $n$ draws satisfies
+
+$$
+\Pr\left( q > Q_n + u \right) \;\le\; e^{-2 n u^2}.
+$$
+
+Set the right side to a confidence level $\delta_t$ and solve: $u = \sqrt{\frac{\ln(1/\delta_t)}{2n}}$. Choosing $\delta_t = t^{-4}$ — confidence tightening as the experiment ages, chosen so that the total probability of *ever* being fooled is summable — gives the **UCB1** rule of Auer, Cesa-Bianchi & Fischer (2002):
+
+$$
+A_t \;=\; \argmax_a \left[\, Q_t(a) + c \sqrt{\frac{\ln t}{N_t(a)}} \,\right],
+$$
+
+with $c = \sqrt{2}$ from the derivation and treated as a tunable in practice. The bonus term is the whole story: it grows (slowly, logarithmically) for arms left unpulled, guaranteeing no arm is abandoned on skimpy evidence, and shrinks like $1/\sqrt{N}$ as evidence accumulates.
+
+**Why it works, in one paragraph.** A suboptimal arm $a$ keeps getting pulled only while its upper bound exceeds the best arm's upper bound. Once $N_t(a) \gtrsim \frac{8 \ln t}{\Delta_a^2}$, Hoeffding says arm $a$'s entire interval sits below $q_*(a^*)$ with high probability, and the pulls stop. Plug $\E[N_T(a)] \le \frac{8 \ln T}{\Delta_a^2} + \mathcal{O}(1)$ into the regret decomposition:
+
+$$
+\mathcal{L}_T \;\le\; \sum_{a\,:\,\Delta_a > 0} \left( \frac{8 \ln T}{\Delta_a} + \mathcal{O}(1)\,\Delta_a \right) \;=\; \mathcal{O}(\log T),
+$$
+
+matching the Lai–Robbins floor up to constants. Note the poignant role of $\Delta_a$: *small* gaps produce *large* regret coefficients — nearly-equal arms are expensive to tell apart, though each confusion also costs little.
+
+UCB's descendants are everywhere. Replace "arm" with "move" and you get the selection rule inside Monte Carlo Tree Search and AlphaGo (Chapter 8). Replace the count $N(a)$ with a learned density over image states and you get the count-based exploration bonuses of Chapter 15. *Optimism in the face of uncertainty* is arguably the single most productive principle exploration research has found.
+
+<Check q="UCB pulls every arm once at the start (the bonus is infinite when N(a) = 0). After that, is it possible for UCB to never pull some arm again?">
+No. If arm $a$ were never pulled after time $t_0$, its bonus $c\sqrt{\ln t / N_t(a)}$ would grow without bound as $t \to \infty$ while its $Q$ stayed frozen — eventually its upper bound exceeds any fixed value, forcing a pull. Every arm is pulled infinitely often; what decays is the *rate*, which for bad arms falls to $\mathcal{O}(\log t)$ pulls total. Contrast ε-greedy, which pulls bad arms at a constant rate forever.
+</Check>
+
+## 5. Gradient Bandit Algorithms
+
+Everything so far estimates *values* and derives choices from them. There is a second road, and it matters far beyond bandits: skip values entirely and directly adjust *preferences* for actions by gradient ascent on expected reward. This is the policy-gradient idea (Chapter 11) in its smallest habitat, and we can derive it completely.
+
+Give each arm a numerical preference $H_t(a) \in \R$, and choose actions by softmax:
+
+$$
+\pi_t(a) \;=\; \Pr(A_t = a) \;=\; \frac{e^{H_t(a)}}{\sum_{b=1}^{k} e^{H_t(b)}}.
+$$
+
+We want to ascend $J = \E[R_t] = \sum_a \pi_t(a)\, q_*(a)$. Differentiate with respect to one preference $H_t(a)$, using the softmax derivative $\frac{\partial \pi_t(b)}{\partial H_t(a)} = \pi_t(b)\left( \mathbb{1}[a = b] - \pi_t(a) \right)$ (Exercise 2.5):
+
+$$
+\frac{\partial J}{\partial H_t(a)}
+= \sum_b q_*(b) \, \pi_t(b) \left( \mathbb{1}[a=b] - \pi_t(a) \right)
+= \pi_t(a) \left( q_*(a) - \sum_b \pi_t(b)\, q_*(b) \right).
+$$
+
+Because $\sum_b \pi_t(b)\left(\mathbb{1}[a=b] - \pi_t(a)\right) = 0$, we may also subtract any action-independent **baseline** $B$ from $q_*(b)$ without changing the gradient — remember this freedom; it is the variance-reduction lever of every policy-gradient method to come. Now the estimator: we cannot evaluate the sum (it needs all the unknown $q_*$), but the single sampled reward $R_t$ from the single sampled action $A_t$ suffices. The update
+
+$$
+H_{t+1}(a) \;=\; H_t(a) + \alpha \left( R_t - \bar{R}_t \right) \left( \mathbb{1}[a = A_t] - \pi_t(a) \right)
+\quad \text{for all } a,
+$$
+
+with $\bar{R}_t$ the running average of all rewards (the baseline), has expectation exactly equal to the true gradient — the full verification is Sutton & Barto §2.8; the key step is that sampling $A_t \sim \pi_t$ turns the sum over arms into an expectation. So this is genuine stochastic gradient ascent on $\E[R]$.
+
+The mechanics are intuitive: if the reward beats the baseline, the taken action's preference rises and all others fall (softmax renormalizes); a below-baseline reward does the opposite. The baseline does not change the direction of the expected update, but it collapses the variance — without it, a problem whose rewards hover around +4 would push *every* taken action's preference up, and learning would ride on the small differences between large numbers (Exercise 2.7 measures this).
+
+## 6. Thompson Sampling: the Bayesian Road
+
+The oldest bandit algorithm (Thompson, 1933) is also, by many empirical measures, still the best. Where UCB summarizes uncertainty by an interval, Thompson sampling keeps the whole **posterior distribution** over each arm's value and explores by *sampling from beliefs*:
+
+1. Maintain a posterior $p(q_a \mid \text{data})$ for each arm.
+2. At each step, draw one sample $\tilde{q}_a$ from each arm's posterior.
+3. Pull $A_t = \argmax_a \tilde{q}_a$; update that arm's posterior with the observed reward.
+
+The agent pulls each arm with exactly the probability that it is the best arm, according to current beliefs — the posterior probability of optimality, computed without ever computing it. An uncertain arm's wide posterior occasionally produces a huge sample and wins the argmax (exploration); a well-understood mediocre arm's narrow posterior almost never does (exploitation). Certainty disarms exploration automatically, just as with UCB, but the randomization makes Thompson far more robust to delayed feedback and batching in practice (Chapelle & Li, 2011).
+
+For Bernoulli rewards (click / no-click) the machinery is three lines. Give each arm a $\mathrm{Beta}(\alpha_a, \beta_a)$ prior, starting from $\mathrm{Beta}(1,1)$ (uniform); Beta is conjugate to Bernoulli, so the posterior after $s$ successes and $f$ failures is simply $\mathrm{Beta}(1 + s, 1 + f)$:
+
+```python
+import numpy as np
+
+def thompson_bernoulli(true_p, steps, rng):
+    k = len(true_p)
+    succ, fail = np.ones(k), np.ones(k)      # Beta(1,1) priors
+    total = 0.0
+    for t in range(steps):
+        theta = rng.beta(succ, fail)          # one sample per arm
+        a = theta.argmax()                    # pull the most promising sample
+        r = float(rng.random() < true_p[a])
+        succ[a] += r
+        fail[a] += 1.0 - r
+        total += r
+    return total
+```
+
+Agrawal & Goyal (2012) proved the matching theory: Thompson sampling achieves the Lai–Robbins bound for Bernoulli bandits — optimal regret, 79 years after the algorithm was proposed. For Gaussian rewards with known variance, the same recipe runs with Gaussian posteriors (Exercise 2.8). For arms whose values are outputs of a neural network, exact posteriors die, and the struggle to approximate them — bootstrapped ensembles, randomized priors — is a running subplot of Chapter 15.
+
+## 7. The Testbed: the Strategies Head to Head
+
+The standard proving ground (Sutton & Barto §2.3) is the one from Chapter 1: $k = 10$, true values $q_*(a) \sim \mathcal{N}(0,1)$, rewards $\mathcal{N}(q_*(a), 1)$, 1,000 steps, averaged over 2,000 random instances.
+
+<Pseudocode title="UCB1">
+<L>Initialize $Q(a) \leftarrow 0$, $N(a) \leftarrow 0$ for all $a$</L>
+<L>Loop for $t = 1, 2, \dots$:</L>
+<L i={1}>If some $N(a) = 0$: $\;A \leftarrow$ that $a$ (pull each arm once first)</L>
+<L i={1}>Else: $\;A \leftarrow \argmax_a \left[ Q(a) + c\sqrt{\ln t / N(a)} \right]$</L>
+<L i={1}>$R \leftarrow bandit(A)$; $\;\; N(A) \leftarrow N(A) + 1$; $\;\; Q(A) \leftarrow Q(A) + \frac{1}{N(A)}\left[R - Q(A)\right]$</L>
+</Pseudocode>
+
+```python
+import numpy as np
+
+def run(strategy, steps=1000, runs=2000, seed=0, **kw):
+    rng = np.random.default_rng(seed)
+    avg_reward = np.zeros(steps)
+    for _ in range(runs):
+        q_star = rng.normal(0, 1, 10)
+        Q, N = np.zeros(10), np.zeros(10)
+        H = np.zeros(10)                      # gradient-bandit preferences
+        rbar = 0.0
+        for t in range(steps):
+            if strategy == "eps":
+                if rng.random() < kw["eps"]:
+                    a = rng.integers(10)
+                else:
+                    a = rng.choice(np.flatnonzero(Q == Q.max()))
+            elif strategy == "ucb":
+                if N.min() == 0:
+                    a = int(N.argmin())
+                else:
+                    a = int(np.argmax(Q + kw["c"] * np.sqrt(np.log(t + 1) / N)))
+            elif strategy == "grad":
+                pi = np.exp(H - H.max()); pi /= pi.sum()
+                a = rng.choice(10, p=pi)
+            r = rng.normal(q_star[a], 1.0)
+            N[a] += 1
+            Q[a] += (r - Q[a]) / N[a]
+            if strategy == "grad":
+                rbar += (r - rbar) / (t + 1)
+                onehot = np.zeros(10); onehot[a] = 1.0
+                H += kw["alpha"] * (r - rbar) * (onehot - pi)
+            avg_reward[t] += r
+    return avg_reward / runs
+
+for name, curve in {
+    "eps=0.1":  run("eps", eps=0.1),
+    "UCB c=2":  run("ucb", c=2.0),
+    "gradient": run("grad", alpha=0.1),
+}.items():
+    print(f"{name:9s}  late avg reward: {curve[-100:].mean():.3f}")
+```
+
+Representative results on this testbed: ε-greedy (ε = 0.1) settles near 1.40; UCB ($c=2$) near 1.47 after an early dip while it pulls everything once; the gradient bandit near 1.45. The differences look small because the testbed is easy; the *slopes* differ — run 10,000 steps and ε-greedy's flat tax becomes visible while UCB keeps creeping upward. The deeper comparison is the **parameter study** (Sutton & Barto Fig. 2.6): sweep each method's knob across orders of magnitude and plot final performance. UCB and gradient bandits are both better at their best *and* flatter around it — robustness to hyperparameters, a virtue you will crave in deep RL, is measurable already here.
+
+<Pitfall title="What breaks — bandit lessons that fail to transfer">
+Two cautions before you carry these tools into full RL. First, everything above assumed stationary arms; under drift, pair any strategy with constant-α estimates, and note that UCB's count-based bonus has no mechanism to re-inflate when the world changes — sliding-window and discounted UCB variants exist for exactly this. Second, and more important: in full MDPs, *the exploration problem is no longer local.* A bandit explores by choosing a different arm now; an MDP agent may need a coordinated hundred-step detour to reach the unvisited region at all — dithering ε-greedy needs time exponential in the detour's depth to stumble there by luck. The principles — optimism, posterior sampling — survive the trip to Chapter 15; the specific algorithms do not.
+</Pitfall>
+
+## 8. Contextual Bandits: One Step Toward Full RL
+
+Between the bandit and the MDP lies a waypoint worth naming, because a surprising amount of industry runs on it. In a **contextual bandit**, each round presents a context $x_t$ (user features, time of day), the agent chooses an action, and the reward depends on both: $q_*(x, a)$. Ad systems and recommenders live here — each decision is personalized, but today's recommendation does not (to first approximation) change tomorrow's user. LinUCB (Li et al., 2010), which powered news recommendation at Yahoo!, is exactly UCB with a linear model of $q_*(x,a)$ supplying both the estimate and the confidence width.
+
+What contextual bandits still lack is the defining difficulty of Chapter 3 onward: **actions that change the state.** Once today's action determines tomorrow's situation, you must plan — and value long-term consequences — rather than merely predict rewards one step out. That single addition costs us the closed theory of this chapter and buys the rest of the book.
+
+## 9. Summary
+
+- The $k$-armed bandit isolates exploration: one state, immediate rewards, unknown arm values $q_*(a)$.
+- **Regret** $\mathcal{L}_T = \sum_a \Delta_a \E[N_T(a)]$ is the yardstick: gap × pulls. Linear regret means never learning; $\log T$ regret is optimal, by the **Lai–Robbins bound**.
+- Sample averages converge on stationary arms under the Robbins–Monro conditions ($\sum \alpha_n = \infty$, $\sum \alpha_n^2$ finite); constant α tracks nonstationary ones and is what deep RL uses.
+- **ε-greedy**: simple, assumption-free, linear regret — it taxes every step forever.
+- **Optimism**: optimistic initialization explores via greed alone; **UCB** makes optimism proportional to uncertainty via Hoeffding, achieving $\mathcal{O}(\log T)$ regret. Its descendants run MCTS and deep-RL exploration bonuses.
+- **Gradient bandits** ascend $\E[R]$ directly on softmax preferences — the policy gradient theorem in miniature, baseline and all.
+- **Thompson sampling** samples from the posterior and pulls the argmax: optimal regret, superb practical performance, and the ancestor of posterior-based deep exploration.
+- Contextual bandits add state without dynamics; MDPs add dynamics, and the closed theory ends.
+
+## 10. Papers & Further Reading
+
+- **Sutton & Barto, Ch. 2** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). The testbed and the gradient-bandit derivation this chapter follows.
+- **Lattimore & Szepesvári, *Bandit Algorithms* (Cambridge UP, 2020)** — [banditalgs.com](https://banditalgs.com/). The definitive graduate text: several hundred pages of exactly this chapter, done with full rigor. Free PDF.
+- **Auer, Cesa-Bianchi & Fischer, "Finite-time Analysis of the Multiarmed Bandit Problem" (Machine Learning, 2002)** — [doi.org/10.1023/A:1013689704352](https://doi.org/10.1023/A:1013689704352). UCB1 and its finite-time $\log T$ guarantee; the argument sketched in Section 4 lives here.
+- **Lai & Robbins, "Asymptotically Efficient Adaptive Allocation Rules" (Advances in Applied Mathematics, 1985)** — [doi.org/10.1016/0196-8858(85)90002-8](https://doi.org/10.1016/0196-8858(85)90002-8). The lower bound; the paper that made regret the field's currency.
+- **Thompson, "On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples" (Biometrika, 1933)** — [doi.org/10.1093/biomet/25.3-4.285](https://doi.org/10.1093/biomet/25.3-4.285). Posterior sampling, proposed for clinical trials, ignored for most of a century.
+- **Chapelle & Li, "An Empirical Evaluation of Thompson Sampling" (NeurIPS, 2011)** — [papers.nips.cc](https://papers.nips.cc/paper_files/paper/2011/hash/e53a0a2978c28872a4505bdb51db06dc-Abstract.html). The paper that revived Thompson sampling by showing it beat UCB in display advertising.
+- **Agrawal & Goyal, "Analysis of Thompson Sampling for the Multi-armed Bandit Problem" (COLT, 2012)** — [arxiv.org/abs/1111.1797](https://arxiv.org/abs/1111.1797). Near-optimal regret for Thompson sampling, closing the theory.
+- **Russo, Van Roy, Kazerouni, Osband & Wen, "A Tutorial on Thompson Sampling" (Foundations and Trends in ML, 2018)** — [arxiv.org/abs/1707.02038](https://arxiv.org/abs/1707.02038). Modern, readable, and honest about when posterior sampling breaks.
+- **Li, Chu, Langford & Schapire, "A Contextual-Bandit Approach to Personalized News Article Recommendation" (WWW, 2010)** — [arxiv.org/abs/1003.0146](https://arxiv.org/abs/1003.0146). LinUCB in production at Yahoo!; contextual bandits meeting reality.
+
+## 11. Exercises
+
+**2.1 (understand)** In ε-greedy with $k = 4$, $\epsilon = 0.2$, and current estimates $Q = (0.3, 0.7, 0.1, 0.5)$, what is the probability that the next action is arm 2? Arm 4? (Careful: the exploration branch can also land on the greedy arm.)
+
+**2.2 (derive)** Prove the regret decomposition $\mathcal{L}_T = \sum_a \Delta_a \E[N_T(a)]$ from the definition $\mathcal{L}_T = T q_*(a^*) - \E\left[\sum_t R_t\right]$. *Hint: write $\sum_t R_t = \sum_a \sum_t R_t \,\mathbb{1}[A_t = a]$ and condition on the actions (tower rule).*
+
+**2.3 (derive)** Show that ε-greedy with fixed ε has regret at least $\frac{\epsilon}{k}\left(\sum_a \Delta_a\right) T$ and hence cannot achieve sublinear regret. Then explain qualitatively why *any* algorithm whose exploration probability does not decay must suffer linear regret.
+
+**2.4 (derive)** Starting from Hoeffding's inequality with confidence $\delta_t = t^{-4}$, derive the UCB1 bonus and verify the constant $c = \sqrt{2}$. Why must the confidence level tighten over time — what goes wrong with a fixed δ? *Hint: a union bound over infinitely many time steps.*
+
+**2.5 (derive)** Derive the softmax derivative $\frac{\partial \pi(b)}{\partial H(a)} = \pi(b)\left(\mathbb{1}[a=b] - \pi(a)\right)$, then complete the expectation calculation showing the gradient-bandit update is unbiased: $\E\left[ (R_t - \bar R_t)\left(\mathbb{1}[a = A_t] - \pi_t(a)\right) \right] = \frac{\partial J}{\partial H_t(a)}$, treating $\bar R_t$ as a constant baseline.
+
+**2.6 (implement)** Reproduce the parameter study: for each method (ε-greedy over ε, UCB over $c$, gradient bandit over α, optimistic-greedy over $Q_1$), sweep the knob over $2^{-7}, 2^{-6}, \dots, 2^2$ and plot average reward over the first 1,000 steps. Which method's curve is flattest near its peak, and why does that matter more than the peak itself?
+
+**2.7 (implement)** Rerun the gradient bandit on a shifted testbed where $q_*(a) \sim \mathcal{N}(+4, 1)$, with and without the baseline $\bar{R}_t$. Explain the gap you observe using the variance argument of Section 5.
+
+**2.8 (implement)** Implement Gaussian Thompson sampling for the standard testbed: prior $\mathcal{N}(0, 1)$ on each $q_*(a)$, known reward variance 1, so the posterior after $n$ pulls with sample mean $\bar r$ is $\mathcal{N}\!\left(\frac{n \bar r}{n + 1}, \frac{1}{n + 1}\right)$. Compare its learning curve to UCB's. Which handles the first 50 steps better, and why?
+
+**2.9 (extend)** Batched feedback: rewards for all pulls in a batch of 100 arrive only at the batch's end. Modify UCB and Thompson sampling to run in this regime and compare degradation. (Thompson's randomization keeps batch-mates diverse while deterministic UCB repeats one arm 100 times — this robustness is why ad systems chose it; Chapelle & Li discuss exactly this.)
+
+**2.10 (research)** UCB needs the count $N(a)$. In Chapter 15, states are images and exact counts are meaningless — every frame is unique. Sketch two distinct proposals for a "generalized count" over continuous observations, and one failure mode of each. (You are re-deriving pseudo-counts and RND; check your ideas against that chapter afterward.)

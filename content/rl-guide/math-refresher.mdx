@@ -1,0 +1,73 @@
+This appendix collects the mathematics the book uses, at the depth it uses it. It is a refresher, not a course: each section states the facts, the notation, and where in the book they carry load. If any section reads as new rather than half-remembered, the linked references are the efficient repair.
+
+## 1. Probability
+
+**Random variables and distributions.** A random variable $X$ takes values by chance; its distribution assigns probabilities. We write $X \sim p$ ("distributed as"), $\Pr(X = x)$ or $p(x)$ for probability (mass or density), and use capital letters for random variables, lowercase for realized values — the convention that lets $\E[G_t \mid S_t = s]$ parse correctly everywhere in this book.
+
+**Joint, marginal, conditional.** $p(x, y)$ is the joint; the marginal integrates the other variable out, $p(x) = \sum_y p(x, y)$; the conditional is $p(y \mid x) = p(x, y)/p(x)$. The **chain rule** $p(x_1, \dots, x_n) = \prod_i p(x_i \mid x_{1:i-1})$ is used every time the book factorizes a trajectory probability (Chapters 3, 11): $p(\tau) = \mu_0(s_0) \prod_t \pi(a_t \mid s_t)\, p(s_{t+1} \mid s_t, a_t)$.
+
+**Independence and conditional independence.** $X \perp Y$ iff $p(x,y) = p(x)p(y)$. Conditional independence $X \perp Y \mid Z$ — "given Z, Y adds nothing about X" — is the *Markov property* (Chapter 3): the future is conditionally independent of the past given the present. Nearly every derivation that "drops the history" (Bellman equations, Chapter 5's importance-sampling cancellation) is an application.
+
+**Bayes' rule.** $p(z \mid x) = \frac{p(x \mid z)\, p(z)}{p(x)}$ — posterior ∝ likelihood × prior. Load-bearing in: Thompson sampling (Chapter 2), POMDP belief updates (Chapter 3), and the variational posterior/prior structure of world models (Chapter 23).
+
+## 2. Expectation, Variance, and the Tools of Estimation
+
+**Expectation** is the probability-weighted average, $\E[X] = \sum_x x\, p(x)$, and is **linear** unconditionally: $\E[aX + bY] = a\E[X] + b\E[Y]$ *whether or not X, Y are independent* — the fact that makes returns decompose ($G_t = R_{t+1} + \gamma G_{t+1}$ ⟹ Bellman equations) and baselines subtract cleanly (Chapter 11).
+
+**The tower rule (law of total expectation).** $\E[X] = \E\left[ \E[X \mid Y] \right]$. The book's most-used invisible tool: it converts "average over trajectories" into "average over states of the average over what follows" — the step inside the Bellman derivation (Chapter 3), the regret decomposition (Chapter 2, Exercise 2.2), and the unbiasedness proofs of Chapters 5 and 11.
+
+**Variance** measures spread: $\mathrm{Var}[X] = \E[X^2] - \E[X]^2$. For independent variables variances add — which is why an $n$-step return's variance grows with $n$ (each reward contributes; Chapter 7) and why averaging $n$ i.i.d. samples shrinks standard error like $1/\sqrt{n}$ (Monte Carlo, Chapter 5).
+
+**Estimators.** An estimator $\hat\theta$ of θ from samples is **unbiased** if $\E[\hat\theta] = \theta$ and **consistent** if $\hat\theta \to \theta$ with more data. The book's recurring trade: unbiased/high-variance (Monte Carlo returns, ordinary importance sampling, REINFORCE) versus biased/low-variance (TD targets, weighted importance sampling, critics). **Bias–variance decomposition:** mean squared error = bias² + variance — the accounting behind every "n-step / λ" dial (Chapter 7) and GAE (Chapter 11).
+
+**Concentration.** **Hoeffding's inequality**: for i.i.d. bounded samples, $\Pr\left( \lvert \bar X_n - \mu \rvert \ge u \right) \le 2 e^{-2 n u^2 / (b-a)^2}$ — deviations decay exponentially. It is the engine of every confidence bound in the book: UCB (Chapter 2), UCBVI's confidence sets (Chapter 21). The **union bound**, $\Pr(\cup_i A_i) \le \sum_i \Pr(A_i)$, is how per-arm/per-state bounds become uniform ones (and why log factors appear everywhere).
+
+**Jensen's inequality.** For convex $f$: $\E[f(X)] \ge f(\E[X])$. With $f = \max$: $\E[\max_i X_i] \ge \max_i \E[X_i]$ — maximization bias, the single inequality responsible for Double Q-learning, Double DQN, and TD3's twin critics (Chapters 6, 10, 13).
+
+**Importance sampling.** To estimate $\E_{x \sim p}[f(x)]$ using samples from $q$: $\E_p[f] = \E_q\!\left[ \frac{p(x)}{q(x)} f(x) \right]$, valid wherever $p > 0 \Rightarrow q > 0$ (coverage). Unbiased; variance governed by the ratio's spread — the mathematics of all off-policy corrections (Chapters 5, 7, 12) and their failure modes (offline RL, Chapter 17).
+
+## 3. The Gaussian, and Sampling Tricks
+
+The **Gaussian** $\mathcal{N}(\mu, \sigma^2)$ has density $\frac{1}{\sqrt{2\pi}\sigma} e^{-(x-\mu)^2 / 2\sigma^2}$; its log-density $-\frac{(x-\mu)^2}{2\sigma^2} - \log\sigma - \frac{1}{2}\log 2\pi$ appears verbatim in every Gaussian-policy log-prob computation (Chapters 11, 13). Products stay Gaussian; sums of independent Gaussians are Gaussian; conditionals and marginals of joint Gaussians are Gaussian — the closure properties PILCO's moment matching exploits (Chapter 14).
+
+**Change of variables.** If $y = g(x)$ with invertible g, densities transform with the Jacobian: $p_Y(y) = p_X(g^{-1}(y)) \left| \det \frac{\partial g^{-1}}{\partial y} \right|$. This is the tanh-correction in SAC's squashed Gaussian (Chapter 13) — forget it and entropies come out wrong.
+
+**Reparameterization.** Sampling $x \sim \mathcal{N}(\mu_\theta, \sigma_\theta^2)$ blocks gradients; writing $x = \mu_\theta + \sigma_\theta \xi$, $\xi \sim \mathcal{N}(0,1)$ restores them: $\nabla_\theta \E[f(x)] = \E_\xi[\nabla_\theta f(\mu_\theta + \sigma_\theta \xi)]$. One of the book's two fundamental gradient estimators (Chapter 13; world models, Chapter 23) — the other being the **score function** identity $\nabla_\theta \E_{p_\theta}[f] = \E_{p_\theta}[f\, \nabla_\theta \log p_\theta]$, derived from $\nabla p = p \nabla \log p$ (Chapter 11).
+
+## 4. Linear Algebra and Calculus, as Used
+
+**Vectors and norms.** $\|x\|_2 = \sqrt{\sum x_i^2}$; $\|x\|_\infty = \max_i |x_i|$ (the sup-norm of Chapter 4's contraction proofs); $\|x\|_1 = \sum |x_i|$ (total-variation-flavored bounds, Chapter 21). Inner product $x^\top y$; vectors are columns.
+
+**Matrices as operators.** A stochastic matrix $P$ (rows sum to 1) maps value vectors to expected-next values; its spectral radius is 1, so $\gamma P$ contracts and $(I - \gamma P)^{-1} = \sum_k (\gamma P)^k$ converges (the Neumann series = "sum over all discounted paths" — Chapter 3). Positive definiteness ($x^\top A x > 0$) is what makes expected TD updates stable (Chapter 9) and the Fisher matrix a metric (Chapter 12).
+
+**Gradients.** $\nabla_\theta f$ points uphill; the chain rule composes through networks (backprop) and through sampled computation graphs (reparameterization). Two named gradients recur: the **policy gradient** $\E[\nabla \log \pi \cdot A]$ and the **pathwise/deterministic gradient** $\E[\nabla_a Q\, \nabla_\theta \mu]$ — Chapters 11 and 13; know both derivations cold.
+
+**Taylor expansion.** $f(\theta + \delta) \approx f + \nabla f^\top \delta + \frac{1}{2} \delta^\top H \delta$ — the tool behind trust regions: TRPO expands the objective to first order and the KL constraint to second (whose Hessian is the Fisher matrix — Chapter 12, Exercise 12.4).
+
+**Fixed points and contractions.** $T$ is a γ-contraction under norm $\|\cdot\|$ if $\|Tx - Ty\| \le \gamma \|x - y\|$; Banach's theorem gives a unique fixed point and geometric convergence of iteration. Proved and used in Chapter 4; echoed for soft Bellman operators (Chapter 13) and distributional operators (Chapter 10).
+
+## 5. Optimization
+
+**Gradient descent/ascent** with step size α; **stochastic** versions replace the gradient with an unbiased sample. Convergence for decaying steps under the **Robbins–Monro conditions** $\sum \alpha_t = \infty$, $\sum \alpha_t^2 < \infty$ (Chapters 2, 6, 21); constant steps track nonstationary targets instead (everywhere in deep RL). **Momentum/Adam**: adaptive per-parameter step sizes; the book's code uses Adam throughout without ceremony.
+
+**Constrained optimization and Lagrange multipliers.** To maximize $f$ subject to $g \le c$: form $L = f - \lambda(g - c)$, optimize over the primal, adjust λ by **dual ascent** (raise λ while the constraint is violated). Used for: TRPO's trust region (Chapter 12), SAC's automatic temperature (Chapter 13), and the max-ent derivations (Chapters 13, 16, 20 — where the Boltzmann distribution $p \propto e^{f/\lambda}$ appears as the closed-form solution of entropy-regularized objectives; deriving that once, via calculus of variations on the simplex, pays off four separate times).
+
+**Convexity** (one definition, three uses): $f$ convex iff chords lie above the graph. Uses: Jensen (Section 2), the log-sum-exp softmax bound (CQL, Chapter 17), and convex conjugates $\psi^*$ (GAIL's occupancy duality, Chapter 16 — used at the "trust the statement" level).
+
+## 6. Information Theory
+
+**Entropy** $\mathcal{H}(p) = -\sum_x p(x) \log p(x)$: expected surprise; maximized by uniform. The exploration bonus of Chapter 11, the objective term of max-ent RL (Chapter 13), and the tie-breaking principle of max-ent IRL (Chapter 16).
+
+**KL divergence** $\KL(p \| q) = \sum_x p(x) \log \frac{p(x)}{q(x)}$: expected log evidence for p over q; nonnegative (Gibbs' inequality), zero iff $p = q$, **asymmetric** — $\KL(p\|q)$ punishes q lacking mass where p has it (mode-covering), $\KL(q\|p)$ punishes q putting mass where p lacks it (mode-seeking); which direction appears in a loss is never an accident (RSSM's two-directional balance, Chapter 23; the RLHF leash, Chapter 20). Its local quadratic expansion $\KL(p_\theta \| p_{\theta + \delta}) \approx \frac{1}{2}\delta^\top F \delta$ defines the **Fisher information matrix** $F = \E[\nabla \log p\, \nabla \log p^\top]$ — the metric of natural gradients (Chapter 12).
+
+**Mutual information** $I(X; Y) = \KL\left( p(x,y) \,\|\, p(x)p(y) \right)$: shared information; the formal objective behind information-gain exploration (Chapter 15) and latent-action discovery (Genie, Chapter 23).
+
+**Cross-entropy** $-\E_p[\log q]$ = entropy + KL: minimizing it in q fits q to p — every classification loss, C51's projection loss (Chapter 10), and behavior cloning's objective (Chapter 16) in one identity.
+
+## 7. Where to Repair Gaps
+
+- **Probability & estimation:** Wasserman, *All of Statistics* — chapters 1–5 cover everything above at the right level. [link.springer.com/book/10.1007/978-0-387-21736-9](https://link.springer.com/book/10.1007/978-0-387-21736-9)
+- **Linear algebra:** Strang's lectures, or Axler for the operator view that makes Chapter 4 natural.
+- **Optimization:** Boyd & Vandenberghe, *Convex Optimization*, chapters 1–5 — free at [stanford.edu/~boyd/cvxbook](https://web.stanford.edu/~boyd/cvxbook/). Lagrange duality is the one section this book truly leans on.
+- **Information theory:** Cover & Thomas, *Elements of Information Theory*, chapters 1–2; or MacKay's free *Information Theory, Inference, and Learning Algorithms* — [inference.org.uk/mackay/itila](https://www.inference.org.uk/mackay/itila/).
+- **Stochastic approximation (optional depth):** Borkar, *Stochastic Approximation: A Dynamical Systems Viewpoint* — the machinery behind Chapters 6 and 21's convergence claims.

@@ -1,0 +1,198 @@
+Every algorithm so far — even the "off-policy" ones — quietly relied on a privilege: when the agent's values went wrong, it could *act on its delusions and be corrected*. DQN overestimates a state's value, visits it, is disappointed, updates. Now revoke the privilege. You are handed a fixed dataset $\mathcal{D}$ — a million transitions from old policies, human operators, or last year's robot fleet — and asked to produce the best possible policy **with no further interaction**. No trying things out. No being corrected. This is **offline RL** (batch RL), and it is not a mild variant of off-policy learning; it is a different regime with its own central pathology, its own algorithms, and — because robot time, patient safety, and fleet data are exactly this shape — arguably more practical importance than everything since Chapter 10.
+
+The promise is enormous: RL's data-hungriness solved by the same move that made vision and language work — learn from logs, from archives, from *other agents' lives*. The obstacle is one mechanism, **extrapolation error**, and this chapter is organized around the four families of defenses against it: constrain the policy to the data (BCQ, TD3+BC), poison the value function against out-of-distribution actions (CQL), never ask out-of-distribution questions at all (IQL), or build a pessimistic model (MOReL, MOPO, COMBO). We close with the problems that make offline RL humbling in practice — evaluation without interaction, and the offline-to-online handoff — both of which Part IV inherits wholesale.
+
+## 1. Why Naive Off-Policy Learning Implodes Offline
+
+Run DQN or SAC on a fixed buffer and watch the Q-values climb — 10×, 1000×, sometimes to numerical infinity — while the extracted policy gets *worse*. The mechanism (Fujimoto et al., 2019, dissected it as their motivation for BCQ):
+
+The Bellman target contains $\max_{a'} Q(s', a')$ (or $Q(s', \pi(s'))$ with π trained to maximize Q). The max ranges over **all** actions — including actions *the dataset never contains at states like $s'$*. For those, $Q(s', a')$ is not an estimate; it is an unconstrained **extrapolation** of a neural network queried outside its training distribution — and among many arbitrary extrapolated values, the max *selects the most wrongly optimistic one* (Chapter 6's $\E[\max] \ge \max\E$, now applied to errors that are not even noise around truth, but sheer fiction). Online, this self-corrects: the policy chases the fiction, reality disappoints, the buffer gains the corrective transition. Offline, the loop is open — **the optimizer proposes, and nothing disposes**. The fictitious value becomes a target, propagates into other states' values (bootstrapping), and the policy extraction concentrates precisely on the fictions. Add the deadly-triad framing (Chapter 9): offline RL is the triad's third leg — off-policy-ness — pushed to its extreme, with the distribution mismatch now *unfixable by future data*.
+
+Note the asymmetry doing the damage, because every method below exploits it: an *under*valued in-distribution action costs a little performance; an *over*valued out-of-distribution (OOD) action can absorb the whole policy. TD3's twin-min pessimism (Chapter 13) was this lesson's first appearance; offline RL is where the lesson becomes the entire field. The slogan: **stay close to the data, or be provably pessimistic when you leave it.**
+
+## 2. Policy Constraints: BCQ and TD3+BC
+
+**Batch-Constrained Q-learning (BCQ)** enforces the slogan literally: only ever evaluate the Bellman max over actions the data could plausibly contain. Train a generative model $G_\omega(s)$ (a VAE) of the dataset's action-given-state distribution; at both target computation and action selection, sample $k$ candidate actions from $G_\omega$, nudge each with a small learned perturbation network (bounded by Φ), and max over *those*:
+
+$$
+\pi(s) \;=\; \argmax_{a_i + \xi_\theta(s, a_i)}\; Q_\phi\left( s,\, a_i + \xi_\theta(s, a_i) \right),
+\qquad a_i \sim G_\omega(\cdot \mid s),\; i = 1..k.
+$$
+
+The max is now batch-constrained — extrapolation is fenced at the source. BCQ was the proof of concept that fixed-buffer control could work at all where DDPG-on-a-buffer collapsed; its costs are the moving parts (VAE + perturbation + twin critics) and the fence itself: with a mediocre dataset, the fence also excludes the *good* actions the data barely hints at.
+
+**TD3+BC** (Fujimoto & Gu, 2021) is the family's minimalist manifesto — a one-line change to TD3's policy loss:
+
+$$
+\pi \;=\; \argmax_\pi\; \E_{(s,a) \sim \mathcal{D}}\left[ \lambda\, Q(s, \pi(s)) \;-\; \left( \pi(s) - a \right)^2 \right],
+$$
+
+maximize value *while regressing toward the dataset's actions*, with λ auto-normalized by the Q-scale ($\lambda = \alpha / \frac{1}{N}\sum |Q|$, α ≈ 2.5). Plus one more line: normalize the states. That is the entire algorithm — and it matched or beat CQL and other far heavier methods across most of the D4RL benchmark at half the compute. Its role in the literature is partly scientific hygiene: any new offline method must now beat the two-liner, and a surprising number don't. (Its conceptual reading: BC is the prior, Q is the tilt — imitation for support, RL for selection within it — Chapter 16's closing theme, formalized in five symbols.)
+
+## 3. Conservative Q-Learning: Poison the Fictions
+
+CQL (Kumar et al., 2020) attacks the value function instead of the policy: *train Q so that OOD actions are systematically undervalued*, then any policy extraction is safe by construction. To the standard Bellman error, add a term that pushes Q down on actions the learned policy favors and up on actions the dataset contains:
+
+$$
+L_{\mathrm{CQL}}(\phi) \;=\; \alpha\, \E_{s \sim \mathcal{D}} \left[ \log \sum_a \exp Q_\phi(s, a) \;-\; \E_{a \sim \mathcal{D}(\cdot|s)} Q_\phi(s, a) \right] \;+\; L_{\mathrm{Bellman}}(\phi),
+$$
+
+(the logsumexp is the soft-max over all actions — in continuous spaces, estimated by sampling; the display is the popular "CQL(H)" variant). Read the penalty's fixed point: actions with inflated Q dominate the logsumexp and get pushed down *hardest*; dataset actions are exempted; the equilibrium Q is a **certified lower bound** — Kumar et al. prove that with sufficient α, the learned $\hat Q^\pi$ lower-bounds the true $Q^\pi$ (in expectation under the policy), turning Section 1's asymmetry into a theorem: you may err, but only in the safe direction. CQL needs no behavior model and became the reference conservative method (and the "CQL" in several robotics stacks); its running costs are the extra logsumexp machinery, sensitivity to α (too high and everything drowns in pessimism — the policy collapses to BC), and notoriously finicky training dynamics at scale.
+
+<Check q="CQL penalizes the policy's preferred actions and rewards the dataset's. At convergence, if the learned policy exactly equals the behavior policy, what does the penalty term become — and what does that tell you about CQL's failure mode when α is too large?">
+The two expectations coincide and the penalty's gradient contribution vanishes (up to the soft-max/behavior gap) — CQL's pressure is proportional to how far the policy strays from the data. Crank α and the cheapest way to zero the penalty is to *be* the behavior policy: CQL degrades gracefully into behavioral cloning, discarding the value function's selectivity. That is the conservative family's characteristic failure — not divergence but timidity — and it is why α (or its Lagrangian auto-tuned form) is the knob that decides whether you bought RL or expensive BC.
+</Check>
+
+## 4. Implicit Q-Learning: Never Ask the Forbidden Question
+
+The preceding methods manage OOD queries; **IQL** (Kostrikov, Nair & Levine, 2021) eliminates them. Observation: the Bellman *optimality* backup needs $\max_{a'} Q(s', a')$ — but if we could estimate "the value of the best action *the dataset supports* at $s'$" without naming that action, no OOD query ever occurs. The tool is **expectile regression**: the $\tau$-expectile of a distribution generalizes the mean (τ = 0.5) toward the maximum (τ → 1), fit by the asymmetric squared loss
+
+$$
+L_V(\psi) \;=\; \E_{(s,a) \sim \mathcal{D}}\left[ \left| \tau - \mathbb{1}\left[ Q_\phi(s,a) - V_\psi(s) < 0 \right] \right| \cdot \left( Q_\phi(s,a) - V_\psi(s) \right)^2 \right],
+$$
+
+which trains $V_\psi(s)$ toward an upper expectile (τ = 0.7–0.9) of the *dataset's own* action values at $s$ — a soft, in-sample max. The critic then bootstraps through V with a plain SARSA-style loss on dataset transitions, $L_Q = \E[(r + \gamma V_\psi(s') - Q_\phi(s,a))^2]$: **every quantity is evaluated only at state–action pairs the dataset contains.** Extrapolation error has nowhere to enter the value recursion at all. The policy is extracted afterward, separately, by **advantage-weighted regression** — BC reweighted toward good actions:
+
+$$
+L_\pi(\theta) \;=\; -\,\E_{(s,a) \sim \mathcal{D}}\left[ \exp\!\left( \beta\, \left( Q_\phi(s,a) - V_\psi(s) \right) \right)\, \log \pi_\theta(a \mid s) \right],
+$$
+
+clone the dataset, but clone its high-advantage actions exponentially harder. IQL is simple, fast, stable, competitive-to-superior on D4RL — and its decoupled structure (values trained fully in-sample; policy a reweighted BC) made it the field's default for the *fine-tuning* setting of Section 7 and a fixture in robot-learning pipelines. Its limit is the mirror of its virtue: strictly in-sample values cannot credit action *combinations* the dataset never exhibits ("stitching" beyond one step relies on state coverage), so on datasets requiring aggressive recombination, conservatives with controlled extrapolation can win.
+
+## 5. Model-Based Offline RL: Pessimism via Uncertainty
+
+Chapter 14's machinery offers a different deal: learn a dynamics model from $\mathcal{D}$, then generate synthetic experience — but a planner exploiting model error is exactly extrapolation error wearing physics clothing, so the model must be *pessimistic where uncertain*. **MOPO** (Yu et al., 2020) and **MOReL** (Kidambi et al., 2020) both build this in: MOPO subtracts an ensemble-uncertainty penalty from every synthetic reward, $\tilde r = \hat r - \lambda\, u(s,a)$ (u = max ensemble std), and proves the resulting policy's true performance is lower-bounded by its penalized-model performance; MOReL instead constructs a hard **pessimistic MDP** — transitions whose ensemble disagreement exceeds a threshold route to an absorbing low-reward HALT state — and proves matching upper/lower bounds. Same treaty as Chapter 14 (ensembles measure epistemic uncertainty; the planner is denied credit there), now with a formal pessimism guarantee replacing online correction. **COMBO** (Yu et al., 2021) fuses families: CQL-style conservatism applied over a mixture of real and model-generated data — no explicit uncertainty estimate needed; the conservative loss itself suppresses the model's fictions. The model-based branch shines when the dataset is *broad but suboptimal* (the model stitches; synthetic rollouts densify coverage) and struggles when the data is narrow (the model knows one tube of state space, and pessimism correctly forbids leaving it — nothing gained).
+
+## 6. Evaluation: the Field's Quiet Crisis
+
+Two nested problems. **Benchmarks**: D4RL (Fu et al., 2020) standardized the field — locomotion buffers of varying quality (random / medium / medium-replay / medium-expert), maze navigation requiring *stitching* (composing subtrajectories no single demonstration contains — the capability that separates true offline RL from fancy BC), and manipulation (Adroit) — with normalized scores (0 = random, 100 = expert reference). Read its composition when you read the literature: many headline gaps between methods appear on only one data-quality regime (policy constraints excel on narrow expert-ish data; conservatives and model-based methods on diverse mediocre data — exactly as the mechanisms predict).
+
+**Off-policy evaluation (OPE)**: estimating a policy's value *from the dataset alone* — needed both to certify a policy before deployment and, more embarrassingly, to *tune hyperparameters*, since every method above has knobs (α, τ, λ) whose good values differ per dataset, and selecting them by running the policy online *is interaction* — the thing offline RL forswore. The honest state of the art: importance sampling (Chapter 5) is unbiased and useless at horizon (variance exponential in T); fitted Q-evaluation (FQE — train a critic for the target policy on the data) is the practical default and inherits, in evaluation form, the very extrapolation problem of Section 1; doubly-robust hybrids and marginalized-IS improve constants. There is no satisfying solution, and papers' "we tuned per dataset" footnotes are the field admitting it. When you deploy offline RL, budget for a small, explicit online evaluation allowance — and count it honestly as part of the method.
+
+## 7. Offline-to-Online: the Handoff
+
+The realistic lifecycle is *pretrain offline, fine-tune online* — robot fleets especially. The handoff has its own failure: begin online fine-tuning with a standard off-policy learner and the first exploratory transitions are wildly off the pretraining distribution; the conservative Q-function — correct-but-pessimistic offline — meets surprising positive returns, updates violently, and the policy often *crashes below its offline performance* before recovering (unlearning at the boundary). Methods built for the seam: **AWAC** (advantage-weighted actor-critic — IQL's cousin, designed for exactly this transition) keeps the policy an advantage-weighted clone throughout, so fresh data reweights rather than destabilizes; IQL fine-tunes gracefully for the same structural reason; **Cal-QL** calibrates CQL's pessimism so learned values are conservative *but not below the behavior policy's true values*, ensuring the online phase starts from a sane baseline rather than a pessimistic crater. The seam — how much pessimism to shed, how fast, as real interaction resumes — is an active research front, and Part IV's "pretrain on fleet data, adapt on the robot" ambitions live or die on it.
+
+## 8. Worked Example: Watching Extrapolation Error, Then Fixing It
+
+Fitted Q-iteration on a fixed CartPole dataset — naive vs. BC-constrained, with the Q-values as the telltale:
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+
+env = gym.make("CartPole-v1")
+rng = np.random.default_rng(0)
+
+# ---- 1. Collect a NARROW dataset: a near-deterministic expert. Narrowness,
+# not badness, is what exposes extrapolation error: the un-demonstrated
+# action's Q-head has almost no training data anywhere.
+def behavior(s):
+    good = int(s[2] + 0.5 * s[3] > 0)
+    return good if rng.random() < 0.99 else 1 - good     # 1% random
+
+D = []
+s, _ = env.reset(seed=0)
+for _ in range(20_000):
+    a = behavior(s)
+    s2, r, term, trunc, _ = env.step(a)
+    D.append((s, a, r, s2, float(term)))
+    s = s2 if not (term or trunc) else env.reset()[0]
+
+S, A, R, S2, DN = map(lambda x: torch.as_tensor(np.array(x), dtype=torch.float32),
+                      zip(*D))
+A = A.long()
+
+def fitted_q(bc_weight=0.0, iters=20_000):
+    q = nn.Sequential(nn.Linear(4, 128), nn.ReLU(),
+                      nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 2))
+    qt = nn.Sequential(nn.Linear(4, 128), nn.ReLU(),
+                       nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 2))
+    qt.load_state_dict(q.state_dict())
+    opt = torch.optim.Adam(q.parameters(), lr=5e-4)
+    for it in range(iters):
+        idx = torch.randint(len(S), (256,))
+        with torch.no_grad():
+            if bc_weight == 0.0:
+                nxt = qt(S2[idx]).max(1).values          # naive: max over ALL
+            else:
+                # "one-step" flavor: evaluate only the dataset's own next
+                # actions is cleaner still; here we keep the max but will
+                # constrain the *policy* via the BC term below.
+                nxt = qt(S2[idx]).max(1).values
+            y = R[idx] + 0.99 * (1 - DN[idx]) * nxt
+        qs = q(S[idx])
+        loss = (qs.gather(1, A[idx, None]).squeeze(1) - y).pow(2).mean()
+        if bc_weight > 0.0:                              # TD3+BC-style anchor
+            logp = torch.log_softmax(qs, dim=1)
+            loss = loss - bc_weight * logp.gather(1, A[idx, None]).mean()
+        opt.zero_grad(); loss.backward(); opt.step()
+        if it % 200 == 0:
+            qt.load_state_dict(q.state_dict())
+    return q
+
+def evaluate(q, episodes=20):
+    total = 0.0
+    for ep in range(episodes):
+        s, _ = env.reset(seed=1_000 + ep)
+        done = False
+        while not done:
+            a = int(q(torch.as_tensor(s, dtype=torch.float32)).argmax())
+            s, r, term, trunc, _ = env.step(a)
+            total += r; done = term or trunc
+    return total / episodes
+
+for w in [0.0, 1.0]:
+    q = fitted_q(bc_weight=w)
+    with torch.no_grad():
+        mean_q = float(q(S[:2000]).max(1).values.mean())
+    print(f"bc_weight={w}:  mean max-Q {mean_q:8.1f}   "
+          f"greedy return {evaluate(q):6.1f}")
+```
+
+The diagnostic to internalize is the *pair* of numbers, and here they are stark (seed 0): the naive run's mean max-Q climbs to **≈ 22,600** — more than 200× the physical ceiling of 100 that γ = 0.99 permits — while its greedy return collapses to **9.4**: the greedy policy actually chooses the fictional action and falls over immediately. The BC-anchored run keeps mean max-Q at ≈ 65 (physical) and scores **500.0** — perfect balance, *better than the 99%-noisy behavior that generated the data*. That pair — impossible values with terrible behavior versus sane values with data-beating behavior — is the entire offline-RL problem and promise in four numbers. Rerun with the 75%-noisy behavior policy instead and the naive method survives: broader action coverage leaves less room for fiction. Narrowness of data, not quality, is what arms the pathology.
+
+<Pitfall title="Common pitfalls — offline practice">
+**Q-magnitude is your smoke alarm**: values beyond $R_{\max}/(1-\gamma)$ are physically impossible and mean extrapolation is loose — check before believing any benchmark score. **Dataset quality dominates algorithm choice**: on expert-heavy data, plain BC is brutally hard to beat (run it first, always — the offline field's equivalent of "did you try the baseline"); on diverse mediocre data, conservatism earns its keep. **Pessimism knobs are dataset-specific** (CQL's α, IQL's τ, MOPO's λ) and the tuning-without-interaction paradox is real — report your selection protocol or your numbers mean little. **Timeout handling** (Chapters 3, 10) is doubly vicious offline: mislabeled truncations poison the only data you will ever have. **Beware evaluation leakage**: "we evaluated 20 checkpoints online and report the best" is interactive tuning wearing a disguise. **The behavior policy is not in the buffer**: it must be estimated (for constraints) from the same finite data — multimodal behavior (multiple operators) breaks unimodal behavior models exactly as in Chapter 16's mean-collapse.
+</Pitfall>
+
+## 9. Summary
+
+- Offline RL: best policy from a fixed dataset, no interaction. The pathology is **extrapolation error**: Bellman maxes over OOD actions select network fictions, and no corrective data ever arrives — the open-loop deadly triad.
+- The governing asymmetry: undervaluing in-support actions is cheap; overvaluing OOD actions is catastrophic. Hence: constrain, penalize, stay in-sample, or model pessimistically.
+- **BCQ**: fence the max inside a generative model of the data. **TD3+BC**: one BC term + normalization — the two-line baseline that embarrassed the field.
+- **CQL**: logsumexp-minus-data penalty ⇒ certified lower-bound Q; fails toward timidity (BC) as α grows.
+- **IQL**: expectile-regressed V = in-sample soft-max; SARSA-style Q; advantage-weighted BC extraction — no OOD query exists anywhere; the fine-tuning workhorse.
+- **MOPO/MOReL/COMBO**: learned models with uncertainty penalties / HALT states / conservative losses — pessimism replacing online correction; best on broad mediocre data.
+- Evaluation is the quiet crisis: OPE is unsolved at horizon, hyperparameter tuning smuggles interaction, D4RL's regimes (and *stitching*) decide which family wins. Offline→online handoff (AWAC, IQL, Cal-QL): shed pessimism without crashing through the floor.
+
+## 10. Papers & Further Reading
+
+- **Levine, Kumar, Tucker & Fu, "Offline Reinforcement Learning: Tutorial, Review, and Perspectives on Open Problems" (2020)** — [arxiv.org/abs/2005.01643](https://arxiv.org/abs/2005.01643). The field's orientation document; read alongside this chapter.
+- **Fujimoto, Meger & Precup, "Off-Policy Deep Reinforcement Learning without Exploration" (ICML, 2019)** — [arxiv.org/abs/1812.02900](https://arxiv.org/abs/1812.02900). Extrapolation error named and dissected; BCQ.
+- **Fujimoto & Gu, "A Minimalist Approach to Offline Reinforcement Learning" (NeurIPS, 2021)** — [arxiv.org/abs/2106.06860](https://arxiv.org/abs/2106.06860). TD3+BC.
+- **Kumar, Zhou, Tucker & Levine, "Conservative Q-Learning for Offline Reinforcement Learning" (NeurIPS, 2020)** — [arxiv.org/abs/2006.04779](https://arxiv.org/abs/2006.04779). CQL and the lower-bound theorems.
+- **Kostrikov, Nair & Levine, "Offline Reinforcement Learning with Implicit Q-Learning" (ICLR, 2022)** — [arxiv.org/abs/2110.06169](https://arxiv.org/abs/2110.06169). IQL. (Fine-tuning kin: Nair et al., "AWAC," 2020 — [arxiv.org/abs/2006.09359](https://arxiv.org/abs/2006.09359); Nakamoto et al., "Cal-QL," 2023 — [arxiv.org/abs/2303.05479](https://arxiv.org/abs/2303.05479).)
+- **Yu et al., "MOPO: Model-based Offline Policy Optimization" (NeurIPS, 2020)** — [arxiv.org/abs/2005.13239](https://arxiv.org/abs/2005.13239); **Kidambi et al., "MOReL" (NeurIPS, 2020)** — [arxiv.org/abs/2005.05951](https://arxiv.org/abs/2005.05951); **Yu et al., "COMBO" (NeurIPS, 2021)** — [arxiv.org/abs/2102.08363](https://arxiv.org/abs/2102.08363). The pessimistic-model branch.
+- **Fu, Kumar, Nachum, Tucker & Levine, "D4RL: Datasets for Deep Data-Driven Reinforcement Learning" (2020)** — [arxiv.org/abs/2004.07219](https://arxiv.org/abs/2004.07219). The benchmark; know its regimes before reading any offline paper's table.
+
+## 11. Exercises
+
+**17.1 (understand)** For each dataset, predict which family wins and why: (a) 10k expert teleoperation episodes, one operator; (b) the full replay buffer of a partially trained SAC run; (c) uniform-random exploration data with dense coverage; (d) 100 demonstrations of task A plus 100 of task B, when the target task requires doing A then B (which benchmark capability is this?).
+
+**17.2 (understand)** Explain why SARSA-style evaluation of the *behavior* policy from a fixed buffer is immune to extrapolation error, while Q-learning-style improvement is maximally exposed — and locate IQL's design as the interpolation between these two poles (which single number moves it along the dial?).
+
+**17.3 (derive)** Expectiles: show that the minimizer of the τ-expectile loss over a constant prediction is the mean at τ = 0.5, and that as τ → 1 it converges to the essential supremum of the target distribution. Then explain why IQL's V — an upper expectile of $Q(s, a)$ over $a \sim \mathcal{D}(\cdot|s)$ — approximates an *in-support* max, and what dataset property (per-state action diversity) governs the quality of that approximation.
+
+**17.4 (derive)** CQL's bound, in miniature: for a single state with finite actions, dataset distribution $\hat\beta(a)$, and the CQL(H) penalty with coefficient α added to a converged Bellman fit, derive the closed-form learned $\hat Q(a) = Q(a) - \alpha \left[ \frac{\mu(a)}{\hat\beta(a)} - 1 \right]$-style shift for policy distribution μ (follow Kumar et al.'s Theorem 3.2 structure), and read off: which actions get pushed down hardest, and what happens as $\hat\beta(a) \to 0$ with $\mu(a)$ fixed?
+
+**17.5 (derive)** MOPO's penalty: given a model with true-vs-learned dynamics gap bounded by $u(s,a)$ in total variation, and rewards bounded by $R_{\max}$, sketch why penalizing synthetic rewards by $\lambda u$ with $\lambda = \gamma R_{\max}/(1-\gamma)$ makes the model-MDP's value a lower bound on the true value (telescoping the simulation lemma). What does this bound become when the ensemble's uncertainty is *miscalibrated* (u underestimates the true gap)?
+
+**17.6 (implement)** Run the Section 8 experiment over 5 seeds; tabulate mean max-Q and greedy return for bc_weight ∈ $\{0, 0.1, 1, 10\}$. You should recover the full arc: divergence-flavored inflation at 0, the sweet spot near 1, and BC-like timidity at 10 (compare against pure BC's return on the same buffer). Plot return vs. the *dataset's* behavior-policy return line.
+
+**17.7 (implement)** Implement discrete IQL for the same buffer: expectile-V (τ = 0.8), SARSA-Q, advantage-weighted policy extraction (β = 3). Compare to the bc_weight = 1 constrained FQI on: final return, mean max-Q sanity, and — the interesting one — robustness when you *shrink the dataset* to 2k transitions. Which method's failure is noisier, and why does the in-sample property predict that?
+
+**17.8 (implement)** Stitching microbenchmark: build a gridworld dataset containing only trajectories A→B and B→C (never A→C). Verify BC cannot reach C from A; verify one-step-constrained FQI *can* (values propagate through B); then break it by removing all state overlap between the two trajectory sets and confirm both fail. Write three sentences on what "coverage" must mean for offline RL to beat imitation.
+
+**17.9 (implement)** The handoff: take your trained IQL agent and fine-tune online (keep the losses, add environment steps to the buffer). Log return from the first online episode. Then swap the value loss to standard max-Q DQN at the handoff and observe the transient. Reproduce the "crash below offline performance" phenomenon and connect it to which quantity (V's expectile vs. the max) changed meaning at the seam.
+
+**17.10 (research)** The tuning paradox: propose a concrete protocol for hyperparameter selection that consumes a strictly budgeted number of online episodes (say 10), and analyze it as a bandit problem over checkpoint candidates (Chapter 2's machinery — which algorithm fits, given returns are noisy and the budget tiny?). Compare your protocol's assumptions with FQE-based selection, and specify the experiment on D4RL that would decide between them. (Then read the "offline policy selection" literature and grade your design.)

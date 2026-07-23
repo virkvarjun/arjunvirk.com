@@ -1,0 +1,211 @@
+Every work cited in this book, grouped by topic, each with one line on why it matters. Chapter numbers point to where the work is taught (bold where it is a primary subject). All links verified at time of writing; DOIs and arXiv identifiers are permanent even where publisher pages gate access.
+
+## Textbooks, Courses, and Monographs
+
+- **Sutton & Barto, *Reinforcement Learning: An Introduction*, 2nd ed. (MIT Press, 2018)** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html) — the field's spine and this book's constant companion for Parts 0–I. (Chs. 1–13)
+- **Lattimore & Szepesvári, *Bandit Algorithms* (Cambridge UP, 2020)** — [banditalgs.com](https://banditalgs.com/) — the definitive rigorous treatment of Chapter 2's material. (Ch. 2)
+- **Szepesvári, *Algorithms for Reinforcement Learning* (Morgan & Claypool, 2010)** — [PDF](https://sites.ualberta.ca/~szepesva/papers/RLAlgsInMDPs.pdf) — sixty dense pages from MDPs to approximation; the short rigorous bridge. (Chs. 3, 21)
+- **Puterman, *Markov Decision Processes* (Wiley, 1994)** — [doi.org/10.1002/9780470316887](https://doi.org/10.1002/9780470316887) — the mathematical reference for everything Chapter 3 waved at. (Chs. 3–4)
+- **Bertsekas & Tsitsiklis, *Neuro-Dynamic Programming* (Athena, 1996)** — [athenasc.com/ndpbook.html](http://www.athenasc.com/ndpbook.html) — asynchronous DP theory and the first rigorous DP-to-learning bridge. (Chs. 4, 9)
+- **Bertsekas, *Reinforcement Learning and Optimal Control* (Athena, 2019)** — [web.mit.edu/dimitrib/www/RLbook.html](https://web.mit.edu/dimitrib/www/RLbook.html) — the control-theoretic retelling; cleanest frame for AlphaZero-style lookahead. (Chs. 4, 8)
+- **Agarwal, Jiang, Kakade & Sun, *RL: Theory and Algorithms*** — [rltheorybook.github.io](https://rltheorybook.github.io/) — the standard graduate theory text ("AJKS"); free. (Ch. 21)
+- **OpenAI, *Spinning Up in Deep RL* (2018)** — [spinningup.openai.com](https://spinningup.openai.com/) — the practitioner's companion to Parts II–III. (Chs. 1, 11–13)
+- **Courses:** David Silver (UCL/DeepMind) — [davidsilver.uk/teaching](https://www.davidsilver.uk/teaching/); Berkeley CS285 (Levine) — [rail.eecs.berkeley.edu/deeprlcourse](https://rail.eecs.berkeley.edu/deeprlcourse/); Stanford CS234 (Brunskill) — [web.stanford.edu/class/cs234](https://web.stanford.edu/class/cs234/). Pair with Parts 0–II, II–IV, and the theory thread respectively.
+
+## Foundations, Bandits, and Exploration Theory
+
+- **Bellman, "A Markovian Decision Process" (1957)** — [jstor.org/stable/24900506](https://www.jstor.org/stable/24900506) — the framework, the equations, the curse. (Chs. 3–4)
+- **Howard, *Dynamic Programming and Markov Processes* (1960)** — policy iteration's debut. (Ch. 4)
+- **Thompson (1933)** — [doi.org/10.1093/biomet/25.3-4.285](https://doi.org/10.1093/biomet/25.3-4.285) — posterior sampling, seventy years early. (Ch. 2)
+- **Lai & Robbins (1985)** — [doi.org/10.1016/0196-8858(85)90002-8](https://doi.org/10.1016/0196-8858(85)90002-8) — the regret lower bound that made bandits a science. (Ch. 2)
+- **Auer, Cesa-Bianchi & Fischer (2002), UCB1** — [doi.org/10.1023/A:1013689704352](https://doi.org/10.1023/A:1013689704352) — finite-time optimism. (Ch. 2)
+- **Agrawal & Goyal (2012)** — [arxiv.org/abs/1111.1797](https://arxiv.org/abs/1111.1797) — Thompson sampling's regret, closed. (Ch. 2)
+- **Chapelle & Li (2011)** — [NeurIPS](https://papers.nips.cc/paper_files/paper/2011/hash/e53a0a2978c28872a4505bdb51db06dc-Abstract.html) — the empirical case that revived Thompson sampling. (Ch. 2)
+- **Russo et al., Thompson tutorial (2018)** — [arxiv.org/abs/1707.02038](https://arxiv.org/abs/1707.02038). (Ch. 2)
+- **Li et al., LinUCB (2010)** — [arxiv.org/abs/1003.0146](https://arxiv.org/abs/1003.0146) — contextual bandits in production. (Ch. 2)
+- **Kaelbling, Littman & Moore, survey (1996)** — [arxiv.org/abs/cs/9605103](https://arxiv.org/abs/cs/9605103) — the pre-deep map; startlingly current questions. (Ch. 1)
+- **Kaelbling, Littman & Cassandra, POMDPs (1998)** — [doi.org/10.1016/S0004-3702(98)00023-X](https://doi.org/10.1016/S0004-3702(98)00023-X) — belief-state planning and its limits. (Ch. 3)
+- **Silver, Singh, Precup & Sutton, "Reward is Enough" (2021)** — [doi.org/10.1016/j.artint.2021.103535](https://doi.org/10.1016/j.artint.2021.103535) — the reward hypothesis, maximalist edition. (Ch. 1)
+- **Ng, Harada & Russell, reward shaping (1999)** — [PDF](https://ai.stanford.edu/~ang/papers/shaping-icml99.pdf) — the only safe shaping is potential-based. (Ch. 1)
+- **Amodei et al., "Concrete Problems in AI Safety" (2016)** — [arxiv.org/abs/1606.06565](https://arxiv.org/abs/1606.06565) — reward hacking catalogued. (Ch. 1)
+
+## Classical RL: TD, MC, Traces, Planning
+
+- **Sutton, TD learning (1988)** — [doi.org/10.1007/BF00115009](https://doi.org/10.1007/BF00115009) — the founding paper of Chs. 6–7's material. (Chs. 6–7, 9)
+- **Watkins (1989); Watkins & Dayan (1992), Q-learning** — [thesis](http://www.cs.rhul.ac.uk/~chrisw/thesis.html), [doi.org/10.1007/BF00992698](https://doi.org/10.1007/BF00992698). (Ch. 6)
+- **Rummery & Niranjan (1994), SARSA** — [semanticscholar.org](https://www.semanticscholar.org/paper/On-line-Q-learning-using-connectionist-systems-Rummery-Niranjan/7a09464f26e18a25a948baaa736270bfb84b5e12). (Ch. 6)
+- **Jaakkola, Jordan & Singh (1994)** — [doi.org/10.1162/neco.1994.6.6.1185](https://doi.org/10.1162/neco.1994.6.6.1185) — and **Tsitsiklis (1994)** — [doi.org/10.1007/BF00993306](https://doi.org/10.1007/BF00993306) — the stochastic-approximation convergence machinery. (Chs. 6, 21)
+- **Singh, Jaakkola, Littman & Szepesvári (2000), GLIE** — [doi.org/10.1023/A:1007678930559](https://doi.org/10.1023/A:1007678930559). (Ch. 6)
+- **van Seijen et al. (2009), Expected SARSA** — [doi.org/10.1109/ADPRL.2009.4927542](https://doi.org/10.1109/ADPRL.2009.4927542). (Ch. 6)
+- **van Hasselt (2010), Double Q-learning** — [NeurIPS](https://papers.nips.cc/paper_files/paper/2010/hash/091d584fced301b442654dd8c23b3fc9-Abstract.html) — maximization bias and its cure. (Chs. 6, 10)
+- **Singh & Sutton (1996), replacing traces** — [doi.org/10.1007/BF00114726](https://doi.org/10.1007/BF00114726). (Chs. 5, 7)
+- **van Seijen & Sutton (2014), true online TD(λ)** — [PMLR](https://proceedings.mlr.press/v32/seijen14.html). (Ch. 7)
+- **Precup, Sutton & Singh (2000), per-decision IS & tree backup** — [PDF](https://scholarworks.umass.edu/cgi/viewcontent.cgi?article=1079&context=cs_faculty_pubs). (Chs. 5, 7)
+- **Munos et al. (2016), Retrace(λ)** — [arxiv.org/abs/1606.02647](https://arxiv.org/abs/1606.02647) — safe off-policy traces. (Ch. 7)
+- **Thomas, Theocharous & Ghavamzadeh (2015), high-confidence OPE** — [AAAI](https://ojs.aaai.org/index.php/AAAI/article/view/9541). (Chs. 5, 17)
+- **Metropolis & Ulam (1949)** — [doi.org/10.1080/01621459.1949.10483310](https://doi.org/10.1080/01621459.1949.10483310) — the Monte Carlo manifesto. (Ch. 5)
+- **Sutton (1990), Dyna** — [doi.org/10.1016/B978-1-55860-141-3.50030-4](https://doi.org/10.1016/B978-1-55860-141-3.50030-4) — planning = learning on imagined experience. (Ch. 8)
+- **Moore & Atkeson (1993), prioritized sweeping** — [doi.org/10.1007/BF00993104](https://doi.org/10.1007/BF00993104). (Ch. 8)
+- **Barto, Bradtke & Singh (1995), RTDP** — [doi.org/10.1016/0004-3702(94)00011-O](https://doi.org/10.1016/0004-3702(94)00011-O). (Ch. 8)
+- **Coulom (2006), MCTS** — [doi.org/10.1007/978-3-540-75538-8_7](https://doi.org/10.1007/978-3-540-75538-8_7) — and **Kocsis & Szepesvári (2006), UCT** — [doi.org/10.1007/11871842_29](https://doi.org/10.1007/11871842_29). (Ch. 8)
+- **Browne et al. (2012), MCTS survey** — [doi.org/10.1109/TCIAIG.2012.2186810](https://doi.org/10.1109/TCIAIG.2012.2186810). (Ch. 8)
+
+## Function Approximation and the Deadly Triad
+
+- **Tsitsiklis & Van Roy (1997)** — [doi.org/10.1109/9.580874](https://doi.org/10.1109/9.580874) — linear TD converges; the projected Bellman equation; the $\frac{1}{1-\gamma}$ bound. (Ch. 9)
+- **Baird (1995)** — [doi.org/10.1016/B978-1-55860-377-6.50013-X](https://doi.org/10.1016/B978-1-55860-377-6.50013-X) — the divergence counterexample. (Ch. 9)
+- **Sutton et al. (2009), GTD/TDC** — [doi.org/10.1145/1553374.1553501](https://doi.org/10.1145/1553374.1553501) — convergent off-policy TD. (Ch. 9)
+- **Sutton, Mahmood & White (2016), emphatic TD** — [JMLR](https://jmlr.org/papers/v17/14-488.html). (Ch. 9)
+- **van Hasselt et al. (2018), triad measured** — [arxiv.org/abs/1812.02648](https://arxiv.org/abs/1812.02648) — which legs actually diverge in DQN. (Ch. 9)
+
+## Deep Value-Based RL
+
+- **Mnih et al., DQN (2013 / Nature 2015)** — [arxiv.org/abs/1312.5602](https://arxiv.org/abs/1312.5602), [doi.org/10.1038/nature14236](https://doi.org/10.1038/nature14236) — the era's starting gun. (Ch. 10)
+- **van Hasselt, Guez & Silver (2016), Double DQN** — [arxiv.org/abs/1509.06461](https://arxiv.org/abs/1509.06461). (Ch. 10)
+- **Wang et al. (2016), dueling** — [arxiv.org/abs/1511.06581](https://arxiv.org/abs/1511.06581). (Ch. 10)
+- **Schaul et al. (2016), prioritized replay** — [arxiv.org/abs/1511.05952](https://arxiv.org/abs/1511.05952). (Ch. 10)
+- **Bellemare, Dabney & Munos (2017), C51** — [arxiv.org/abs/1707.06887](https://arxiv.org/abs/1707.06887) — and **Dabney et al. (2018), QR-DQN** — [arxiv.org/abs/1710.10044](https://arxiv.org/abs/1710.10044) — the distributional turn. (Ch. 10)
+- **Hessel et al. (2018), Rainbow** — [arxiv.org/abs/1710.02298](https://arxiv.org/abs/1710.02298) — the synthesis and its ablations. (Ch. 10)
+- **Machado et al. (2018), ALE protocol** — [arxiv.org/abs/1709.06009](https://arxiv.org/abs/1709.06009) — evaluation hygiene for Atari. (Ch. 10)
+
+## Policy Optimization and Actor-Critic
+
+- **Williams (1992), REINFORCE** — [doi.org/10.1007/BF00992696](https://doi.org/10.1007/BF00992696). (Ch. 11)
+- **Sutton, McAllester, Singh & Mansour (2000), PG theorem** — [NeurIPS](https://papers.nips.cc/paper_files/paper/1999/hash/464d828b85b0bed98e80ade0a5c43b0f-Abstract.html). (Ch. 11)
+- **Konda & Tsitsiklis (2000), actor-critic** — [NeurIPS](https://papers.nips.cc/paper_files/paper/1999/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html). (Ch. 11)
+- **Greensmith, Bartlett & Baxter (2004), baselines** — [JMLR](https://jmlr.org/papers/v5/greensmith04a.html). (Ch. 11)
+- **Schulman et al. (2016), GAE** — [arxiv.org/abs/1506.02438](https://arxiv.org/abs/1506.02438) — the advantage estimator of modern practice. (Ch. 11)
+- **Amari (1998), natural gradient** — [doi.org/10.1162/089976698300017746](https://doi.org/10.1162/089976698300017746) — and **Kakade (2001), NPG** — [NeurIPS](https://papers.nips.cc/paper_files/paper/2001/hash/4b86abe48d358ecf194c56c69108433e-Abstract.html). (Ch. 12)
+- **Kakade & Langford (2002), CPI** — [PDF](https://homes.cs.washington.edu/~sham/papers/rl/aoarl.pdf) — the performance difference lemma. (Ch. 12)
+- **Schulman et al. (2015), TRPO** — [arxiv.org/abs/1502.05477](https://arxiv.org/abs/1502.05477) — monotonic improvement, certified. (Ch. 12)
+- **Schulman et al. (2017), PPO** — [arxiv.org/abs/1707.06347](https://arxiv.org/abs/1707.06347) — the workhorse. (Ch. 12)
+- **Mnih et al. (2016), A3C** — [arxiv.org/abs/1602.01783](https://arxiv.org/abs/1602.01783) — parallelism replaces replay. (Ch. 12)
+- **Engstrom et al. (2020)** — [arxiv.org/abs/2005.12729](https://arxiv.org/abs/2005.12729) — and **Andrychowicz et al. (2021)** — [arxiv.org/abs/2006.05990](https://arxiv.org/abs/2006.05990) — implementation details carry algorithm-sized effects. (Ch. 12)
+- **Schulman, "Nuts and Bolts"** — [PDF](http://joschu.net/docs/nuts-and-bolts.pdf) — the debugging folklore. (Ch. 12)
+
+## Continuous Control and Maximum Entropy
+
+- **Silver et al. (2014), DPG** — [PMLR](https://proceedings.mlr.press/v32/silver14.html). (Ch. 13)
+- **Lillicrap et al. (2016), DDPG** — [arxiv.org/abs/1509.02971](https://arxiv.org/abs/1509.02971). (Ch. 13)
+- **Fujimoto, van Hoof & Meger (2018), TD3** — [arxiv.org/abs/1802.09477](https://arxiv.org/abs/1802.09477) — overestimation diagnosed and fixed. (Ch. 13)
+- **Haarnoja et al. (2018), SAC + applications** — [arxiv.org/abs/1801.01290](https://arxiv.org/abs/1801.01290), [arxiv.org/abs/1812.05905](https://arxiv.org/abs/1812.05905) — the robot-RL workhorse. (Ch. 13)
+- **Levine (2018), control as inference** — [arxiv.org/abs/1805.00909](https://arxiv.org/abs/1805.00909) — the max-ent framework's formal home. (Chs. 13, 16)
+- **Henderson et al. (2018), "Deep RL that Matters"** — [arxiv.org/abs/1709.06560](https://arxiv.org/abs/1709.06560) — the reproducibility audit. (Ch. 13)
+- **Chen et al. (2021), REDQ** — [arxiv.org/abs/2101.05982](https://arxiv.org/abs/2101.05982) — high update ratios via ensembles. (Ch. 13)
+
+## Model-Based RL
+
+- **Deisenroth & Rasmussen (2011), PILCO** — [PDF](https://mlg.eng.cam.ac.uk/pub/pdf/DeiRas11.pdf) — never plan with a point estimate. (Ch. 14)
+- **Chua et al. (2018), PETS** — [arxiv.org/abs/1805.12114](https://arxiv.org/abs/1805.12114) — probabilistic ensembles + MPC. (Ch. 14)
+- **Janner et al. (2019), MBPO** — [arxiv.org/abs/1906.08253](https://arxiv.org/abs/1906.08253) — short branched rollouts. (Ch. 14)
+- **Silver et al., AlphaGo (2016) / AlphaZero (2018)** — [doi.org/10.1038/nature16961](https://doi.org/10.1038/nature16961), [doi.org/10.1126/science.aar6404](https://doi.org/10.1126/science.aar6404) — search as the improvement operator. (Chs. 8, 14)
+- **Schrittwieser et al. (2020), MuZero** — [arxiv.org/abs/1911.08265](https://arxiv.org/abs/1911.08265) — planning without rules; value equivalence. (Ch. 14)
+- **Grimm et al. (2020), value equivalence** — [arxiv.org/abs/2011.03506](https://arxiv.org/abs/2011.03506). (Ch. 14)
+- **Ye et al. (2021), EfficientZero** — [arxiv.org/abs/2111.00210](https://arxiv.org/abs/2111.00210). (Ch. 14)
+- **Moerland et al. (2023), MBRL survey** — [arxiv.org/abs/2006.16712](https://arxiv.org/abs/2006.16712). (Ch. 14)
+
+## Exploration in Deep RL
+
+- **Bellemare et al. (2016), pseudo-counts** — [arxiv.org/abs/1606.01868](https://arxiv.org/abs/1606.01868); **Ostrovski et al. (2017)** — [arxiv.org/abs/1703.01310](https://arxiv.org/abs/1703.01310). (Ch. 15)
+- **Tang et al. (2017), hash counts** — [arxiv.org/abs/1611.04717](https://arxiv.org/abs/1611.04717). (Ch. 15)
+- **Pathak et al. (2017), ICM** — [arxiv.org/abs/1705.05363](https://arxiv.org/abs/1705.05363); **Burda et al. (2018), curiosity at scale** — [arxiv.org/abs/1808.04355](https://arxiv.org/abs/1808.04355). (Ch. 15)
+- **Burda et al. (2019), RND** — [arxiv.org/abs/1810.12894](https://arxiv.org/abs/1810.12894) — past the human benchmark on Montezuma. (Ch. 15)
+- **Osband et al. (2016), Bootstrapped DQN** — [arxiv.org/abs/1602.04621](https://arxiv.org/abs/1602.04621); **Fortunato et al. (2018), NoisyNets** — [arxiv.org/abs/1706.10295](https://arxiv.org/abs/1706.10295). (Chs. 10, 15)
+- **Sekar et al. (2020), Plan2Explore** — [arxiv.org/abs/2005.05960](https://arxiv.org/abs/2005.05960). (Chs. 15, 23)
+- **Ecoffet et al. (2021), Go-Explore** — [arxiv.org/abs/2004.12919](https://arxiv.org/abs/2004.12919) — detachment, derailment, records. (Ch. 15)
+- **Taïga et al. (2020), bonus audit** — [arxiv.org/abs/2109.11052](https://arxiv.org/abs/2109.11052) — where bonuses pay and where they don't. (Ch. 15)
+
+## Imitation and Inverse RL
+
+- **Pomerleau (1988), ALVINN** — [NeurIPS](https://papers.nips.cc/paper_files/paper/1988/hash/812b4ba287f5ee0bc9d43bbf5bbe87fb-Abstract.html) — BC drives, 1988. (Ch. 16)
+- **Ross & Bagnell (2010)** — [PMLR](https://proceedings.mlr.press/v9/ross10a.html) — and **Ross, Gordon & Bagnell (2011), DAgger** — [arxiv.org/abs/1011.0686](https://arxiv.org/abs/1011.0686) — the T² bound and its cure. (Ch. 16)
+- **Laskey et al. (2017), DART** — [arxiv.org/abs/1703.09327](https://arxiv.org/abs/1703.09327) — noise injection at collection. (Ch. 16)
+- **Abbeel & Ng (2004), apprenticeship** — [doi.org/10.1145/1015330.1015430](https://doi.org/10.1145/1015330.1015430). (Ch. 16)
+- **Ziebart et al. (2008), MaxEnt IRL** — [PDF](https://cdn.aaai.org/AAAI/2008/AAAI08-227.pdf). (Ch. 16)
+- **Finn, Levine & Abbeel (2016), GCL** — [arxiv.org/abs/1603.00448](https://arxiv.org/abs/1603.00448). (Ch. 16)
+- **Ho & Ermon (2016), GAIL** — [arxiv.org/abs/1606.03476](https://arxiv.org/abs/1606.03476) — imitation = occupancy matching; **Fu et al. (2018), AIRL** — [arxiv.org/abs/1710.11248](https://arxiv.org/abs/1710.11248). (Ch. 16)
+- **Osa et al. (2018), IL survey** — [arxiv.org/abs/1811.06711](https://arxiv.org/abs/1811.06711). (Ch. 16)
+
+## Offline RL
+
+- **Levine et al. (2020), tutorial** — [arxiv.org/abs/2005.01643](https://arxiv.org/abs/2005.01643) — the orientation document. (Ch. 17)
+- **Fujimoto, Meger & Precup (2019), BCQ** — [arxiv.org/abs/1812.02900](https://arxiv.org/abs/1812.02900) — extrapolation error named. (Ch. 17)
+- **Fujimoto & Gu (2021), TD3+BC** — [arxiv.org/abs/2106.06860](https://arxiv.org/abs/2106.06860) — the two-line baseline. (Ch. 17)
+- **Kumar et al. (2020), CQL** — [arxiv.org/abs/2006.04779](https://arxiv.org/abs/2006.04779) — certified pessimism. (Ch. 17)
+- **Kostrikov, Nair & Levine (2022), IQL** — [arxiv.org/abs/2110.06169](https://arxiv.org/abs/2110.06169) — in-sample everything. (Ch. 17)
+- **Nair et al. (2020), AWAC** — [arxiv.org/abs/2006.09359](https://arxiv.org/abs/2006.09359); **Nakamoto et al. (2023), Cal-QL** — [arxiv.org/abs/2303.05479](https://arxiv.org/abs/2303.05479) — the offline-to-online seam. (Ch. 17)
+- **Yu et al. (2020), MOPO** — [arxiv.org/abs/2005.13239](https://arxiv.org/abs/2005.13239); **Kidambi et al. (2020), MOReL** — [arxiv.org/abs/2005.05951](https://arxiv.org/abs/2005.05951); **Yu et al. (2021), COMBO** — [arxiv.org/abs/2102.08363](https://arxiv.org/abs/2102.08363). (Ch. 17)
+- **Fu et al. (2020), D4RL** — [arxiv.org/abs/2004.07219](https://arxiv.org/abs/2004.07219) — the benchmark and its regimes. (Ch. 17)
+
+## RL as Sequence Modeling
+
+- **Chen et al. (2021), Decision Transformer** — [arxiv.org/abs/2106.01345](https://arxiv.org/abs/2106.01345). (Ch. 18)
+- **Janner, Li & Levine (2021), Trajectory Transformer** — [arxiv.org/abs/2106.02039](https://arxiv.org/abs/2106.02039). (Ch. 18)
+- **Janner et al. (2022), Diffuser** — [arxiv.org/abs/2205.09991](https://arxiv.org/abs/2205.09991); **Ajay et al. (2023), Decision Diffuser** — [arxiv.org/abs/2211.15657](https://arxiv.org/abs/2211.15657). (Ch. 18)
+- **Schmidhuber (2019), upside-down RL** — [arxiv.org/abs/1912.02875](https://arxiv.org/abs/1912.02875). (Ch. 18)
+- **Emmons et al. (2022), RvS** — [arxiv.org/abs/2112.10751](https://arxiv.org/abs/2112.10751) — conditioning is the ingredient. (Ch. 18)
+- **Brandfonbrener et al. (2022)** — [arxiv.org/abs/2206.01079](https://arxiv.org/abs/2206.01079) — and **Paster et al. (2022)** — [arxiv.org/abs/2205.15967](https://arxiv.org/abs/2205.15967) — when return-conditioning provably fails. (Ch. 18)
+- **Yamagata et al. (2023), QDT** — [arxiv.org/abs/2209.03993](https://arxiv.org/abs/2209.03993) — stitching retrofitted. (Ch. 18)
+
+## Goals, Hierarchy, Meta, Multi-Agent
+
+- **Schaul et al. (2015), UVFA** — [PMLR](https://proceedings.mlr.press/v37/schaul15.html). (Ch. 19)
+- **Andrychowicz et al. (2017), HER** — [arxiv.org/abs/1707.01495](https://arxiv.org/abs/1707.01495) — failure is success, relabeled. (Ch. 19)
+- **Sutton, Precup & Singh (1999), options** — [doi.org/10.1016/S0004-3702(99)00052-1](https://doi.org/10.1016/S0004-3702(99)00052-1); **Bacon et al. (2017), option-critic** — [arxiv.org/abs/1609.05140](https://arxiv.org/abs/1609.05140). (Ch. 19)
+- **Nachum et al. (2018), HIRO** — [arxiv.org/abs/1805.08296](https://arxiv.org/abs/1805.08296). (Ch. 19)
+- **Duan et al. (2016), RL²** — [arxiv.org/abs/1611.02779](https://arxiv.org/abs/1611.02779); **Finn et al. (2017), MAML** — [arxiv.org/abs/1703.03400](https://arxiv.org/abs/1703.03400); **Rakelly et al. (2019), PEARL** — [arxiv.org/abs/1903.08254](https://arxiv.org/abs/1903.08254); **Beck et al. (2023), meta-RL survey** — [arxiv.org/abs/2301.08028](https://arxiv.org/abs/2301.08028). (Ch. 19)
+- **Lowe et al. (2017), MADDPG** — [arxiv.org/abs/1706.02275](https://arxiv.org/abs/1706.02275); **Rashid et al. (2018), QMIX** — [arxiv.org/abs/1803.11485](https://arxiv.org/abs/1803.11485). (Ch. 19)
+- **Vinyals et al. (2019), AlphaStar** — [doi.org/10.1038/s41586-019-1724-z](https://doi.org/10.1038/s41586-019-1724-z); **Berner et al. (2019), OpenAI Five** — [arxiv.org/abs/1912.06680](https://arxiv.org/abs/1912.06680). (Ch. 19)
+
+## RL for Language Models
+
+- **Christiano et al. (2017), deep RL from preferences** — [arxiv.org/abs/1706.03741](https://arxiv.org/abs/1706.03741). (Ch. 20)
+- **Stiennon et al. (2020), summarization RLHF** — [arxiv.org/abs/2009.01325](https://arxiv.org/abs/2009.01325); **Ouyang et al. (2022), InstructGPT** — [arxiv.org/abs/2203.02155](https://arxiv.org/abs/2203.02155). (Ch. 20)
+- **Bai et al. (2022), Constitutional AI** — [arxiv.org/abs/2212.08073](https://arxiv.org/abs/2212.08073); **Lee et al. (2023), RLAIF** — [arxiv.org/abs/2309.00267](https://arxiv.org/abs/2309.00267). (Ch. 20)
+- **Gao, Schulman & Hilton (2023), RM overoptimization** — [arxiv.org/abs/2210.10760](https://arxiv.org/abs/2210.10760) — Goodhart with scaling laws. (Ch. 20)
+- **Rafailov et al. (2023), DPO** — [arxiv.org/abs/2305.18290](https://arxiv.org/abs/2305.18290) — the pipeline as one loss. (Ch. 20)
+- **Shao et al. (2024), DeepSeekMath/GRPO** — [arxiv.org/abs/2402.03300](https://arxiv.org/abs/2402.03300); **DeepSeek-R1 (2025)** — [arxiv.org/abs/2501.12948](https://arxiv.org/abs/2501.12948) — verifiable rewards; emergent reasoning. (Ch. 20)
+- **Lambert et al. (2024), Tülu 3** — [arxiv.org/abs/2411.15124](https://arxiv.org/abs/2411.15124) — the open post-training stack. (Ch. 20)
+
+## Theory
+
+- **Kearns & Singh (2002), E³** — [doi.org/10.1023/A:1017984413808](https://doi.org/10.1023/A:1017984413808); **Brafman & Tennenholtz (2002), R-max** — [JMLR](https://www.jmlr.org/papers/v3/brafman02a.html). (Ch. 21)
+- **Jaksch, Ortner & Auer (2010), UCRL2** — [JMLR](https://www.jmlr.org/papers/v11/jaksch10a.html); **Azar, Osband & Munos (2017), UCBVI** — [arxiv.org/abs/1703.05449](https://arxiv.org/abs/1703.05449) — minimax regret, matched. (Ch. 21)
+- **Azar, Munos & Kappen (2013)** — [doi.org/10.1007/s10994-013-5368-1](https://doi.org/10.1007/s10994-013-5368-1) — the $(1-\gamma)^{-3}$. (Ch. 21)
+- **Agarwal, Kakade, Lee & Mahajan (2021), PG theory** — [JMLR](https://www.jmlr.org/papers/v22/19-736.html). (Ch. 21)
+- **Jin et al. (2020), linear MDPs** — [arxiv.org/abs/1907.05388](https://arxiv.org/abs/1907.05388). (Ch. 21)
+- **Weisz et al. (2021), realizability lower bounds** — [arxiv.org/abs/2010.01374](https://arxiv.org/abs/2010.01374). (Ch. 21)
+- **Rashidinejad et al. (2021), pessimism** — [arxiv.org/abs/2103.12021](https://arxiv.org/abs/2103.12021) — offline optimality via single-policy coverage. (Chs. 17, 21)
+
+## Robotics: Classical and Deep
+
+- **Levine et al. (2016), GPS/visuomotor** — [JMLR](https://www.jmlr.org/papers/v17/15-522.html) — pixels to torques, first. (Ch. 22)
+- **Kalashnikov et al. (2018), QT-Opt** — [arxiv.org/abs/1806.10293](https://arxiv.org/abs/1806.10293) — fleet-scale grasping. (Ch. 22)
+- **Tobin et al. (2017), domain randomization** — [arxiv.org/abs/1703.06907](https://arxiv.org/abs/1703.06907); **Peng et al. (2018), dynamics randomization** — [arxiv.org/abs/1710.06537](https://arxiv.org/abs/1710.06537). (Ch. 22)
+- **OpenAI (2018), Dactyl** — [arxiv.org/abs/1808.00177](https://arxiv.org/abs/1808.00177); **OpenAI (2019), Rubik's cube / ADR** — [arxiv.org/abs/1910.07113](https://arxiv.org/abs/1910.07113). (Ch. 22)
+- **Haarnoja et al. (2019), Minitaur walking** — [arxiv.org/abs/1812.11103](https://arxiv.org/abs/1812.11103). (Chs. 13, 22)
+- **Ibarz et al. (2021), lessons learned** — [arxiv.org/abs/2102.02915](https://arxiv.org/abs/2102.02915) — the honest post-mortem. (Ch. 22)
+- **Zhao et al. (2020), sim-to-real survey** — [arxiv.org/abs/2009.13303](https://arxiv.org/abs/2009.13303). (Ch. 22)
+
+## World Models
+
+- **Ha & Schmidhuber (2018)** — [arxiv.org/abs/1803.10122](https://arxiv.org/abs/1803.10122) — learning inside the dream. (Ch. 23)
+- **Hafner et al. (2019), PlaNet** — [arxiv.org/abs/1811.04551](https://arxiv.org/abs/1811.04551) — the RSSM. (Ch. 23)
+- **Hafner et al., DreamerV1/V2/V3** — [arxiv.org/abs/1912.01603](https://arxiv.org/abs/1912.01603), [arxiv.org/abs/2010.02193](https://arxiv.org/abs/2010.02193), [arxiv.org/abs/2301.04104](https://arxiv.org/abs/2301.04104) (+ [Nature 2025](https://doi.org/10.1038/s41586-025-08744-2)) — imagination-trained actor-critic, generalized. (Ch. 23)
+- **Wu et al. (2022), DayDreamer** — [arxiv.org/abs/2206.14176](https://arxiv.org/abs/2206.14176) — Dreamer on hardware. (Ch. 23)
+- **Hansen et al., TD-MPC (2022) / TD-MPC2 (2024)** — [arxiv.org/abs/2203.04955](https://arxiv.org/abs/2203.04955), [arxiv.org/abs/2310.16828](https://arxiv.org/abs/2310.16828) — the reconstruction-free counterpoint. (Ch. 23)
+- **Micheli et al. (2023), IRIS** — [arxiv.org/abs/2209.00588](https://arxiv.org/abs/2209.00588); **Alonso et al. (2024), DIAMOND** — [arxiv.org/abs/2405.12399](https://arxiv.org/abs/2405.12399). (Ch. 23)
+- **Bruce et al. (2024), Genie** — [arxiv.org/abs/2402.15391](https://arxiv.org/abs/2402.15391); **Genie 2 (2024)** — [blog](https://deepmind.google/discover/blog/genie-2-a-large-scale-foundation-world-model/); **Genie 3 (2025)** — [blog](https://deepmind.google/discover/blog/genie-3-a-new-frontier-for-world-models/). (Ch. 23)
+- **Zhou et al. (2024), DINO-WM** — [arxiv.org/abs/2411.04983](https://arxiv.org/abs/2411.04983) — frozen features + dynamics = zero-shot planning. (Ch. 23)
+
+## Vision-Language-Action Models
+
+- **Zhao et al. (2023), ACT/ALOHA** — [arxiv.org/abs/2304.13705](https://arxiv.org/abs/2304.13705) — chunking + CVAE on $20k hardware. (Ch. 24)
+- **Chi et al. (2023), Diffusion Policy** — [arxiv.org/abs/2303.04137](https://arxiv.org/abs/2303.04137) — the generative action head. (Ch. 24)
+- **Reed et al. (2022), Gato** — [arxiv.org/abs/2205.06175](https://arxiv.org/abs/2205.06175); **Driess et al. (2023), PaLM-E** — [arxiv.org/abs/2303.03378](https://arxiv.org/abs/2303.03378) — the generalist precursors. (Ch. 24)
+- **Brohan et al. (2022), RT-1** — [arxiv.org/abs/2212.06817](https://arxiv.org/abs/2212.06817) — diversity beats quantity. (Ch. 24)
+- **Brohan et al. (2023), RT-2** — [arxiv.org/abs/2307.15818](https://arxiv.org/abs/2307.15818) — web knowledge reaches the actuator. (Ch. 24)
+- **Open X-Embodiment (2024), RT-X** — [arxiv.org/abs/2310.08864](https://arxiv.org/abs/2310.08864) — the field pools its data. (Ch. 24)
+- **Octo Team (2024)** — [arxiv.org/abs/2405.12213](https://arxiv.org/abs/2405.12213); **Kim et al. (2024), OpenVLA** — [arxiv.org/abs/2406.09246](https://arxiv.org/abs/2406.09246) — the open generalists. (Ch. 24)
+- **Physical Intelligence, π0 (2024)** — [arxiv.org/abs/2410.24164](https://arxiv.org/abs/2410.24164) — and **π0.5 (2025)** — [arxiv.org/abs/2504.16054](https://arxiv.org/abs/2504.16054) — flow-matching dexterity; open-world homes. (Ch. 24)
+- **Ma et al. (2024), VLA survey** — [arxiv.org/abs/2405.14093](https://arxiv.org/abs/2405.14093). (Ch. 24)

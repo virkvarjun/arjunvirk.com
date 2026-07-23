@@ -1,0 +1,253 @@
+Every method since Chapter 4 has taken the same route to behavior: learn values, then act greedily on them. The policy was always a *byproduct*. This chapter inverts the arrangement: parameterize the policy itself, $\pi_\theta(a \mid s)$, define its performance $J(\theta)$ as the expected return of running it, and ascend $\nabla_\theta J$ directly. Values will re-enter — first as baselines, then as critics — but demoted from decision-makers to variance-reducers.
+
+Why bother, when Q-learning works? Three structural reasons. **Continuous actions**: $\argmax_a Q(s, a)$ over a torque vector in $\R^7$ is itself an optimization problem you'd have to solve at every step; a policy network just *outputs* the torques. **Stochastic optima**: in partially observed or adversarial settings (poker's bluffing frequencies), the best policy is genuinely random, and a family of stochastic policies can represent and smoothly tune it, while greedy-on-Q cannot. **Smoothness**: an infinitesimal change to θ changes action *probabilities* infinitesimally, so $J(\theta)$ is differentiable and improvement can be continuous — whereas value-based methods can flip an argmax discontinuously, with the instabilities Chapter 10 fought. The price, and this chapter's central villain, is **variance**: the gradient must be estimated from sampled returns, and raw estimates are noisy enough to be useless. The chapter is one long war on that variance — causality, baselines, critics, and finally GAE, the modern armistice between bias and noise, and the engine room of PPO in Chapter 12.
+
+## 1. Setup: Policies and the Objective
+
+A parameterized policy is any differentiable map from states to action distributions. The two canonical forms, which cover almost all of practice:
+
+- **Softmax (discrete):** preferences $h_\theta(s, a)$ (a neural network's logits), $\pi_\theta(a \mid s) = \frac{e^{h_\theta(s,a)}}{\sum_b e^{h_\theta(s,b)}}$ — Chapter 2's gradient bandit, given eyes.
+- **Gaussian (continuous):** $\pi_\theta(\cdot \mid s) = \mathcal{N}\left(\mu_\theta(s), \sigma_\theta(s)^2\right)$, the network outputting mean (and usually log-std) per action dimension.
+
+The objective is the expected return from the start distribution:
+
+$$
+J(\theta) \;=\; \E_{\tau \sim \pi_\theta}\left[ R(\tau) \right],
+\qquad
+R(\tau) = \sum_{t=0}^{T-1} \gamma^t R_{t+1},
+$$
+
+where the trajectory distribution factorizes as
+
+$$
+p_\theta(\tau) \;=\; \mu_0(S_0) \prod_{t=0}^{T-1} \pi_\theta(A_t \mid S_t)\, p(S_{t+1} \mid S_t, A_t).
+$$
+
+The obstacle is visible immediately: θ influences $J$ only *through which trajectories get sampled*, and the sampling passes through the unknown dynamics $p$. We cannot backpropagate through the environment. The escape is one identity.
+
+## 2. The Score-Function Trick
+
+For any distribution $p_\theta$ and function $f$ (no differentiability of $f$ needed):
+
+$$
+\nabla_\theta \E_{x \sim p_\theta}[f(x)]
+= \nabla_\theta \int p_\theta(x) f(x)\, dx
+= \int p_\theta(x)\, \frac{\nabla_\theta p_\theta(x)}{p_\theta(x)}\, f(x)\, dx
+= \E_{x \sim p_\theta}\left[ f(x)\, \nabla_\theta \log p_\theta(x) \right].
+$$
+
+The **likelihood-ratio / score-function estimator** (REINFORCE estimator, in ML; present in the statistics literature long before). Read it as instruction: *to increase $\E[f]$, raise the log-probability of samples in proportion to how good they were.* No gradient of $f$, no model of how $x$ produces $f$ — only the ability to sample and to score your own choices. This is what makes it fit RL exactly: the environment can stay a black box.
+
+Apply it to $J$ with $x = \tau$. The log of the trajectory probability splits into a sum, and — the crucial cancellation — the dynamics terms $\log p(S_{t+1} \mid S_t, A_t)$ and $\log \mu_0$ *do not depend on θ*, so their gradients vanish:
+
+$$
+\nabla_\theta \log p_\theta(\tau) \;=\; \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(A_t \mid S_t).
+$$
+
+The unknown world drops out of the gradient — the same fortunate cancellation as importance sampling's (Chapter 5), for the same reason. We arrive at the raw policy gradient:
+
+$$
+\nabla_\theta J(\theta) \;=\; \E_{\tau \sim \pi_\theta}\left[ \left( \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(A_t \mid S_t) \right) R(\tau) \right].
+$$
+
+Sample a batch of trajectories, average the bracket: an unbiased gradient estimate. It is also nearly useless as written — every action in a trajectory is credited with the *entire* trajectory's return, including rewards earned before the action was taken. Variance reduction begins now, in two exact steps.
+
+**Step 1: causality (reward-to-go).** An action cannot influence rewards that preceded it, and the math agrees: for $k < t$... more precisely, $\E\left[ \nabla_\theta \log \pi_\theta(A_t \mid S_t) \, R_{k+1} \right] = 0$ for $k$ before $t$ (condition on $(S_t)$ and the earlier reward; the score's conditional mean is zero — the same lemma as Step 2's, Exercise 11.3). Dropping those terms leaves each action weighted by only what followed it:
+
+$$
+\nabla_\theta J(\theta) \;=\; \E_{\pi_\theta}\left[ \sum_{t=0}^{T-1} \nabla_\theta \log \pi_\theta(A_t \mid S_t)\; G_t \right],
+$$
+
+with $G_t = \sum_{k \ge t} \gamma^{k-t} R_{k+1}$ the return from $t$ (a $\gamma^t$ weighting on each term is formally required by the discounted objective; virtually all implementations drop it, a small standard bias we flag once here). Same expectation, strictly less variance — terms of provably zero mean were deleted.
+
+**Step 2: baselines.** Subtract any state-dependent function $b(S_t)$ from the return:
+
+$$
+\nabla_\theta J(\theta) \;=\; \E_{\pi_\theta}\left[ \sum_t \nabla_\theta \log \pi_\theta(A_t \mid S_t)\, \left( G_t - b(S_t) \right) \right].
+$$
+
+Unbiasedness is the fundamental **score lemma**: for any $b(s)$,
+
+$$
+\E_{a \sim \pi_\theta(\cdot \mid s)}\left[ \nabla_\theta \log \pi_\theta(a \mid s)\, b(s) \right]
+= b(s) \nabla_\theta \underbrace{\sum_a \pi_\theta(a \mid s)}_{=\,1} = 0.
+$$
+
+(The gradient bandit's baseline freedom — Chapter 2 — was this lemma with one state.) The variance, however, moves a lot: the near-optimal practical choice is $b(s) = V^\pi(s)$, centering each action's weight at zero so that *better-than-expected* actions are reinforced and worse-than-expected suppressed — rather than everything being reinforced in proportion to returns that may all be large and positive. The centered weight has a name you know:
+
+$$
+G_t - V^\pi(S_t) \;\approx\; Q^\pi(S_t, A_t) - V^\pi(S_t) \;=\; A^\pi(S_t, A_t),
+$$
+
+the **advantage**. The policy gradient, in the form worth memorizing:
+
+$$
+\nabla_\theta J(\theta) \;=\; \E_{\pi_\theta}\left[ \sum_t \nabla_\theta \log \pi_\theta(A_t \mid S_t)\; A^\pi(S_t, A_t) \right].
+$$
+
+## 3. The Policy Gradient Theorem
+
+The derivation above is the modern trajectory-space route. The classical **policy gradient theorem** (Sutton, McAllester, Singh & Mansour, 2000) states the same result in state-space form, and its content deserves separate attention:
+
+$$
+\nabla_\theta J(\theta) \;\propto\; \sum_s d^{\pi}(s) \sum_a Q^\pi(s, a)\, \nabla_\theta \pi_\theta(a \mid s),
+$$
+
+where $d^\pi$ is the (discounted) state-visitation distribution under $\pi_\theta$. The theorem's real surprise is what is *missing*: no $\nabla_\theta d^\pi(s)$ term. Changing the policy changes which states you visit, and the return depends on the states visited — yet the gradient can be computed *as if the state distribution were fixed*, correcting only the action choices. The two derivations make this non-mystery: in trajectory space, the dynamics' θ-independence killed those terms at the cancellation step. (S&B §13.2 gives the third route — unrolling the recursion $\nabla V^\pi(s) = \sum_a [\ldots] + \gamma \E[\nabla V^\pi(S')]$ into a sum over the visitation measure — worth working once; Exercise 11.4.) The practical consequence is enormous: sampling states by *running the policy* and computing $\hat{\E}[\nabla \log \pi \cdot \hat{A}]$ is exactly right; no correction for the shifting state distribution is needed — but only *on-policy*. Data from an old policy samples the wrong $d^\pi$, and unlike the action-level mismatch (fixable by one importance ratio), the state-level mismatch has no cheap fix. This single fact is why policy-gradient methods are congenitally on-policy, why they discard data after every update, and why Chapter 12 will go to such lengths to take multiple safe steps per batch.
+
+<Check q="The score-function estimator needs no gradient of f — here, no gradient of the return. What information about the environment does the policy gradient use, and through what channel does it arrive?">
+Only samples: which trajectories occurred and what they returned. The environment's structure enters solely through the *distribution* of sampled $(s, a, G)$ triples — never through derivatives of dynamics or reward. That is why PG works with discrete rewards, contact discontinuities, and simulators you cannot differentiate; and also why it is information-starved compared to methods that can exploit model gradients (Chapter 14's PILCO and the analytic-gradient world-model methods of Chapter 23): one scalar per trajectory-action is a thin pipe.
+</Check>
+
+## 4. REINFORCE, and Its Variance, in Code
+
+**REINFORCE** (Williams, 1992) is the Monte Carlo instantiation: run episodes, compute reward-to-go, ascend. With a learned baseline $V_\phi$ (trained by regression on returns), it is "REINFORCE with baseline":
+
+<Pseudocode title="REINFORCE with baseline (episodic)">
+<L>Input: differentiable $\pi_\theta$, baseline $V_\phi$; step sizes $\alpha_\theta, \alpha_\phi$</L>
+<L>Loop per episode:</L>
+<L i={1}>Generate $S_0, A_0, R_1, \dots, S_{T-1}, A_{T-1}, R_T$ following $\pi_\theta$</L>
+<L i={1}>For $t = 0, \dots, T-1$:</L>
+<L i={2}>$G \leftarrow \sum_{k=t}^{T-1} \gamma^{k-t} R_{k+1}$</L>
+<L i={2}>$\delta \leftarrow G - V_\phi(S_t)$</L>
+<L i={2}>$\phi \leftarrow \phi + \alpha_\phi\, \delta\, \nabla_\phi V_\phi(S_t)$</L>
+<L i={2}>$\theta \leftarrow \theta + \alpha_\theta\, \delta\, \nabla_\theta \log \pi_\theta(A_t \mid S_t)$</L>
+</Pseudocode>
+
+```python
+import numpy as np
+import torch
+import torch.nn as nn
+import gymnasium as gym
+
+env = gym.make("CartPole-v1")
+GAMMA = 0.99
+
+policy = nn.Sequential(nn.Linear(4, 128), nn.ReLU(), nn.Linear(128, 2))
+value  = nn.Sequential(nn.Linear(4, 128), nn.ReLU(), nn.Linear(128, 1))
+opt_pi = torch.optim.Adam(policy.parameters(), lr=1e-3)
+opt_v  = torch.optim.Adam(value.parameters(),  lr=1e-3)
+
+for episode in range(800):
+    states, actions, rewards = [], [], []
+    s, _ = env.reset(seed=episode)
+    done = False
+    while not done:
+        logits = policy(torch.as_tensor(s, dtype=torch.float32))
+        dist = torch.distributions.Categorical(logits=logits)
+        a = dist.sample()
+        s2, r, term, trunc, _ = env.step(int(a))
+        states.append(s); actions.append(int(a)); rewards.append(r)
+        s, done = s2, term or trunc
+
+    # reward-to-go
+    G, returns = 0.0, []
+    for r in reversed(rewards):
+        G = r + GAMMA * G
+        returns.append(G)
+    returns.reverse()
+
+    S = torch.as_tensor(np.array(states), dtype=torch.float32)
+    A = torch.as_tensor(actions)
+    G = torch.as_tensor(returns, dtype=torch.float32)
+
+    V = value(S).squeeze(-1)
+    adv = (G - V).detach()                       # baseline: no grad into policy loss
+    logp = torch.distributions.Categorical(logits=policy(S)).log_prob(A)
+
+    loss_pi = -(logp * adv).mean()               # ascend => minimize negative
+    opt_pi.zero_grad(); loss_pi.backward(); opt_pi.step()
+
+    loss_v = nn.functional.mse_loss(V, G)        # fit baseline to returns
+    opt_v.zero_grad(); loss_v.backward(); opt_v.step()
+
+    if episode % 50 == 0:
+        print(f"ep {episode:4d}  return {sum(rewards):6.1f}")
+```
+
+This solves CartPole in a few hundred episodes — noisily. Run five seeds and the curves will disagree by a factor of two at fixed episode counts; delete the baseline (`adv = G`) and watch learning slow and the disagreement widen. That noise is not an implementation flaw; it is the estimator. Quantitatively, the estimator's variance scales with the *square of the typical weight* multiplying each score — which is why centering the weights around zero (the baseline) and shortening what each weight sums over (the critic, next) are the two levers that matter.
+
+## 5. Actor-Critic: Bootstrapping the Weight
+
+REINFORCE's weight $G_t$ is a full Monte Carlo return — unbiased, horizon-length variance. Chapter 6 taught the alternative once and for all: bootstrap. Replace $G_t - V(S_t)$ with the **one-step TD error**,
+
+$$
+\delta_t \;=\; R_{t+1} + \gamma V_\phi(S_{t+1}) - V_\phi(S_t),
+$$
+
+which is a legitimate advantage estimate: if $V_\phi$ were exact, $\E[\delta_t \mid S_t, A_t] = Q^\pi(S_t, A_t) - V^\pi(S_t) = A^\pi(S_t, A_t)$ — the TD error is an unbiased sample of the advantage (a lovely identity; Exercise 11.5). The resulting **actor-critic** updates run fully online, no episode boundary needed:
+
+$$
+\phi \leftarrow \phi + \alpha_\phi\, \delta_t\, \nabla_\phi V_\phi(S_t),
+\qquad
+\theta \leftarrow \theta + \alpha_\theta\, \delta_t\, \nabla_\theta \log \pi_\theta(A_t \mid S_t).
+$$
+
+The **critic** $V_\phi$ evaluates; the **actor** $\pi_\theta$ decides; the TD error is the entire interface between them — one scalar carrying "better or worse than I expected?" from evaluator to decider. (GPI again, with gradient steps for both halves.) But $V_\phi$ is *not* exact during learning, and its error now biases the policy gradient — we have reinvented, on the policy side, exactly Chapter 6's trade: MC weights are unbiased/high-variance; TD weights are biased/low-variance. Which invites exactly Chapter 7's resolution.
+
+## 6. Generalized Advantage Estimation
+
+Define the $n$-step advantage estimates $\hat{A}^{(n)}_t = \sum_{k=0}^{n-1}\gamma^k R_{t+k+1} + \gamma^n V(S_{t+n}) - V(S_t)$ — the dial from $\hat A^{(1)} = \delta_t$ (biased, low variance) to $\hat A^{(\infty)} = G_t - V(S_t)$ (unbiased, high variance). **GAE** (Schulman et al., 2016) is the λ-return construction applied to advantages — the exponentially weighted blend, which by Chapter 7's telescoping identity collapses to a discounted sum of TD errors:
+
+$$
+\hat{A}^{\mathrm{GAE}(\gamma, \lambda)}_t \;=\; (1-\lambda)\sum_{n \ge 1} \lambda^{n-1} \hat A^{(n)}_t \;=\; \sum_{k=0}^{\infty} (\gamma \lambda)^k\, \delta_{t+k},
+$$
+
+computed in one backward pass: $\hat A_t = \delta_t + \gamma\lambda \hat A_{t+1}$. Two knobs, cleanly separated: **γ** defines *which problem* you are solving (the discount of the objective itself — lowering it below the "true" discount is a bias accepted to shrink long-horizon noise), while **λ** defines *how much you trust the critic*: λ = 0 is pure TD (all trust), λ = 1 is pure MC-minus-baseline (no trust beyond the baseline role). Standard settings γ = 0.99, λ = 0.95 say: care about ~100 steps, and let the critic absorb most of the variance while keeping a long tail of real rewards to limit its bias. GAE is not itself an algorithm but the *advantage estimator inside* essentially every modern on-policy method — A2C variants, TRPO, PPO — and empirically the single most consequential hyperparameter block those methods have.
+
+The batched on-policy template that Chapter 12's algorithms all share:
+
+<Pseudocode title="Batched advantage actor-critic (the A2C/PPO chassis)">
+<L>Loop:</L>
+<L i={1}>Run $\pi_\theta$ for $N$ steps across (possibly parallel) environments; store $s, a, r$, done, $\log\pi_\theta(a \mid s)$, $V_\phi(s)$</L>
+<L i={1}>Compute $\delta_t$ and GAE advantages $\hat A_t$ backward through the buffer; targets $\hat G_t = \hat A_t + V_\phi(s_t)$</L>
+<L i={1}>Normalize $\hat A$ per batch (mean 0, std 1)</L>
+<L i={1}>Actor step: ascend $\frac{1}{N}\sum_t \log \pi_\theta(a_t \mid s_t)\, \hat A_t \;+\; \beta\, \mathcal{H}\!\left[\pi_\theta(\cdot \mid s_t)\right]$</L>
+<L i={1}>Critic step: descend $\frac{1}{N}\sum_t \left( V_\phi(s_t) - \hat G_t \right)^2$; discard the batch</L>
+</Pseudocode>
+
+The entropy bonus $\beta \mathcal{H}$ (typically β ≈ 0.01) is the policy-side exploration device: it penalizes premature collapse to determinism, keeping gradient signal alive — the softmax's version of ε that can be annealed by the optimizer itself. The batch normalization of advantages is atheoretic but ubiquitous: it fixes the gradient scale across environments and training phases, making one learning rate portable.
+
+<Pitfall title="Common pitfalls — policy-gradient edition">
+**Entropy collapse**: the policy saturates early (one action at probability ~1), gradients vanish, learning dies while returns look merely mediocre. Monitor entropy; raise β or lower the actor's learning rate. **The baseline must not enter the actor's graph**: forgetting `detach()` on the advantage lets the policy loss backpropagate into $V_\phi$, silently corrupting both (a top-3 implementation bug). **Wrong log-prob bookkeeping** for continuous actions — summing per-dimension log-probs, and correcting for squashing (tanh) Jacobians — errors here *look like* bad hyperparameters (Chapter 13 does this properly). **Stale data**: even one epoch of re-updating on yesterday's batch samples the wrong $d^\pi$; if you want data reuse, you want Chapter 12's machinery, not a for-loop. **Reward scale** again: PG updates are proportional to advantage magnitude; normalize or clip rewards, or tune α per environment forever.
+</Pitfall>
+
+## 7. Summary
+
+- Policy-based methods parameterize behavior directly: essential for continuous actions, capable of stochastic optima, smooth in θ. Values return as servants (baseline, critic).
+- **Score-function trick**: $\nabla \E[f] = \E[f \nabla \log p]$ — raise the log-probability of good samples; needs no model and no differentiable reward. Dynamics cancel from $\nabla_\theta \log p_\theta(\tau)$.
+- Exact variance reductions: **causality** (weight actions by reward-to-go only) and **baselines** (subtract $b(s)$; unbiased by the score lemma). Best weight: the **advantage** $A^\pi = Q^\pi - V^\pi$.
+- **Policy gradient theorem**: $\nabla J \propto \sum_s d^\pi(s) \sum_a Q^\pi \nabla \pi$ — no gradient through the state distribution, which is precisely why on-policy sampling computes the right thing and off-policy data has no cheap fix.
+- **REINFORCE**: PG with MC returns — unbiased, loud. **Actor-critic**: weight by TD error $\delta_t$ (an unbiased sample of the advantage under an exact critic) — quiet, biased by critic error.
+- **GAE**: $\hat A_t = \sum_k (\gamma\lambda)^k \delta_{t+k}$ — the λ-dial for advantages; γ picks the problem, λ prices the critic's trustworthiness. Plus entropy bonus and advantage normalization: the chassis of modern on-policy RL.
+
+## 8. Papers & Further Reading
+
+- **Williams, "Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning" (Machine Learning, 1992)** — [doi.org/10.1007/BF00992696](https://doi.org/10.1007/BF00992696). REINFORCE, baselines, and the episodic analysis; the paper that named the estimator.
+- **Sutton, McAllester, Singh & Mansour, "Policy Gradient Methods for Reinforcement Learning with Function Approximation" (NeurIPS, 2000)** — [papers.nips.cc](https://papers.nips.cc/paper_files/paper/1999/hash/464d828b85b0bed98e80ade0a5c43b0f-Abstract.html). The policy gradient theorem and compatible function approximation (the conditions under which a learned critic yields the *exact* gradient).
+- **Konda & Tsitsiklis, "Actor-Critic Algorithms" (NeurIPS, 2000)** — [papers.nips.cc](https://papers.nips.cc/paper_files/paper/1999/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html). The two-timescale convergence analysis: critic fast, actor slow.
+- **Schulman, Moritz, Levine, Jordan & Abbeel, "High-Dimensional Continuous Control Using Generalized Advantage Estimation" (ICLR, 2016)** — [arxiv.org/abs/1506.02438](https://arxiv.org/abs/1506.02438). GAE: the bias–variance analysis of advantage estimators and the (γ, λ) decomposition.
+- **Greensmith, Bartlett & Baxter, "Variance Reduction Techniques for Gradient Estimates in Reinforcement Learning" (JMLR, 2004)** — [jmlr.org/papers/v5/greensmith04a.html](https://jmlr.org/papers/v5/greensmith04a.html). The optimal-baseline theory: what the best $b(s)$ actually is (not quite $V^\pi$), and how much it buys.
+- **Sutton & Barto, Ch. 13** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). The state-recursion derivation of the PG theorem and short-corridor example showing why stochastic policies can beat all deterministic ones.
+
+## 9. Exercises
+
+**11.1 (understand)** The short-corridor gridworld (S&B Example 13.1) has a state where the action's *effect* is reversed, and function approximation makes all states look identical. Show that every deterministic policy is poor and the optimal ε-free stochastic policy takes "right" with probability ≈ 0.59. What does this example prove about policy classes that value-based greedification cannot represent?
+
+**11.2 (understand)** Explain, at the level of the two derivations, why there is no $\nabla_\theta d^\pi$ term in the policy gradient theorem — and then why this same fact makes reusing old trajectories illegitimate. Which specific expectation breaks?
+
+**11.3 (derive)** Prove the causality step: $\E_{\pi_\theta}\left[ \nabla_\theta \log \pi_\theta(A_t \mid S_t)\, R_{k+1} \right] = 0$ for $k$ strictly less than $t$. (Condition on the history through $R_{k+1}$ and $S_t$; apply the score lemma to the inner expectation over $A_t$.)
+
+**11.4 (derive)** Carry out the state-recursion derivation of the policy gradient theorem: differentiate the Bellman equation for $V^{\pi_\theta}$, obtain $\nabla V^\pi(s) = \sum_a \nabla\pi(a \mid s) Q^\pi(s,a) + \gamma \E_{\pi}[\nabla V^\pi(S')]$, and unroll to the visitation-measure form. Track carefully where the discount enters the visitation measure.
+
+**11.5 (derive)** Prove $\E\left[\delta_t \mid S_t = s, A_t = a\right] = A^\pi(s, a)$ when $\delta_t$ uses the true $V^\pi$ — the TD error is an unbiased advantage sample. Then bound the bias of the actor's expected update when the critic has error $\epsilon(s) = V_\phi(s) - V^\pi(s)$: which differences of ε appear, and why does a critic that is wrong by a *constant* not bias the policy gradient at all?
+
+**11.6 (derive)** From the n-step advantage definitions, derive the GAE telescoping form $\hat A^{\mathrm{GAE}} = \sum_k (\gamma\lambda)^k \delta_{t+k}$, and verify the λ = 0 and λ = 1 endpoints. Then derive the backward recursion used in code, including the correct handling of `done` flags (both true terminals and timeout truncations — they differ, per Chapters 3 and 10).
+
+**11.7 (implement)** Run the REINFORCE code with and without the baseline, 10 seeds each. Plot mean ± interquartile return curves, and separately plot the empirical variance of the per-episode policy-gradient norm. Confirm the baseline's variance reduction and quantify it.
+
+**11.8 (implement)** Convert the REINFORCE code to the batched A2C chassis (N = 2048 steps per batch, GAE λ = 0.95, entropy β = 0.01, advantage normalization) and compare wall-clock and episode-efficiency against REINFORCE on CartPole and Acrobot. Then sweep λ ∈ $\{0, 0.5, 0.9, 0.95, 1.0\}$ and plot final performance — reproduce the GAE paper's qualitative U-shape.
+
+**11.9 (implement)** Continuous control warm-up: solve `Pendulum-v1` with the A2C chassis and a Gaussian policy (network outputs mean and log-std; log-prob is a sum over action dims). Log entropy over training. You will likely observe entropy collapsing before the task is solved — apply the pitfalls section and report what fixed it. (Keep this code; Chapter 13 upgrades it to SAC.)
+
+**11.10 (research)** The variance war never ended: action-dependent baselines (Q-Prop, Stein control variates) promised further reductions, but Tucker et al. (2018, "The Mirage of Action-Dependent Baselines") showed several reported gains came from implementation artifacts rather than the estimator. Read that paper; then design a *bias-detection harness* — a small MDP where the exact policy gradient is computable in closed form — and specify the three comparisons you would run before believing any new low-variance estimator. (Building exactly this harness is one of the more transferable skills in empirical RL research.)

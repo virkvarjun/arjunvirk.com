@@ -76,3 +76,85 @@ body {
   background: #111111;
   color: #fafaf8;
 }
+
+/* ------------------------------------------------------------------ */
+/* RL Bible (/writing/rl-guide) — scoped prose styles for MDX content. */
+/* Real monospace inside code contexts; card-colored code blocks;      */
+/* KaTeX display spacing; comparison tables.                           */
+/* ------------------------------------------------------------------ */
+
+.rl-prose pre,
+.rl-prose pre code,
+.rl-prose .code-inline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+.rl-prose pre {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.rl-prose pre code {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
+}
+
+.rl-prose pre [data-line] {
+  padding: 0;
+}
+
+.rl-prose code[data-theme],
+.rl-prose code[data-theme] span {
+  color: var(--shiki-light, inherit);
+}
+
+.rl-prose .code-inline {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.8em;
+}
+
+.rl-prose .katex {
+  font-size: 1.06em;
+}
+
+.rl-prose .katex-display {
+  margin: 1.1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0;
+}
+
+.rl-prose .katex-display > .katex {
+  font-size: 1.12em;
+}
+
+.rl-prose .prose-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.rl-prose .prose-table th {
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--foreground);
+  padding: 0.4rem 0.75rem 0.4rem 0;
+}
+
+.rl-prose .prose-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.75rem 0.4rem 0;
+  vertical-align: top;
+}

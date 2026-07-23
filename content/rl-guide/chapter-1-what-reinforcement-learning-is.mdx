@@ -1,0 +1,251 @@
+Every other kind of machine learning you have met answers the question "what is this?" A classifier sees a photo and names the animal. A language model sees half a sentence and predicts the rest. Reinforcement learning answers a different and harder question: "what should I *do*?" — and it has to answer it in a world that reacts to what it does, doles out praise rarely and late, and never once shows the right answer.
+
+This chapter builds the RL problem from nothing. By the end you will know exactly what makes it distinct from supervised learning, what an agent, environment, and reward formally are, why exploration and credit assignment are the two demons every algorithm in this book is fighting, and how the entire field — from Q-learning to the robot policies in Part IV — fits into one taxonomy you can hold in your head. We close with a real algorithm on a real problem: a bandit agent that learns, from pure trial and error, which slot machine pays.
+
+## 1. Learning from Interaction
+
+Think about how you learned to ride a bicycle. Nobody handed you a labeled dataset of handlebar angles. You got on, wobbled, fell, adjusted, and fell less. The world itself graded you — not with the correct action at each instant, but with a coarse, delayed signal: you stayed up, or you hit the pavement. Out of that thin feedback you constructed a control policy that modern robotics still struggles to replicate.
+
+That is the reinforcement learning problem: an agent interacts with an environment over time, chooses actions, observes consequences, and receives a scalar reward signal. Its goal is to select actions that maximize the total reward it collects over the long run — not the next instant's reward, but the *cumulative* reward, which may require sacrificing now to gain later. A chess move that loses a pawn but wins the game is a good move. RL is the mathematics of "good move."
+
+Three features define the setting, and each one breaks a tool you already trust:
+
+- **The training signal is evaluative, not instructive.** A supervised label says "the answer was 7." A reward says "that got you 0.2 points." It scores what you did without ever telling you what you should have done. To find better actions, the agent has to try things — which is why exploration (Section 5) is forced on us from the start.
+- **Feedback is delayed.** The reward for a good opening move in chess arrives forty moves later, mixed with the consequences of every move in between. Deciding which past actions deserve credit for a distant outcome is the *credit assignment problem* (Section 6).
+- **The data distribution depends on the agent.** A classifier's dataset is fixed before training starts. An RL agent's "dataset" is its own experience, and its experience depends on its current behavior. Improve the policy and the data changes. This feedback loop between learning and data collection is the deepest difference from supervised learning, and it is the source of most of the instability we will spend Parts II and III taming.
+
+## 2. What RL Is Not
+
+It sharpens the definition to contrast it with its neighbors.
+
+**Supervised learning** is learning from a teacher: for each input $x$ you are told the desired output $y$, and you fit $f(x) \approx y$. The theory rests on the data being independent and identically distributed, and on the loss being a direct, differentiable measure of how wrong each individual prediction was. In RL, none of that holds: there is no $y$, consecutive experiences are strongly correlated (the state now heavily determines the state next), and the objective — long-run reward — is not a per-example loss you can differentiate through directly.
+
+**Unsupervised learning** is learning structure without a teacher: clustering, density estimation, representation learning. RL is also teacherless, but it is not trying to *uncover* structure — it is trying to *maximize* a signal. Structure often helps (world models in Chapter 23 are exactly unsupervised learning recruited into the service of control), but it is a means, not the objective.
+
+**Optimal control** is RL's closest relative — so close that large parts of this book are optimal control by another name. Control theory typically assumes the dynamics of the system are *known* (you have the differential equations of the plant) and derives optimal behavior analytically or numerically. RL asks: what if you don't know the dynamics and can only sample them by acting? Richard Bellman's dynamic programming (Chapter 4) is the shared ancestor of both fields, which is why the central equations of this book carry his name.
+
+<Check q="A model is trained on a fixed dataset of human chess games to predict the human's move in each position. Is that reinforcement learning?">
+No — it is supervised learning (behavioral cloning, which we treat properly in Chapter 16). Each position comes with an instructive label: the move the human played. Nothing the model does changes its data, no reward is optimized, and no exploration happens. It becomes RL when the model plays games, wins or loses, and updates from that evaluative outcome — as AlphaGo did after its imitation-learning warm start.
+</Check>
+
+## 3. The Agent–Environment Interface
+
+We now fix the vocabulary and the diagram that everything in this book hangs on. Time advances in discrete steps $t = 0, 1, 2, \dots$ At each step:
+
+1. The agent observes the environment's **state** $S_t \in \mathcal{S}$.
+2. Based on $S_t$, it selects an **action** $A_t \in \mathcal{A}(S_t)$.
+3. One tick later, the environment responds with a scalar **reward** $R_{t+1} \in \R$ and a next state $S_{t+1}$.
+
+<Figure caption="Fig 1.1, The agent–environment loop: the agent emits actions; the environment returns the next state and a scalar reward. Every algorithm in this book lives inside this loop.">
+<svg width="420" height="190" viewBox="0 0 420 190" role="img" aria-label="Agent environment interaction loop">
+  <rect x="130" y="18" width="160" height="44" rx="6" fill="none" stroke="#111" strokeWidth="1.3" />
+  <text x="210" y="45" textAnchor="middle" fontSize="15" fill="#111" fontFamily="et-book, Palatino, Georgia, serif">Agent</text>
+  <rect x="130" y="128" width="160" height="44" rx="6" fill="none" stroke="#111" strokeWidth="1.3" />
+  <text x="210" y="155" textAnchor="middle" fontSize="15" fill="#111" fontFamily="et-book, Palatino, Georgia, serif">Environment</text>
+  <path d="M 290 40 H 358 V 150 H 294" fill="none" stroke="#111" strokeWidth="1.1" markerEnd="url(#arr1)" />
+  <text x="366" y="99" fontSize="13" fill="#111" fontFamily="et-book, Palatino, Georgia, serif" fontStyle="italic">A<tspan dy="3" fontSize="10">t</tspan></text>
+  <path d="M 130 150 H 62 V 40 H 126" fill="none" stroke="#111" strokeWidth="1.1" markerEnd="url(#arr1)" />
+  <text x="18" y="86" fontSize="13" fill="#111" fontFamily="et-book, Palatino, Georgia, serif" fontStyle="italic">S<tspan dy="3" fontSize="10">t+1</tspan></text>
+  <text x="18" y="112" fontSize="13" fill="#111" fontFamily="et-book, Palatino, Georgia, serif" fontStyle="italic">R<tspan dy="3" fontSize="10">t+1</tspan></text>
+  <defs>
+    <marker id="arr1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#111" />
+    </marker>
+  </defs>
+</svg>
+</Figure>
+
+The interaction generates a **trajectory**
+
+$$
+\tau = (S_0, A_0, R_1, S_1, A_1, R_2, S_2, A_2, R_3, \dots),
+$$
+
+and note the indexing convention, which we keep for the whole book (it is Sutton & Barto's): the reward that *results from* action $A_t$ is $R_{t+1}$, arriving together with $S_{t+1}$. Consequences live one tick after their causes.
+
+A few clarifications that matter more than they look:
+
+- **The boundary is informational, not physical.** For a robot, the "agent" is not the robot's body — motors, joints, and sensors are part of the environment, because the learning algorithm cannot change them by fiat, only send commands into them. The agent is the decision-maker: the thing that maps observations to action choices. Anything the agent cannot alter arbitrarily is environment.
+- **State vs. observation.** We will assume for now that the agent sees the true state $S_t$ — everything relevant about the world at time $t$. In reality a robot gets camera pixels: a partial, noisy **observation** $O_t$. The gap between observation and state (partial observability) is formalized as a POMDP in Chapter 3 and haunts the robotics chapters; until then, state means "sufficient information," a phrase Chapter 3 makes precise as the Markov property.
+- **The agent's behavior is a policy.** A **policy** $\pi(a \mid s)$ gives the probability of taking action $a$ in state $s$ (deterministic policies $a = \pi(s)$ are the special case that puts all mass on one action). The policy is the object we are ultimately trying to find: everything else — value functions, models, replay buffers — is scaffolding for producing a good $\pi$.
+
+**Episodic and continuing tasks.** Some interactions naturally break into **episodes** — a chess game, one attempt at stacking a block — ending at a terminal time $T$, after which the environment resets. Others run forever: a server allocating jobs, a heating controller. Chapter 3 unifies the two with discounting; for now, know both exist.
+
+## 4. Rewards and the Reward Hypothesis
+
+The reward is a single scalar per step. That austerity is a design choice, crystallized in what Sutton calls the **reward hypothesis**:
+
+> All of what we mean by goals and purposes can be well thought of as maximization of the expected value of the cumulative sum of a received scalar signal.
+
+Formally, the agent maximizes the expected **return** — for now, in an episodic task,
+
+$$
+G_t = R_{t+1} + R_{t+2} + \cdots + R_T,
+$$
+
+with the discounted version $G_t = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}$ waiting for Chapter 3. The hypothesis says this humble sum is expressive enough to encode *any* goal worth having: win the game (+1 at victory, 0 elsewhere), walk fast (reward proportional to forward velocity), keep the pole up (+1 per step survived).
+
+Two consequences deserve respect from day one.
+
+**The reward defines the task — completely and literally.** The agent optimizes what you wrote down, not what you meant. A vacuum robot rewarded per unit of dust ingested learns to dump dust and re-ingest it. A boat-racing agent rewarded for hitting score pickups learns to circle three pickups forever, on fire, while every other boat finishes the race (a real result from OpenAI's *Faulty Reward Functions* experiments). This is **reward hacking**, and it is not a curiosity: it is the default outcome of a misspecified reward paired with a strong optimizer. The discipline of writing rewards that say *what* you want (reach the target) rather than *how* to do it (follow this trajectory) is the first craft skill of applied RL, and the difficulty of writing rewards at all is why imitation learning (Chapter 16) and learned rewards (Chapters 16 and 20) exist.
+
+**Reward is where the goal enters — and the only place.** The environment defines what is possible; the reward defines what is desirable. Change the reward and the same environment poses a different task. This clean separation is what lets one algorithm — SAC, PPO — solve hundreds of tasks: the algorithm never needs to know what the task *means*.
+
+<Pitfall title="Common pitfalls — sparse and shaped rewards">
+The honest reward for most goals is **sparse**: +1 at the goal state, 0 everywhere else. Sparse rewards are unhackable but nearly unlearnable from scratch — a random policy may never see a nonzero reward (Chapter 15 measures exactly how bad this gets). The tempting fix, **reward shaping** — adding dense hints like negative distance-to-goal — speeds learning but reintroduces hacking risk: an agent rewarded for approaching the goal may learn to hover next to it. Ng, Harada & Russell (1999) proved the one safe form: potential-based shaping $r'(s,a,s') = r(s,a,s') + \gamma \Phi(s') - \Phi(s)$ for any state function $\Phi$, which provably preserves the ranking of policies. Any shaping not of this form can change what the optimal policy is.
+</Pitfall>
+
+## 5. Exploration versus Exploitation
+
+Because rewards evaluate rather than instruct, the agent only learns about the actions it takes. This creates a dilemma with no analogue in supervised learning.
+
+Suppose the agent has found an action that yields decent reward. **Exploiting** — repeating that action — maximizes reward *given current knowledge*. **Exploring** — trying something else — risks a worse outcome now for information that might reveal a better action forever after. Both are necessary: pure exploitation locks in the first mediocre strategy discovered; pure exploration never cashes in on what it learns. And the agent cannot do both at once with a single action, so every action is a small bet on the value of information.
+
+You already run this trade-off daily. Order the dish you love, or the one you've never tried? The stakes scale up smoothly from lunch to clinical trials, where "explore" means assigning a patient to an experimental treatment.
+
+What makes this mathematically deep is that the *value of exploring* depends on how much future there is to exploit in, how uncertain you are, and how costly bad outcomes are. Chapter 2 studies the cleanest possible version — the multi-armed bandit, where the dilemma appears with no states attached — and derives strategies (optimism, posterior sampling) whose regret provably grows only logarithmically in time. Chapter 15 confronts the ugly version, where rewards are sparse, states are images, and "have I been somewhere like this before?" is itself a hard question.
+
+## 6. The Credit Assignment Problem
+
+The second demon. An episode of Breakout lasts a thousand actions and ends with a score. Which of the thousand actions earned it? The reward arrives long after the decisive action was taken, and every action in between muddies the signal. Minsky named this the **credit assignment problem** in 1961, and it is *the* problem the central objects of this book exist to solve.
+
+The solution concept is the **value function** — the single most important idea in reinforcement learning. Rather than waiting for the final score, we learn to predict, from each state, the total reward that will follow:
+
+$$
+V^\pi(s) = \E_\pi\!\left[\, G_t \mid S_t = s \,\right],
+$$
+
+the expected return from state $s$ if the agent behaves according to $\pi$ thereafter. A value function converts a delayed, sparse outcome into an immediate, dense evaluation: an action is good if it leads to a state of higher value than expected — even if the actual reward is months away. Chess players do exactly this; they don't evaluate a move by playing every game to mate, they evaluate the *position* it produces. When, in Chapter 6, we update value estimates from other value estimates ("this move surprised me — the position got better than predicted, so credit the move"), credit begins flowing backward one step per update, and nearly every algorithm in this book falls out of variations on that trick.
+
+Hold on to both demons. Exploration is about *getting* informative experience; credit assignment is about *interpreting* it. Every algorithm we meet is an answer to one or both, and when an algorithm fails on your robot, the diagnosis almost always starts with "which demon won?"
+
+## 7. A First Algorithm: the 10-Armed Bandit
+
+Enough philosophy — let's build an agent. We strip the RL problem to its minimum: **one state**, so no credit assignment across time, leaving exploration alone on stage. This is the $k$-armed bandit, Chapter 2's subject; here it serves as our first working example.
+
+You face $k = 10$ slot-machine arms. Arm $a$ pays out a random reward drawn from a Gaussian with unknown mean $q_*(a)$ and unit variance. At each of 1,000 steps you pull one arm. Maximize total payout.
+
+The natural plan: estimate each arm's value by the average of the rewards it has paid,
+
+$$
+Q_t(a) = \frac{\text{sum of rewards when } a \text{ was taken before } t}{\text{number of times } a \text{ was taken before } t},
+$$
+
+then usually pull the best-looking arm, but occasionally — with probability $\epsilon$ — pull a uniformly random arm, just to keep the estimates honest. This is the **ε-greedy** strategy: greedy exploitation, ε of the time interrupted by exploration.
+
+<Pseudocode title="ε-greedy action-value bandit (incremental)">
+<L>Initialize, for $a = 1, \dots, k$: $\quad Q(a) \leftarrow 0, \quad N(a) \leftarrow 0$</L>
+<L>Loop forever:</L>
+<L i={1}>$A \leftarrow \begin{cases} \argmax_a Q(a) & \text{with probability } 1 - \epsilon \\ \text{a random action} & \text{with probability } \epsilon \end{cases}$</L>
+<L i={1}>$R \leftarrow bandit(A)$</L>
+<L i={1}>$N(A) \leftarrow N(A) + 1$</L>
+<L i={1}>$Q(A) \leftarrow Q(A) + \frac{1}{N(A)}\big[R - Q(A)\big]$</L>
+</Pseudocode>
+
+The update on the last line is worth staring at. Instead of storing all past rewards and re-averaging, we move the old estimate a step toward the new sample:
+
+$$
+Q_{n+1} = Q_n + \frac{1}{n}\big( R_n - Q_n \big),
+$$
+
+which is algebraically identical to the running mean (expand it and check — Exercise 1.4). Its shape,
+
+$$
+\text{NewEstimate} \leftarrow \text{OldEstimate} + \text{StepSize}\,\big[\,\text{Target} - \text{OldEstimate}\,\big],
+$$
+
+is the master template of this entire book. TD learning, Q-learning, DQN's loss, even PPO's critic update are all instances with fancier targets. The bracketed term is an *error*: the discrepancy between what happened and what you predicted. Learning means shrinking it.
+
+In NumPy, the whole experiment:
+
+```python
+import numpy as np
+
+rng = np.random.default_rng(0)
+k, steps, runs, eps = 10, 1000, 2000, 0.1
+
+rewards = np.zeros(steps)
+optimal = np.zeros(steps)
+
+for run in range(runs):
+    q_star = rng.normal(0.0, 1.0, k)   # true arm values, hidden from the agent
+    Q = np.zeros(k)                    # value estimates
+    N = np.zeros(k)                    # pull counts
+
+    for t in range(steps):
+        if rng.random() < eps:                       # explore
+            a = rng.integers(k)
+        else:                                        # exploit (ties broken randomly)
+            a = rng.choice(np.flatnonzero(Q == Q.max()))
+        r = rng.normal(q_star[a], 1.0)               # pull the arm
+        N[a] += 1
+        Q[a] += (r - Q[a]) / N[a]                    # incremental mean update
+
+        rewards[t] += r
+        optimal[t] += (a == q_star.argmax())
+
+rewards /= runs
+optimal /= runs
+print(f"final avg reward:   {rewards[-100:].mean():.3f}")
+print(f"final %% optimal arm: {100 * optimal[-100:].mean():.1f}%")
+```
+
+Averaged over 2,000 random bandit problems, ε = 0.1 reaches about 1.4 average reward per step and picks the best arm roughly 80% of the time by step 1,000. Set `eps = 0` and watch it plateau near 1.0, having married the first arm that paid: the cost of never exploring, measured. Set `eps = 0.5` and it explores itself poor. Chapter 2 turns this knob-fiddling into theory — regret bounds, optimism, and Thompson sampling — and shows strategies that beat every fixed ε.
+
+<Check q="Even with ε = 0, the greedy agent sometimes switches arms during the first dozen steps. Why?">
+Early value estimates are noisy: with initial estimates at zero and one sample per pulled arm, an unlucky draw from a good arm (or a lucky draw from a bad one) reorders the estimates, and the greedy choice changes. This accidental exploration dries up as estimates sharpen — which is exactly why greedy gets stuck: once the estimates stabilize on a wrong ranking, no new evidence ever arrives to fix them.
+</Check>
+
+## 8. A Map of the Whole Field
+
+Everything from here to Chapter 25 can be located with four questions. Learn these axes now and no algorithm in this book — or in any paper you read after it — will arrive unclassified.
+
+**Does the agent learn a model of the environment?** **Model-based** methods learn (or are given) the transition dynamics — a simulator in the head — and use it to plan: dynamic programming (Chapter 4), Dyna and MCTS (Chapter 8), PETS and MuZero (Chapter 14), the world models that power modern robotics (Chapter 23). **Model-free** methods learn values or policies directly from experience, never predicting what state comes next: Q-learning, DQN, PPO, SAC. Models buy sample efficiency and foresight at the price of a second learning problem — and errors in a learned model compound when you plan with it.
+
+**What does the agent learn?** **Value-based** methods (Chapters 4–10) learn value functions and derive the policy implicitly — act greedily on the values. **Policy-based** methods (Chapter 11) parameterize and optimize the policy directly, which handles continuous actions and stochastic optima gracefully. **Actor-critic** methods (Chapters 11–13) do both: a critic learns values to lower the variance of the actor's policy updates. The workhorses of modern practice — PPO, SAC, TD3 — all live here.
+
+**Whose behavior generated the learning data?** **On-policy** methods evaluate and improve the same policy that is collecting data; data must be discarded after each policy change (SARSA, A2C, PPO). **Off-policy** methods learn about one policy from data generated by another — enabling replay buffers, learning from demonstrations, and exploration policies that differ from the target (Q-learning, DQN, SAC). Off-policy is more flexible and more sample-efficient, and Chapter 9 shows the price: combined with function approximation and bootstrapping, it forms the *deadly triad* that can make learning diverge outright.
+
+**When does the data arrive?** **Online** RL interleaves acting and learning. **Offline** RL (Chapter 17) learns from a fixed, previously collected dataset with no further interaction allowed — essential when interaction is expensive or unsafe, i.e., robots — and hard for a reason with a name: distribution shift between the dataset policy and the learned one.
+
+Two orthogonal distinctions complete the map. *Prediction vs. control*: estimating $V^\pi$ for a fixed policy versus finding the best policy — every chapter tackles prediction first because control is built on it. And *tabular vs. function approximation*: Parts 0–I store one value per state in a table, where the theory is clean and convergence is provable; Part II replaces the table with a neural network, buying generalization at the price of that theory.
+
+The book's arc in one breath: Part 0 formalizes the problem (bandits, MDPs). Part I solves it exactly when tables suffice (DP, Monte Carlo, TD, traces, planning). Part II scales it with neural networks (DQN, policy gradients, PPO, SAC, model-based RL). Part III assembles the modern toolbox (exploration, imitation, offline RL, sequence models, goals and hierarchy, RLHF, theory). Part IV takes it all to robots (deep RL on hardware, world models, vision-language-action policies, and the open frontier).
+
+## 9. Summary
+
+- Reinforcement learning is learning **what to do** from interaction: no labels, only a scalar reward that evaluates without instructing.
+- The formal loop: observe $S_t$, act $A_t$, receive $R_{t+1}$ and $S_{t+1}$. Behavior is a policy $\pi(a \mid s)$; the objective is expected cumulative reward, the return $G_t$.
+- The **reward hypothesis**: any goal can be cast as maximizing expected cumulative scalar reward. The reward defines the task literally — misspecify it and the agent optimizes your mistake (reward hacking).
+- **Exploration vs. exploitation**: evaluative feedback means you learn only about what you try, so every action trades immediate reward against information.
+- **Credit assignment**: delayed rewards must be attributed to the actions that caused them; the value function $V^\pi(s) = \E_\pi[G_t \mid S_t = s]$ is the field's central device for it.
+- The update template $Q \leftarrow Q + \alpha\,[\text{target} - Q]$ from the bandit generalizes to nearly every algorithm in this book.
+- Four axes locate any RL method: model-based vs. model-free; value vs. policy vs. actor-critic; on- vs. off-policy; online vs. offline.
+
+## 10. Papers & Further Reading
+
+- **Sutton & Barto, *Reinforcement Learning: An Introduction*, 2nd ed. (2018)** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). The book this book leans on for Parts 0–I; Chapter 1 of it covers this ground with a tic-tac-toe running example. Free online.
+- **Kaelbling, Littman & Moore, "Reinforcement Learning: A Survey" (JAIR, 1996)** — [arxiv.org/abs/cs/9605103](https://arxiv.org/abs/cs/9605103). The classic pre-deep-learning survey; striking how many "modern" issues (exploration, hidden state, function approximation) were already crisply posed.
+- **Silver, Singh, Precup & Sutton, "Reward is Enough" (AIJ, 2021)** — [doi.org/10.1016/j.artint.2021.103535](https://doi.org/10.1016/j.artint.2021.103535). The maximalist case for the reward hypothesis: that reward maximization alone could drive the emergence of intelligence and all its faculties. Read skeptically; it sharpens your own position either way.
+- **Ng, Harada & Russell, "Policy Invariance Under Reward Transformations" (ICML, 1999)** — [ai.stanford.edu/~ang/papers/shaping-icml99.pdf](https://ai.stanford.edu/~ang/papers/shaping-icml99.pdf). The potential-based shaping theorem from Section 4: the only rewards you can add without changing the optimal policy.
+- **Amodei et al., "Concrete Problems in AI Safety" (2016)** — [arxiv.org/abs/1606.06565](https://arxiv.org/abs/1606.06565). Reward hacking, negative side effects, and safe exploration, catalogued with examples; the boat-racing agent lives in OpenAI's companion post *Faulty Reward Functions in the Wild* ([archived](https://web.archive.org/web/2024/https://openai.com/index/faulty-reward-functions/)), and DeepMind's [specification-gaming catalogue](https://deepmind.google/discover/blog/specification-gaming-the-flip-side-of-ai-ingenuity/) collects dozens more.
+- **OpenAI, *Spinning Up in Deep RL* (2018)** — [spinningup.openai.com](https://spinningup.openai.com/). The best practitioner-oriented companion to Parts II–III; return to it when you start implementing at scale.
+- **Courses:** David Silver's UCL/DeepMind lectures ([davidsilver.uk/teaching](https://www.davidsilver.uk/teaching/)) pair with Parts 0–II; Berkeley CS285 ([rail.eecs.berkeley.edu/deeprlcourse](https://rail.eecs.berkeley.edu/deeprlcourse/)) with Parts II–IV; Stanford CS234 ([web.stanford.edu/class/cs234](https://web.stanford.edu/class/cs234/)) sits between them with more theory.
+
+## 11. Exercises
+
+**1.1 (understand)** Classify each as supervised, unsupervised, or reinforcement learning, and justify with one sentence each: (a) learning to grade essays from teacher-scored examples; (b) a thermostat controller penalized by energy use plus occupant complaints; (c) grouping customers by purchase history; (d) a spam filter whose user marks messages "spam" after delivery. For (d): what subtle RL-like property does the data have, even though it is usually treated as supervised? *Hint: does the filter's behavior affect what mail the user sees and labels?*
+
+**1.2 (understand)** For a robot vacuum, propose two reward functions: one that would produce useful behavior and one that a determined optimizer would hack. Describe the hacked behavior concretely.
+
+**1.3 (understand)** In the bicycle example, identify the state, action, reward, and why the task is episodic or continuing. There is more than one defensible answer for the reward; give a sparse one and a shaped one, and name the risk the shaped one carries.
+
+**1.4 (derive)** Show that $Q_{n+1} = Q_n + \frac{1}{n}(R_n - Q_n)$ computes exactly the mean of the first $n$ rewards, given $Q_1$ arbitrary and the convention that the first update uses $n = 1$. Then show that with a *constant* step size $\alpha$ in place of $\frac{1}{n}$, the estimate becomes an exponentially weighted average $Q_{n+1} = (1-\alpha)^n Q_1 + \sum_{i=1}^{n} \alpha (1-\alpha)^{n-i} R_i$. When would you prefer the constant-α version? *(This is why every deep-RL method uses constant step sizes: Chapter 6.)*
+
+**1.5 (derive)** Prove the potential-based shaping claim in the special case of a two-step episodic task: adding $\gamma\Phi(s') - \Phi(s)$ to every reward changes the return of any trajectory by a quantity that does not depend on the actions taken. Conclude that the ordering of policies by expected return is preserved.
+
+**1.6 (implement)** Run the bandit code above. Produce the average-reward and %-optimal-action curves for $\epsilon \in \{0, 0.01, 0.1, 0.5\}$ and reproduce the qualitative ordering claimed in Section 7. Which ε wins at step 100? At step 10,000? Explain the crossover.
+
+**1.7 (implement)** Modify the bandit so that arm values drift: after every step, each $q_*(a)$ takes an independent random walk step of standard deviation 0.01. Show empirically that sample-average updates lose to constant-α updates, and connect this to Exercise 1.4.
+
+**1.8 (extend)** The greedy agent fails because early estimates are pessimistic-when-unlucky and never revisited. Instead of ε-greedy, initialize $Q(a) = +5$ for all arms (wildly optimistic, since $q_*(a) \sim \mathcal{N}(0,1)$) and act purely greedily with constant $\alpha = 0.1$. Explain the exploration behavior this produces and its failure mode in the drifting bandit of Exercise 1.7. *(You have invented optimistic initialization, Chapter 2's Section 3.)*

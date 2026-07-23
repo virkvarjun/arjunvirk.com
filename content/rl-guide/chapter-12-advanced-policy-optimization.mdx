@@ -1,0 +1,246 @@
+Chapter 11 ended with a working policy-gradient chassis and a quiet scandal: nothing in it says how big a step to take. In supervised learning an overlarge step wastes an update; the loss spikes, the next batch corrects it. In on-policy RL an overlarge step is a different kind of catastrophe, because **the policy is the data collector**. Step too far, and the new policy visits new states, generating data that reflects its own damage; the critic mis-evaluates the unfamiliar states; the next gradient is computed from wreckage. Performance does not dip — it *collapses*, often unrecoverably. Every practitioner has watched a beautiful learning curve fall off a cliff in one update.
+
+This chapter is about taking steps of the right size — and it contains, in sequence, one of the prettiest theoretical developments in RL and its most-used practical distillation. The route: a lemma that says exactly what improvement a new policy delivers (performance difference), a geometry that says what "step size" should even mean for distributions (natural gradient), a bound that converts both into a certificate of monotonic improvement (TRPO), and finally a two-line objective that captures most of the benefit with none of the second-order machinery (PPO) — the algorithm that trained everything from dexterous robot hands to the RLHF stage of modern language models (Chapter 20).
+
+## 1. What Exactly Goes Wrong with a Big Step
+
+Write the failure precisely; the whole chapter falls out of it. The policy gradient is $\E_{s \sim d^{\pi}} \E_{a \sim \pi}[\nabla \log \pi \cdot A^\pi]$ — an expectation under the *current* policy's state distribution $d^\pi$ and actions. It is a **local** object: valid at θ, silent about $\theta + \Delta\theta$. Two distinct errors grow with the step:
+
+1. **Action-distribution error.** The gradient direction assumed action probabilities change infinitesimally; a finite step changes them a lot, and the linear extrapolation misprices the change. This error is *visible* and correctable with importance ratios.
+2. **State-distribution error.** The new policy induces a new $d^{\pi'}$. The gradient contained no term for this (Chapter 11's "missing $\nabla d^\pi$" — a blessing locally, a trap globally). This error is *invisible* to any quantity computed from the old data, and it is the one that kills.
+
+Worse, the natural knob — the learning rate on θ — is denominated in the wrong units. The same $\|\Delta\theta\|$ can be a negligible policy change (wide Gaussian, logits far from saturation) or a total behavioral rewrite (near-deterministic softmax). Parameter distance is not policy distance. We need to measure steps *in the space of distributions*, and to know how far in that space the old data can be trusted. Both needs get exact answers.
+
+## 2. The Performance Difference Lemma and the Surrogate
+
+The foundation stone (Kakade & Langford, 2002). For any two policies π and π′:
+
+$$
+J(\pi') - J(\pi) \;=\; \frac{1}{1 - \gamma}\, \E_{s \sim d^{\pi'}}\, \E_{a \sim \pi'(\cdot \mid s)} \left[ A^\pi(s, a) \right],
+$$
+
+with $d^{\pi'}$ the normalized discounted visitation distribution of the *new* policy. (Proof sketch — worth doing once, Exercise 12.2: write $J(\pi') - J(\pi) = \E_{\tau \sim \pi'}[\sum_t \gamma^t (R_{t+1} + \gamma V^\pi(S_{t+1}) - V^\pi(S_t))]$ by telescoping $V^\pi$ along π′'s trajectories; each summand's conditional expectation is exactly $A^\pi$.) Read it twice: the *new* policy's gain over the old equals the *old* policy's advantages, averaged where the *new* policy goes. Improvement is precisely "choose actions the old policy considered advantageous, in the states you will now visit."
+
+The lemma is exact and uncomputable — $d^{\pi'}$ requires running π′. The computable object replaces $d^{\pi'}$ with $d^\pi$ and reweights actions by an importance ratio:
+
+$$
+L_\pi(\pi') \;=\; J(\pi) + \frac{1}{1-\gamma}\,\E_{s \sim d^{\pi}}\, \E_{a \sim \pi(\cdot \mid s)}\left[ \frac{\pi'(a \mid s)}{\pi(a \mid s)}\, A^\pi(s, a) \right],
+$$
+
+the **surrogate objective** — estimable entirely from on-policy data of π. It fixes error 1 (the ratio prices finite action changes exactly) and ignores error 2 (the state distribution is frozen at $d^\pi$). Two properties make it the right foundation: $L_\pi(\pi) = J(\pi)$, and $\nabla_{\theta'} L_\pi(\pi_{\theta'}) \vert_{\theta'=\theta} = \nabla J(\theta)$ — the surrogate *matches J to first order*. It is a local model of true performance, trustworthy in a neighborhood whose size is exactly the question. Everything that follows — natural gradient, TRPO, PPO — is a policy for how far to trust $L$.
+
+## 3. Natural Policy Gradient: the Right Geometry
+
+First, fix the units problem. The principled notion of distance between $\pi_\theta$ and $\pi_{\theta + \Delta\theta}$ is not $\|\Delta\theta\|$ but a divergence between the distributions themselves; the local quadratic expansion of KL divergence is
+
+$$
+\KL\left( \pi_\theta \,\|\, \pi_{\theta+\Delta\theta} \right) \;\approx\; \tfrac{1}{2}\, \Delta\theta^\top F(\theta)\, \Delta\theta,
+\qquad
+F(\theta) = \E_{s \sim d^\pi}\E_{a \sim \pi_\theta} \left[ \nabla \log \pi_\theta(a \mid s)\, \nabla \log \pi_\theta(a \mid s)^\top \right],
+$$
+
+with $F$ the **Fisher information matrix** — the metric tensor of the statistical manifold (Amari's information geometry). The **natural gradient** asks: which $\Delta\theta$ maximizes the first-order improvement $g^\top \Delta\theta$ (where $g = \nabla_\theta J$) subject to a fixed KL budget $\tfrac{1}{2}\Delta\theta^\top F \Delta\theta \le \delta$? Lagrange gives the answer in closed form:
+
+$$
+\Delta\theta \;\propto\; F(\theta)^{-1}\, g,
+$$
+
+steepest ascent *measured in policy space*. Its signature property is **parameterization invariance**: reparameterize the same policy family (swap logits for probabilities, rescale a layer) and the natural-gradient *policy update* is unchanged, while vanilla gradient descent changes completely — the algorithm finally optimizes the thing itself rather than its coordinates (Kakade, 2001, brought this to RL). The natural gradient also explains mysteries you have already seen: near-deterministic softmax policies have tiny score variance in most directions, so $F$ is nearly singular there and $F^{-1}g$ takes *huge* parameter steps where probabilities barely move and *small* ones where they would swing — exactly the correction Section 1 asked for. The obstacle is arithmetic: $F$ is $d \times d$ for networks with millions of parameters. Inverting it is out; even forming it is out. TRPO's contribution is substantially the engineering that makes $F^{-1}g$ computable — plus a theorem that says the step is safe.
+
+## 4. TRPO: Monotonic Improvement, Certified
+
+**The theorem** (Schulman et al., 2015, tightening Kakade & Langford's conservative policy iteration). For any policies π, π′:
+
+$$
+J(\pi') \;\ge\; L_\pi(\pi') \;-\; C \cdot \max_s \KL\left( \pi(\cdot \mid s) \,\|\, \pi'(\cdot \mid s) \right),
+\qquad
+C = \frac{4 \epsilon \gamma}{(1-\gamma)^2},
+$$
+
+with $\epsilon = \max_{s,a} \lvert A^\pi(s,a) \rvert$. In words: **true performance is at least the surrogate minus a penalty proportional to how far the policy moved**, with the state-distribution error — the invisible one — bounded by the KL term. (The proof's heart is a coupling argument: policies within KL ε of each other pick different actions with bounded probability, so their state distributions after $t$ steps differ by at most a factor growing like $t\epsilon$ — the $(1-\gamma)^{-2}$ is the price of compounding over the horizon. Note the exponent: distribution shift is a *squared*-horizon problem, a number that will haunt imitation learning in Chapter 16 for the same underlying reason.)
+
+The certificate follows: maximize the right-hand side over π′ and you get $J(\pi') \ge J(\pi)$ — the right side equals $J(\pi)$ at π′ = π, so its maximizer can only improve. **Monotonic improvement, guaranteed, with no step-size tuning.** Theory this clean rarely survives contact with implementation, and here is where it bends: the penalty coefficient $C$ is far too conservative (steps become homeopathic), so TRPO swaps penalty for **constraint** — and max-KL for mean-KL, which is estimable:
+
+$$
+\max_{\theta'}\; \hat{\E}\left[ \frac{\pi_{\theta'}(a \mid s)}{\pi_\theta(a \mid s)}\, \hat{A}(s,a) \right]
+\quad \text{s.t.} \quad
+\hat{\E}\left[ \KL\left( \pi_\theta(\cdot \mid s)\, \|\, \pi_{\theta'}(\cdot \mid s) \right) \right] \le \delta,
+$$
+
+with δ ≈ 0.01. Solving it: expand the objective to first order and the constraint to second — the constraint's Hessian *is* the Fisher matrix — giving exactly the natural-gradient direction $F^{-1}g$, computed matrix-free by **conjugate gradient** (only Fisher-vector products $Fv$ are needed, each one a double-backprop through the KL), scaled to the constraint boundary, then **line-searched** backward until the *actual* (not quadratic-model) constraint holds and the surrogate actually improved. TRPO = natural policy gradient + trust-region scaling + a safety line search.
+
+It worked — TRPO trained locomotion policies and Atari from pixels with one hyperparameter setting, a first — and its descendants remain the reference for stability. But the machinery is heavy: CG iterations per update, double-backprop, incompatibility with anything that isn't a plain differentiable policy (parameter sharing between actor and critic, dropout, and recurrent nets all get awkward). The field wanted the trust region without the trust-region *solver*.
+
+<Check q="TRPO constrains the mean KL over visited states, but the theorem requires the max over all states. What could exploit that gap, and why is it usually tolerated?">
+A policy update could keep mean KL tiny while rewriting behavior drastically at a few rarely visited but pivotal states (e.g., near a cliff edge) — the bound's protection evaporates exactly where trajectories can diverge catastrophically. It is tolerated because the max is unestimable from samples, the states where behavior changes most tend to be the ones being visited (they carry the gradient signal), and empirically the mean-KL trust region already suppresses the collapse mode. But the gap is real: it is one reason even TRPO occasionally cliff-dives, and why safe-RL work (and cautious robotics deployments) revisit per-state constraints.
+</Check>
+
+## 5. PPO: the Trust Region as a Loss Function
+
+**Proximal Policy Optimization** (Schulman et al., 2017) asks: can a *first-order* method — plain Adam on a loss — get TRPO's stability? Define the ratio $r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}$ and take the loss
+
+$$
+L^{\mathrm{CLIP}}(\theta) \;=\; \hat{\E}_t \left[ \min\left( r_t(\theta)\, \hat{A}_t,\;\; \mathrm{clip}\left( r_t(\theta),\, 1 - \epsilon,\, 1 + \epsilon \right) \hat{A}_t \right) \right],
+$$
+
+ε ≈ 0.2. Parse it by cases, because the asymmetry is the design. If $\hat A_t$ is positive (action was good), the unclipped term rewards raising $r_t$, but the min caps the payoff at $(1+\epsilon)\hat A_t$: once the action is 20% more probable than before, *further increase earns nothing* — the gradient through that sample dies. If $\hat A_t$ is negative, decreases in probability are likewise credited only down to $1 - \epsilon$. Crucially, the min makes the clipping one-sided in your *disfavor*: moves that make the surrogate *worse* are never clipped away — $L^{\mathrm{CLIP}}$ is a **pessimistic (lower) bound** on the true surrogate. The loss doesn't forbid leaving the trust region; it removes the *incentive* to, sample by sample. That incentive-shaping — no constraint solver, no Fisher products, just a min and a clip inside an autodiff loss — is the entire trick.
+
+Because each sample's gradient self-deactivates once its ratio saturates, you can safely run **multiple epochs of minibatch SGD on the same batch** — the data reuse that vanilla PG forbade (Chapter 11) and TRPO's one-step solver never attempted. That is where PPO's sample efficiency comes from. The full practical algorithm is the Chapter 11 chassis with the clipped loss:
+
+<Pseudocode title="PPO (clipped), the standard form">
+<L>Loop per iteration:</L>
+<L i={1}>Collect $N$ steps with $\pi_{\theta_{\text{old}}}$ across parallel envs; store $\log\pi_{\theta_{\text{old}}}$, values, rewards</L>
+<L i={1}>Compute GAE advantages $\hat A$ and value targets; normalize $\hat A$</L>
+<L i={1}>For $K$ epochs (e.g. 4–10), over shuffled minibatches:</L>
+<L i={2}>$r \leftarrow \exp\left( \log\pi_\theta - \log\pi_{\theta_{\text{old}}} \right)$</L>
+<L i={2}>$L \leftarrow -\,\hat\E\!\left[\min\left(r \hat A,\, \mathrm{clip}(r, 1\pm\epsilon)\hat A\right)\right] + c_v\, \hat\E\!\left[(V_\phi - \hat G)^2\right] - c_e\, \hat\E\!\left[\mathcal{H}[\pi_\theta]\right]$</L>
+<L i={2}>Adam step on $L$; optionally stop epochs early if $\hat\E[\KL(\pi_{\theta_{\text{old}}} \| \pi_\theta)]$ exceeds a target</L>
+<L i={1}>$\theta_{\text{old}} \leftarrow \theta$</L>
+</Pseudocode>
+
+**Why PPO won.** Not peak performance — TRPO matches or beats it per-sample on some continuous-control tasks, and off-policy methods (Chapter 13) beat both on sample efficiency. PPO won on *robustness times simplicity times generality*: ~50 lines on top of autodiff; tolerant of shared actor-critic trunks, recurrence, massive parallelism, and sloppy hyperparameters; scales from CartPole to StarCraft (OpenAI Five ran PPO at ~1M frames/second) to dexterous manipulation (Chapter 22's Dactyl) to RLHF (Chapter 20 — InstructGPT's RL stage is PPO with a KL penalty to a reference model, this chapter's penalty variant wearing a language-model costume). When compute is abundant and simulation cheap, a stable simple algorithm that parallelizes beats a sample-efficient fragile one — an economics lesson as much as an algorithms lesson.
+
+Two honest footnotes. First, **PPO is not actually a trust-region method in any provable sense** — ratios can and do exceed the clip range (they only lose *incentive*, not *ability*, and multiple epochs can carry them out); no monotonic-improvement certificate survives. It is TRPO-flavored regularization that empirically suffices. Second, **implementation details carry shocking weight**: Engstrom et al. (2020) showed code-level choices — advantage normalization, value-loss clipping, orthogonal initialization, learning-rate annealing, reward scaling — can matter as much as the choice between PPO and TRPO itself; Andrychowicz et al. (2021) ran 250k experiments to the same conclusion. Treat "PPO" as a family whose reference implementations (CleanRL, Spinning Up) encode a decade of accumulated fixes; reproduce from those, not from the paper's equations alone.
+
+## 6. A3C and A2C: Parallelism as the Stabilizer
+
+One branch of history ran concurrently. **A3C** (Mnih et al., 2016) made actor-critic work at deep-RL scale *without replay*: many CPU workers, each with its own environment copy, computing gradients from their own n-step rollouts and applying them asynchronously (Hogwild-style) to shared parameters. The de-correlation that DQN bought with a replay buffer, A3C bought with *parallel diversity* — sixteen slightly different policies exploring sixteen environments generate a stream that is effectively i.i.d.-enough. It briefly held the Atari crown at a fraction of DQN's compute, and mattered doubly as the proof that on-policy methods could scale. **A2C**, its synchronous simplification (wait for all workers, average gradients, step once), turned out to match or beat it — the asynchrony was an implementation convenience (CPU utilization), not an algorithmic ingredient. A2C's synchronous-batch skeleton is what PPO inherited; you have already read its pseudocode twice.
+
+## 7. PPO in Code
+
+The Chapter 11 chassis, upgraded to PPO — this is a complete, runnable agent:
+
+```python
+import numpy as np
+import torch
+import torch.nn as nn
+import gymnasium as gym
+
+GAMMA, LAM, CLIP, EPOCHS, MB, LR = 0.99, 0.95, 0.2, 4, 256, 2.5e-4
+N_STEPS, ITERS, ENT = 2048, 150, 0.01
+
+env = gym.make("CartPole-v1")
+
+class ActorCritic(nn.Module):
+    # Separate actor/critic networks. With a shared trunk, CartPole's
+    # unnormalized value targets (up to ~100) make the value loss dwarf
+    # the policy loss and the trunk becomes a value net with a vestigial
+    # policy head — the exact pitfall discussed below. Share trunks only
+    # with normalized targets or a tuned value coefficient.
+    def __init__(self):
+        super().__init__()
+        self.actor = nn.Sequential(nn.Linear(4, 64), nn.Tanh(),
+                                   nn.Linear(64, 64), nn.Tanh(),
+                                   nn.Linear(64, 2))
+        self.critic = nn.Sequential(nn.Linear(4, 64), nn.Tanh(),
+                                    nn.Linear(64, 64), nn.Tanh(),
+                                    nn.Linear(64, 1))
+    def forward(self, x):
+        return self.actor(x), self.critic(x).squeeze(-1)
+
+ac = ActorCritic()
+opt = torch.optim.Adam(ac.parameters(), lr=LR)
+
+s, _ = env.reset(seed=0)
+ep_ret, ep_rets = 0.0, []
+for it in range(ITERS):
+    S, A, LP, R, D, V = [], [], [], [], [], []
+    for _ in range(N_STEPS):                          # ---- collect
+        st = torch.as_tensor(s, dtype=torch.float32)
+        with torch.no_grad():
+            logits, v = ac(st)
+        dist = torch.distributions.Categorical(logits=logits)
+        a = dist.sample()
+        s2, r, term, trunc, _ = env.step(int(a))
+        S.append(s); A.append(int(a)); LP.append(float(dist.log_prob(a)))
+        # Mask on term OR trunc: GAE must never propagate across a reset.
+        # (Ideal truncation handling would still bootstrap V(s2) at timeouts
+        # — see Ch. 10's pitfall; we accept that small bias for simplicity.)
+        R.append(r); D.append(float(term or trunc)); V.append(float(v))
+        ep_ret += r
+        s = s2
+        if term or trunc:
+            ep_rets.append(ep_ret); ep_ret = 0.0
+            s, _ = env.reset()
+    with torch.no_grad():
+        _, last_v = ac(torch.as_tensor(s, dtype=torch.float32))
+
+    adv, gae = np.zeros(N_STEPS, dtype=np.float32), 0.0   # ---- GAE
+    for t in reversed(range(N_STEPS)):
+        nxt_v = V[t + 1] if t + 1 < N_STEPS else float(last_v)
+        delta = R[t] + GAMMA * (1 - D[t]) * nxt_v - V[t]
+        gae = delta + GAMMA * LAM * (1 - D[t]) * gae
+        adv[t] = gae
+    ret = adv + np.array(V, dtype=np.float32)
+
+    S  = torch.as_tensor(np.array(S), dtype=torch.float32)
+    A  = torch.as_tensor(A); LPo = torch.as_tensor(LP)
+    AD = torch.as_tensor((adv - adv.mean()) / (adv.std() + 1e-8))
+    RT = torch.as_tensor(ret)
+
+    for _ in range(EPOCHS):                            # ---- optimize
+        for idx in torch.randperm(N_STEPS).split(MB):
+            logits, v = ac(S[idx])
+            dist = torch.distributions.Categorical(logits=logits)
+            ratio = torch.exp(dist.log_prob(A[idx]) - LPo[idx])
+            l_clip = torch.min(
+                ratio * AD[idx],
+                ratio.clamp(1 - CLIP, 1 + CLIP) * AD[idx]).mean()
+            loss = -l_clip + 0.5 * (v - RT[idx]).pow(2).mean() \
+                   - ENT * dist.entropy().mean()
+            opt.zero_grad(); loss.backward()
+            nn.utils.clip_grad_norm_(ac.parameters(), 0.5)
+            opt.step()
+
+    if it % 5 == 0 and ep_rets:
+        print(f"iter {it:3d}  avg return {np.mean(ep_rets[-20:]):6.1f}")
+```
+
+Expect returns in the 400–500 range from roughly iteration 110–120 (~250k steps) onward, holding there rather than sawtoothing — the stability, not the sample count, is the contrast with Chapter 10's DQN (which used ~10× fewer steps and paid in collapses). On-policy methods buy robustness with data; that trade is exactly why PPO is the default when environment interaction is cheap and the wrong choice when it isn't (Chapter 13, and offline RL in Chapter 17, are the other side of that trade).
+
+<Pitfall title="Common pitfalls — trust-region practice">
+**Reading clipped-fraction wrong**: a high fraction of clipped samples is not "working as intended" — it means the batch is being burned for nothing (dead gradients); lower the learning rate or epochs. **Skipping the KL early-stop**: with aggressive epochs, ratios drift far outside the clip range and updates go destructive; monitoring approximate KL and halting epochs at ~0.02 is the cheapest insurance in RL. **Value-function scale**: the 0.5 coefficient couples critic and actor gradients through the shared trunk; if value loss dwarfs the policy loss, the trunk becomes a value network with a vestigial policy head. **Advantage normalization before vs. after GAE** — normalize the advantages, never the returns used as value targets. **Recompute nothing**: the old log-probs must be the ones *from collection time*; recomputing them after the first epoch silently sets every ratio to 1 and PPO degrades to vanilla PG (a classic bug). **Entropy schedule**: 0.01 is a default, not a law; sparse-reward tasks need more, near-deterministic optima need decay.
+</Pitfall>
+
+## 8. Summary
+
+- Big steps kill on-policy learners through an *invisible* error: the state distribution shifts and old data says nothing about it. Parameter norms are the wrong ruler; KL between policies is the right one.
+- **Performance difference lemma**: $J(\pi') - J(\pi) = \frac{1}{1-\gamma}\E_{d^{\pi'}}\E_{\pi'}[A^\pi]$ — exact, uncomputable; freezing the state distribution gives the **surrogate** $L_\pi$, correct to first order.
+- **Natural gradient** $F^{-1}g$: steepest ascent under the Fisher/KL metric; parameterization-invariant; automatically small where policy is sensitive.
+- **TRPO**: $J(\pi') \ge L_\pi(\pi') - C \max_s \KL$ certifies monotonic improvement; practical form maximizes the surrogate under a mean-KL constraint via conjugate-gradient natural steps + line search. Heavy but principled.
+- **PPO**: the clipped surrogate $\min(r\hat A, \mathrm{clip}(r)\hat A)$ is a pessimistic bound that *removes the incentive* to leave the trust region, enabling multi-epoch minibatch reuse with plain Adam. No certificate — but robustness × simplicity × scalability made it the field's workhorse, from Dactyl to RLHF.
+- **A3C/A2C**: parallel rollouts replace replay as the de-correlator; synchronous A2C matched async and became PPO's skeleton.
+- Implementation details (normalization, clipping variants, initialization, KL stopping) carry effect sizes comparable to algorithm choice. Respect the reference implementations.
+
+## 9. Papers & Further Reading
+
+- **Kakade, "A Natural Policy Gradient" (NeurIPS, 2001)** — [papers.nips.cc](https://papers.nips.cc/paper_files/paper/2001/hash/4b86abe48d358ecf194c56c69108433e-Abstract.html). Fisher geometry enters RL.
+- **Kakade & Langford, "Approximately Optimal Approximate Reinforcement Learning" (ICML, 2002)** — [homes.cs.washington.edu/~sham/papers/rl/aoarl.pdf](https://homes.cs.washington.edu/~sham/papers/rl/aoarl.pdf). The performance difference lemma and conservative policy iteration — TRPO's theoretical parents.
+- **Amari, "Natural Gradient Works Efficiently in Learning" (Neural Computation, 1998)** — [doi.org/10.1162/089976698300017746](https://doi.org/10.1162/089976698300017746). The information-geometry source.
+- **Schulman, Levine, Abbeel, Jordan & Moritz, "Trust Region Policy Optimization" (ICML, 2015)** — [arxiv.org/abs/1502.05477](https://arxiv.org/abs/1502.05477). The bound, the algorithm, the locomotion results.
+- **Schulman, Wolski, Dhariwal, Radford & Klimov, "Proximal Policy Optimization Algorithms" (2017)** — [arxiv.org/abs/1707.06347](https://arxiv.org/abs/1707.06347). Clip and penalty variants; possibly the most-implemented paper in RL.
+- **Mnih et al., "Asynchronous Methods for Deep Reinforcement Learning" (ICML, 2016)** — [arxiv.org/abs/1602.01783](https://arxiv.org/abs/1602.01783). A3C and the parallelism-instead-of-replay thesis.
+- **Engstrom et al., "Implementation Matters in Deep RL: A Case Study on PPO and TRPO" (ICLR, 2020)** — [arxiv.org/abs/2005.12729](https://arxiv.org/abs/2005.12729) — and **Andrychowicz et al., "What Matters in On-Policy Reinforcement Learning?" (2021)** — [arxiv.org/abs/2006.05990](https://arxiv.org/abs/2006.05990). The code-level-details literature; humbling and indispensable.
+- **Schulman's "Nuts and Bolts of Deep RL" lecture** — [joschu.net](http://joschu.net/docs/nuts-and-bolts.pdf). The debugging folklore, from the author of both algorithms.
+
+## 10. Exercises
+
+**12.1 (understand)** Two Gaussian policies for a 1-D action: A has σ = 1.0, B has σ = 0.01. The same parameter step Δμ = 0.05 is applied to each. Compute the KL divergence between old and new policy in both cases, and connect the ratio of the two KLs to the Fisher matrix of a Gaussian (F = diag(1/σ², 2/σ²) in (μ, σ)). Which policy needed the smaller learning rate, and by what factor?
+
+**12.2 (derive)** Prove the performance difference lemma via the telescoping argument sketched in Section 2. Then derive the surrogate's two properties ($L_\pi(\pi) = J(\pi)$, gradient match at θ), and exhibit the exact term the surrogate discards (the integrand's dependence on $d^{\pi'} - d^\pi$).
+
+**12.3 (derive)** Derive the natural gradient: maximize $g^\top \Delta\theta$ subject to $\frac{1}{2}\Delta\theta^\top F \Delta\theta = \delta$ by Lagrange multipliers, obtaining $\Delta\theta = \sqrt{2\delta / (g^\top F^{-1} g)}\, F^{-1} g$ (the step size TRPO uses before its line search). Then verify parameterization invariance to first order: under a smooth reparameterization $\theta = h(\eta)$ with Jacobian $M$, show $F_\eta = M^\top F_\theta M$ and that the induced policy change of the natural step is identical.
+
+**12.4 (derive)** Show that the KL constraint's second-order expansion has Hessian equal to the Fisher matrix: $\nabla^2_{\theta'} \E_s\left[\KL(\pi_\theta \| \pi_{\theta'})\right]\big\vert_{\theta'=\theta} = F(\theta)$. (Differentiate under the integral; use $\E[\nabla \log \pi] = 0$.) This is why TRPO's constrained problem *is* the natural gradient problem.
+
+**12.5 (derive)** For PPO's clipped loss: (a) prove $L^{\mathrm{CLIP}}(\theta) \le L_\pi(\pi_\theta)$ pointwise (it is a lower bound on the surrogate); (b) show the per-sample gradient vanishes exactly when ($\hat A$ positive and $r$ above $1+\epsilon$) or ($\hat A$ negative and $r$ below $1-\epsilon$); (c) construct a two-sample batch where multiple epochs of gradient steps drive a ratio far outside $[1-\epsilon, 1+\epsilon]$ despite clipping — proving PPO enforces no hard constraint.
+
+**12.6 (implement)** Run the PPO code; verify stable solution of CartPole across 5 seeds. Log per-iteration: mean KL, clipped fraction, entropy, explained variance of the critic. Then break it deliberately three ways — EPOCHS = 80; no advantage normalization; recomputing old log-probs each epoch — and match each failure's diagnostic signature to the logs.
+
+**12.7 (implement)** Implement the KL-penalty variant of PPO (loss $-r\hat A + \beta \KL$, with β adaptively doubled/halved to track a target KL of 0.01) and compare to clipping on CartPole and Pendulum (Gaussian policy). The penalty form is what RLHF systems use — note which of the two is more sensitive to reward scale, and hypothesize why that mattered for language models.
+
+**12.8 (implement)** Implement a minimal TRPO for CartPole: conjugate gradient (10 iterations) for $F^{-1}g$ using Fisher-vector products via double backprop, step to the δ = 0.01 boundary, backtracking line search on the true surrogate + constraint. Compare wall-clock per update and learning curves vs. PPO. Report the fraction of updates where the line search rejected the full natural step — TRPO's safety margin, made visible.
+
+**12.9 (derive/research)** The TRPO bound's constant $C = \frac{4\epsilon\gamma}{(1-\gamma)^2}$ contains the squared effective horizon. Trace through the coupling proof (TRPO paper, Appendix A) to identify exactly which step introduces each factor of $\frac{1}{1-\gamma}$. Then connect: DAgger's analysis (Chapter 16) shows behavioral cloning suffers $T^2$ compounding error while interactive correction gets $T$. Are these the same phenomenon? Make the correspondence precise or refute it.
+
+**12.10 (research)** PPO's dominance is partly ecological: it thrives where simulation is cheap. Pick a domain where interaction is expensive (real robot, RLHF with human raters) and analyze which of PPO's design choices become liabilities. Design a hybrid — what would "PPO with a replay buffer" have to solve? (You are anticipating the off-policy actor-critics of the next chapter; write your answer before reading it, then grade yourself.)

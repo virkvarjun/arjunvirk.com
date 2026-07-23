@@ -1,0 +1,166 @@
+In 2015, DQN beat professional humans at 29 Atari games — and scored **zero** on Montezuma's Revenge, not once in 200 million frames stumbling upon the sequence (climb down, jump the skull, grab the key, climb back, open the door) that earns the first reward. Nothing was wrong with its credit assignment: there was no credit to assign. ε-greedy exploration — flip a coin, jiggle the joystick — had met a problem where the nearest reward is dozens of *coordinated* steps away, and dithering's probability of stringing them together by luck is exponentially small in the length of the string.
+
+Chapter 2 solved exploration completely — for one state. Its principles (optimism in the face of uncertainty; posterior sampling) were the right ones, but their machinery ran on *counts*, and in a space of camera images every state is seen exactly once. This chapter is about rebuilding those principles when counting is impossible: generalized counts from density models, curiosity from prediction error, Random Network Distillation's elegant shortcut, disagreement-based information seeking, posterior-sampling's deep descendants, and Go-Explore's blunt, record-breaking insistence that you must *remember and return* before you explore. The honest theme throughout: intrinsic motivation is a powerful and treacherous tool — an auxiliary objective the optimizer will pursue as literally as the real one.
+
+## 1. Why Dithering Fails: the Geometry of Hard Exploration
+
+Make the folklore precise with the simplest hard case: a chain of $N$ states, start at one end, the only reward at the far end, and actions *left/right* where any wrong step tends to slide you back toward the start. Undirected noise performs a random walk; the expected time for a random walk to first reach distance $N$ scales like... well, for an unbiased walk, $\Theta(N^2)$ — and for the adversarial variants common in benchmarks (where most actions reset you toward the start), the hitting time is *exponential* in $N$. Meanwhile an agent that systematically pushes toward its frontier of ignorance solves the chain in $\mathcal{O}(N)$ visits per state. The gap between $\exp(N)$ and $\text{poly}(N)$ is the entire subject; "deep exploration" (Osband's term) means behaving, over *sequences* of steps, so as to reach where knowledge ends — not perturbing individual actions.
+
+The problem statement for the chapter, then: construct an **intrinsic reward** $r^{i}_t$ (or an exploratory policy directly) such that maximizing $r^{e} + \beta r^{i}$ drives the agent through its own ignorance frontier — using only function approximators, no state enumeration. Every section is one design for $r^i$, and each inherits Chapter 2's warning in new clothing: the bonus must *die* as knowledge accumulates, or the agent optimizes the bonus forever.
+
+## 2. Generalized Counts: Pseudo-Counts from Density Models
+
+The optimism program (UCB, MBIE-EB) wants a bonus like $r^i(s) = \beta / \sqrt{N(s)}$. In continuous/visual spaces, define counts *through generalization*: train a density model $\rho(s)$ over visited states; when the agent sees $s$, ask how much the model's confidence in $s$ rises from one more visit. Bellemare et al. (2016) formalized this: let $\rho_t(s)$ be the model's probability of $s$ after $t$ states, and $\rho'_t(s)$ its probability after one *additional* hypothetical visit to $s$. Solve for the fictitious count $\hat{N}_t(s)$ that would produce that confidence gain in a multinomial model:
+
+$$
+\rho_t(s) = \frac{\hat{N}_t(s)}{\hat{n}}, \quad \rho'_t(s) = \frac{\hat{N}_t(s) + 1}{\hat{n} + 1}
+\quad\Longrightarrow\quad
+\hat{N}_t(s) = \frac{\rho_t(s)\left(1 - \rho'_t(s)\right)}{\rho'_t(s) - \rho_t(s)},
+$$
+
+the **pseudo-count**. States similar to much-visited ones inherit large $\hat N$ (the density model generalizes); genuinely novel ones get $\hat N \approx 0$ and a large bonus $\beta / \sqrt{\hat N + \epsilon}$. With a CTS density model over game frames, this took Montezuma's Revenge from zero to ~15 rooms explored — the result that ignited the modern exploration literature; PixelCNN-based successors (Ostrovski et al., 2017) improved it. The approach's burden is the density model itself: image-space density estimation is hard, and the pseudo-count is only as sane as $\rho$'s generalization. Cheap cousin: **hash-based counting** (Tang et al., 2017) — SimHash the state into a discrete code, count codes; startlingly competitive on medium-hard tasks, useless when the hash collides the wrong things.
+
+## 3. Curiosity as Prediction Error: ICM
+
+A different instinct: novelty is *what you cannot yet predict*. Train a forward dynamics model alongside the policy and pay the agent its own prediction error:
+
+$$
+r^i_t \;=\; \left\| \hat{f}\!\left( \phi(s_t), a_t \right) - \phi(s_{t+1}) \right\|^2 .
+$$
+
+The design's load-bearing choice is the feature map φ, because of a failure mode with a permanent name: the **noisy-TV problem**. Predict raw pixels and any source of irreducible randomness — static on a screen, leaves in wind — yields perpetual prediction error: a slot machine for the curiosity signal, which the optimizer will sit in front of forever (this is aleatoric uncertainty masquerading as ignorance — Chapter 14's distinction, weaponized). The **Intrinsic Curiosity Module** (Pathak et al., 2017) chooses φ adversarially against this: features are trained by an **inverse model** — predict the action $a_t$ from $\phi(s_t), \phi(s_{t+1})$ — so φ retains only aspects of the world *the agent's actions influence*, discarding action-irrelevant noise by construction. ICM famously drove agents through VizDoom corridors and most of Super Mario Bros. Level 1 with **no extrinsic reward at all** — and its ablations seeded a sobering lesson: with sufficient scale, "curiosity" gains on many games trace substantially to the bonus acting as a *death penalty* (dying returns you to predictable, boring starts), a reminder to always ask what an intrinsic signal is actually paying for.
+
+## 4. Random Network Distillation
+
+RND (Burda et al., 2018) achieves novelty detection with a move of almost suspicious simplicity. Fix a **randomly initialized, never-trained** target network $f^*$; train a predictor $\hat{f}$ to match it on every state the agent visits; the bonus is the residual:
+
+$$
+r^i_t \;=\; \left\| \hat{f}(s_{t+1}) - f^*(s_{t+1}) \right\|^2 .
+$$
+
+On states like those seen often, the predictor has fit the random function well — small bonus. On novel states, it has never regressed there — large bonus. The trick's virtues are exactly the ancestors' vices inverted: the target is **deterministic**, so irreducible environmental noise cannot sustain error (the noisy TV pays once, not forever — RND detects *state* novelty, not *transition* stochasticity); there is no density model to mis-generalize and no dynamics model to be confounded; the whole apparatus is two forward passes and an MSE. Engineering that matters: observation normalization (a random network's response scale is arbitrary), intrinsic-return normalization, and treating the intrinsic stream as **non-episodic** (novelty seeking shouldn't reset at death — curiosity about the world transcends the episode) with two value heads for the two streams. RND was the first algorithm to clear the human benchmark on Montezuma's Revenge without demonstrations — the closing of the challenge that opened this chapter. Its honest limitation: the bonus measures *visitation* novelty, not *learning progress*; a state can be novel and worthless, and RND cannot tell.
+
+<Check q="Why does RND's bonus decay at a noisy-TV state while ICM-on-pixels' does not — and what kind of 'novelty' does RND still miss?">
+RND's regression target $f^*(s)$ is a fixed deterministic function: for any given screen of static, the predictor can (after visits to similar static) fit it, and error decays — randomness in *which* static frame appears doesn't renew the error much once the static's manifold is covered. ICM-on-pixels regresses onto the *next observation itself*, which at a noisy TV is irreducibly random: error never decays, bonus never dies. What RND misses: stochastic *transitions* whose outcomes matter (it only sees states, not predictability), and any notion of learning progress — a reachable-but-useless novel region scores as well as a scientifically informative one. Disagreement methods (next section) target exactly that gap.
+</Check>
+
+## 5. Information Gain and Disagreement
+
+The principled north star: explore to maximize **information gain** about the environment — the mutual information between the next observation and the agent's model parameters. Exact computation is hopeless; the practical surrogate is by now an old friend from Chapter 14: **ensemble disagreement**. Train $B$ dynamics models; the intrinsic reward is the variance of their predictions,
+
+$$
+r^i_t \;=\; \mathrm{Var}_{b}\left[ \hat{f}_{\psi_b}\left( \phi(s_t), a_t \right) \right],
+$$
+
+which estimates *epistemic* uncertainty specifically — irreducible noise inflates every member's error but, in expectation, not their *disagreement*, so the noisy TV is (approximately) priced out on principle rather than by architectural accident. Pathak et al.'s disagreement work (2019) and **Plan2Explore** (Sekar et al., 2020) push this to its natural conclusion: with a world model (Chapter 23's Dreamer), the agent can *plan trajectories that maximize expected future disagreement* — seeking not the novel state it can see, but the experiment whose outcome it cannot predict; task-free exploration that then zero-shots to downstream rewards. This is the modern form of Chapter 2's "value of information," and its robotics descendants (active data collection for model learning) run through Part IV.
+
+**The posterior-sampling lineage** deserves its paragraph. Thompson sampling's deep translation is **Bootstrapped DQN** (Osband et al., 2016): $K$ Q-heads on a shared trunk, each trained on a bootstrapped data stream; each episode, *commit to one head*. A head optimistic about a distant region drives a whole episode toward it — temporally extended, self-consistent exploration (deep exploration) that ε-greedy structurally cannot produce; randomized prior functions (add a fixed random network to each head) restore the prior that bootstrapping alone lacks. And **NoisyNets** (Fortunato et al., 2018) — learned parameter-space noise, resampled per episode — is the cheapest member of the family, part of Rainbow's stack (Chapter 10). The family's shared signature: *randomize the value function, act greedily* — exploration through coherent hypotheses rather than incoherent actions.
+
+## 6. Go-Explore: Remember, Return, Then Explore
+
+Ecoffet et al. diagnosed two failure modes that afflict *all* intrinsic-bonus methods. **Detachment**: the bonus is consumable — an agent that finds two novel corridors, exhausts one, may find the other's bonus already dissipated (its entrance was visited long ago) and never returns; the frontier is *forgotten*. **Derailment**: even knowing a frontier exists, the stochastic policy that must *travel* there keeps exploring en route and rarely arrives. The mechanisms conflict: exploration noise sabotages the return trip.
+
+Go-Explore's fix is architectural, not a bonus: maintain an **archive** of cells (downsampled states) with the best trajectory reaching each; iterate — *select* a promising cell, **return** to it reliably (restore simulator state; or, in the "robustified" version, replay/execute a goal-conditioned policy), then **explore** from there with cheap randomness; add newly reached cells. Exploration and returning are separated into different phases with different tools. Results were not incremental: Montezuma's Revenge scores in the millions (beating the human *world record*) and all remaining hard-exploration Atari games solved; a robotics demonstration (shelf-placement with sparse reward) included. The criticisms are equally instructive: restoring simulator state is a privilege real environments deny; cell design is domain knowledge smuggled in; and the final policies come from imitation of archive trajectories (Chapter 16's tools). But its two nouns — detachment and derailment — are now permanent vocabulary, and its lesson ("first return, then explore") shapes even bonus-based practice.
+
+## 7. What Actually Works: an Honest Accounting
+
+The uncomfortable audit (Taïga et al., 2020, and successors): on the *full* Atari suite, sophisticated bonuses (pseudo-counts, ICM, RND) decisively beat ε-greedy on the handful of hard-exploration games — and on the other ~50, buy little or nothing over well-tuned baselines, sometimes hurting (the bonus is off-objective noise once exploration is easy). Meanwhile ε-greedy and entropy bonuses remain the defaults in most production systems because most tasks, suitably reward-shaped, are *not* Montezuma. The working guidance: diagnose before medicating (is return-to-frontier the actual bottleneck? does a random policy ever see reward?); prefer RND for visual novelty (simple, robust), disagreement when you're already model-based, count-ish methods in low dimensions; keep the two-stream (extrinsic/intrinsic) value separation; expect to tune β and expect the bonus to distort the final policy if it never fully decays. Exploration remains, by consensus, one of RL's genuinely unsolved problems — the methods here are the best-known moves, not a solution.
+
+## 8. Worked Example: the Chain, Quantified
+
+The chapter's opening claim, run to convergence — ε-greedy vs. a count bonus on the classic adversarial chain (right = progress with certainty, but ε-dithering constantly undoes it; reward only at the far end):
+
+```python
+import numpy as np
+
+def chain_env(N):
+    """States 0..N-1, start 0. Action 1 (right): s+1; action 0 (left): back to 0.
+    Reward 1.0 only on reaching N-1 (episode ends), else 0. Horizon 4N."""
+    def step(s, a):
+        s2 = min(s + 1, N - 1) if a == 1 else 0
+        done = (s2 == N - 1)
+        return s2, (1.0 if done else 0.0), done
+    return step
+
+def q_learn(N, bonus_beta=0.0, episodes=3000, eps=0.1, alpha=0.2, seed=0):
+    rng = np.random.default_rng(seed)
+    step = chain_env(N)
+    Q = np.zeros((N, 2))
+    visits = np.ones((N, 2))            # init 1 to avoid div-by-zero
+    first_solve = None
+    for ep in range(episodes):
+        s, done, t = 0, False, 0
+        while not done and t < 4 * N:
+            if rng.random() < eps:
+                a = int(rng.integers(2))
+            else:                        # greedy, ties broken randomly
+                a = int(rng.choice(np.flatnonzero(Q[s] == Q[s].max())))
+            s2, r, done = step(s, a)
+            visits[s, a] += 1
+            r_total = r + bonus_beta / np.sqrt(visits[s, a])   # count bonus
+            target = 0.0 if done else Q[s2].max()
+            Q[s, a] += alpha * (r_total + 0.99 * target - Q[s, a])
+            s, t = s2, t + 1
+        if done and first_solve is None:
+            first_solve = ep
+    return first_solve
+
+for N in [10, 20, 40]:
+    eps_greedy = [q_learn(N, 0.0, seed=s) for s in range(10)]
+    bonus      = [q_learn(N, 0.5, seed=s) for s in range(10)]
+    fmt = lambda xs: "never" if all(x is None for x in xs) else \
+          f"{np.mean([x for x in xs if x is not None]):6.0f} " \
+          f"({sum(x is None for x in xs)}/10 fail)"
+    print(f"N={N:2d}  eps-greedy first solve: {fmt(eps_greedy):24s} "
+          f"count-bonus: {fmt(bonus)}")
+```
+
+Measured output (10 seeds, 3,000-episode budget): at $N = 10$, ε-greedy first solves at episode ≈ 27 and the bonus agent at ≈ 283 — *the bonus is a tax on easy problems*, Section 7's audit in miniature. At $N = 20$ the order reverses violently: ε-greedy fails in 8 of 10 runs while the bonus agent always solves (≈ 800 episodes). At $N = 40$, ε-greedy never solves; the bonus agent still does (≈ 2,100), its cost growing roughly linearly with depth. Thirty lines of NumPy, and both the exponential wall of Section 1 *and* the honest accounting of Section 7 are on your screen. Every method in this chapter is a way of building `visits[s, a]` when `s` is a camera frame.
+
+<Pitfall title="Common pitfalls — intrinsic motivation in practice">
+**The bonus is a reward, and rewards get hacked** (Chapter 1): noisy TVs, bonus farming loops, and death-as-reset-to-boring are all the optimizer doing its job on your auxiliary objective. **Non-decaying bonuses bias the final policy** — the converged agent still detours toward historically novel regions; anneal β or accept the distortion. **Normalization is load-bearing** for RND-class methods: unnormalized observations make the random target trivially predictable in some regions and hopeless in others, both failure modes. **Two value streams** (extrinsic episodic, intrinsic non-episodic) prevent death from truncating curiosity and prevent curiosity from inflating extrinsic values. **Scale mismatch**: an intrinsic reward stream whose magnitude drifts (prediction error shrinks over training!) is a nonstationary reward — the value function chases it; normalize by running std. **Evaluation hygiene**: report extrinsic-only scores from policies run *without* the bonus; several literature "wins" shrink under that protocol (Section 7's audit).
+</Pitfall>
+
+## 9. Summary
+
+- Dithering's hitting time on deep-frontier problems is exponential; **deep exploration** — coherent multi-step travel to the ignorance frontier — is the requirement, and bonuses/randomized values are the two mechanism families.
+- **Pseudo-counts** back out $\hat N$ from a density model's confidence gain — UCB's bonus, generalized; only as good as the density model.
+- **ICM**: curiosity = forward-model error *in action-relevant features* (inverse-model features exist to kill the noisy TV); can drive play with no reward, but audit what the bonus actually pays for.
+- **RND**: regress a fixed random network; residual = state novelty. Deterministic target defuses stochasticity traps; first past the human benchmark on Montezuma; blind to learning progress.
+- **Disagreement/information gain**: ensemble variance isolates epistemic uncertainty on principle; with a world model, plan *experiments* (Plan2Explore) — Chapter 2's value-of-information, industrialized.
+- **Posterior-sampling lineage**: Bootstrapped DQN (commit to a sampled Q-head per episode), randomized priors, NoisyNets — randomize hypotheses, act greedily, explore coherently.
+- **Go-Explore**: detachment and derailment are the shared failure modes of all bonuses; remember frontiers (archive) and separate returning from exploring; record-shattering with simulator privileges.
+- Audits say: bonuses matter enormously on hard-exploration tasks and little elsewhere — diagnose first; exploration is still an open problem.
+
+## 10. Papers & Further Reading
+
+- **Bellemare, Srinivasan, Ostrovski, Schaul, Saxton & Munos, "Unifying Count-Based Exploration and Intrinsic Motivation" (NeurIPS, 2016)** — [arxiv.org/abs/1606.01868](https://arxiv.org/abs/1606.01868). Pseudo-counts; the first real dent in Montezuma. (PixelCNN follow-up: Ostrovski et al., 2017 — [arxiv.org/abs/1703.01310](https://arxiv.org/abs/1703.01310).)
+- **Tang et al., "#Exploration: A Study of Count-Based Exploration for Deep Reinforcement Learning" (NeurIPS, 2017)** — [arxiv.org/abs/1611.04717](https://arxiv.org/abs/1611.04717). Hashing as counting.
+- **Pathak, Agrawal, Efros & Darrell, "Curiosity-driven Exploration by Self-supervised Prediction" (ICML, 2017)** — [arxiv.org/abs/1705.05363](https://arxiv.org/abs/1705.05363). ICM. (Scale study: Burda et al., "Large-Scale Study of Curiosity-Driven Learning," 2018 — [arxiv.org/abs/1808.04355](https://arxiv.org/abs/1808.04355).)
+- **Burda, Edwards, Storkey & Klimov, "Exploration by Random Network Distillation" (ICLR, 2019)** — [arxiv.org/abs/1810.12894](https://arxiv.org/abs/1810.12894). RND.
+- **Osband, Blundell, Pritzel & Van Roy, "Deep Exploration via Bootstrapped DQN" (NeurIPS, 2016)** — [arxiv.org/abs/1602.04621](https://arxiv.org/abs/1602.04621) — and **Fortunato et al., "Noisy Networks for Exploration" (ICLR, 2018)** — [arxiv.org/abs/1706.10295](https://arxiv.org/abs/1706.10295). The randomized-value family.
+- **Sekar, Rybkin, Daniilidis, Abbeel, Hafner & Pathak, "Planning to Explore via Self-Supervised World Models" (ICML, 2020)** — [arxiv.org/abs/2005.05960](https://arxiv.org/abs/2005.05960). Plan2Explore: disagreement-seeking imagination.
+- **Ecoffet, Huizinga, Lehman, Stanley & Clune, "First Return, Then Explore" (Nature, 2021)** — [doi.org/10.1038/s41586-020-03157-9](https://doi.org/10.1038/s41586-020-03157-9) / [arxiv.org/abs/2004.12919](https://arxiv.org/abs/2004.12919). Go-Explore, detachment, derailment.
+- **Taïga, Fedus, Machado, Courville & Bellemare, "On Bonus-Based Exploration Methods in the Arcade Learning Environment" (ICLR, 2020)** — [arxiv.org/abs/2109.11052](https://arxiv.org/abs/2109.11052). The audit: where bonuses do and don't pay.
+
+## 11. Exercises
+
+**15.1 (understand)** For each method — pseudo-counts, ICM, RND, ensemble disagreement, Bootstrapped DQN, Go-Explore — identify which Chapter 2 principle it descends from (optimism / posterior sampling / neither), and which failure mode of the *naive* version of that principle it exists to fix.
+
+**15.2 (understand)** A robot vacuum with a camera keeps returning to stare at a rotating ceiling fan. Diagnose under: (a) ICM on pixels; (b) ICM with inverse-model features; (c) RND; (d) ensemble disagreement over a dynamics model. For each, will the fixation persist, and precisely why?
+
+**15.3 (derive)** Derive the pseudo-count formula from the two displayed conditions in Section 2, and show $\hat N_t(s) \to \infty$ requires the "prediction gain" $\log \rho'_t(s) - \log \rho_t(s) \to 0$. Then show that if the density model *underfits* (assigns similar probability everywhere), all bonuses converge to the same value — what exploration behavior results?
+
+**15.4 (derive)** For the unbiased random walk on a chain of length $N$, prove the expected first-hitting time of the far end from the start is $\Theta(N^2)$ (use the standard gambler's-ruin/martingale argument). Then modify: if each "left" action returns the agent to state 0 (as in the Section 8 environment) and the policy takes left with probability ε/2 per step, show the expected time to traverse scales like $(1 - \epsilon/2)^{-N}$ — the exponential wall, exactly.
+
+**15.5 (derive)** Ensemble disagreement as epistemic proxy: model each member's prediction as $f_b = f^* + \eta_b + \zeta$ where $\eta_b$ is independent per-member error (epistemic, shrinks with data) and ζ is shared aleatoric noise realized in targets. Show $\E[\mathrm{Var}_b(f_b)]$ depends on the $\eta$'s but not ζ's variance — and identify the assumption (independence of member errors) that correlated training could break, re-admitting the noisy TV.
+
+**15.6 (implement)** Run the chain experiment; extend the table to N = 60 and plot first-solve time vs. N for both agents on a log scale. Then add a third agent: optimistic initialization (Q init = 2, no bonus). Where does it land, and why does its advantage fade at large N in this specific environment (hint: propagation speed of optimism vs. its decay)?
+
+**15.7 (implement)** Implement RND for MountainCar-v0 (sparse-ish: reward −1 per step until the flag): DQN + RND bonus with running normalization, two value heads optional. Compare episodes-to-first-success and final policy vs. plain DQN over 10 seeds. Then add a "noisy TV": append 8 uniform-random pixels to the observation. Re-run both and report the damage to each.
+
+**15.8 (implement)** Implement Bootstrapped DQN (K = 10 heads, shared trunk, per-episode head selection, mask probability 0.5) on the chain environment scaled to N = 50, no bonus at all. Compare against ε-greedy DQN and count-bonus Q-learning. Plot per-episode *state coverage* — the deep-exploration signature should be visible as coherent excursions rather than diffusion.
+
+**15.9 (extend)** Build a minimal Go-Explore for the chain-with-teleport-traps: archive cells = states, "return" via environment reset-to-state (you have simulator privileges), explore = 10 random steps. Then *revoke* the reset privilege and replace return with a learned goal-conditioned policy (HER-style, Chapter 19 preview). Quantify the cost of losing the privilege — this gap is exactly what "policy-based Go-Explore" research addresses.
+
+**15.10 (research)** RND detects visitation novelty; disagreement detects epistemic uncertainty; neither measures *learning progress* (the derivative of competence). Design an intrinsic reward that targets learning progress directly, address its estimation noise (progress is a difference of noisy quantities), and specify the gameable degenerate policy your design must be audited against (there is always one). Compare your proposal afterward with the literature on learning-progress-based curricula (Oudeyer's line of work) and note the strongest idea you missed.

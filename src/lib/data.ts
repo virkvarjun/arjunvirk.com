@@ -346,6 +346,13 @@ export const writing: WritingCategory[] = [
     chapters: roboticsGuideChapters,
   },
   {
+    key: "rl-guide",
+    title: "RL Bible",
+    description:
+      "A from-scratch guide to reinforcement learning — bandits, Bellman equations, deep RL, offline RL, world models, and vision-language-action policies for robots.",
+    link: { label: "Table of contents", href: "/writing/rl-guide" },
+  },
+  {
     key: "becoming",
     title: "Becoming",
     description: "Reflections, raw and unedited.",

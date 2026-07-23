@@ -1,0 +1,132 @@
+Twenty chapters of algorithms have earned you strong instincts. This chapter's job is to tell you, precisely, which of those instincts are *theorems*, which are *conjectures with good publicity*, and which are *known to be false in the worst case and true in practice for reasons nobody can fully prove*. This is the qualifying-exam chapter: the one that separates "I can run PPO" from "I know what is and is not guaranteed, and why."
+
+The honest headline: reinforcement learning has a beautiful, essentially complete theory for small problems (tabular MDPs — matching upper and lower bounds, the whole story), a delicate and rapidly built theory for linearly structured problems, and *provable impossibility results* for the general function-approximation setting in which all of deep RL operates. That last clause is not a scandal; it is a map of where empirical science must carry the weight. By the end you should be able to state the PAC-MDP and regret frameworks, sketch why optimism gives $\sqrt{T}$ regret, state what is known about TD, Q-learning, and policy-gradient convergence, and — the rarest skill — say *exactly where the guarantees stop*.
+
+## 1. The Questions Theory Asks
+
+Three currencies, each formalizing "how hard is RL":
+
+- **Sample complexity (PAC-RL):** how many interactions until the agent's policy is ε-optimal with probability $1 - \delta$? An algorithm is **PAC-MDP** if, with probability $1-\delta$, the number of timesteps on which it acts more than ε-suboptimally is polynomial in $(S, A, 1/\epsilon, 1/\delta, 1/(1-\gamma))$ (Kakade's thesis formalization). This counts *mistakes*, wherever they occur.
+- **Regret:** over $T$ steps (or $K$ episodes of horizon $H$), the shortfall against the optimal policy, $\mathrm{Regret}(T) = \sum_k \left( V^*(s_0^k) - V^{\pi_k}(s_0^k) \right)$ — Chapter 2's yardstick, now with states. Sublinear regret means the *average* policy approaches optimal; $\sqrt{T}$ is the gold standard.
+- **Computational complexity:** given the MDP (or a simulator), how much *compute* to find a near-optimal policy? Distinct from the statistical questions, and the binding constraint in surprising places (planning in POMDPs: PSPACE-hard, Chapter 3; some function-approximation settings: statistically easy, computationally hopeless).
+
+The frameworks interconvert (a no-regret algorithm can be converted to a PAC one and vice versa, with loss), and they share one enemy: exploration. A theory of supervised learning needs uniform convergence; a theory of RL needs uniform convergence *plus a guarantee that the agent forces the world to reveal what it is hiding* — which is why every positive result below has optimism (or its Bayesian twin) at its core, and why every impossibility result is, at bottom, a needle the agent cannot be made to find.
+
+## 2. The Tabular Story: Closed, and Worth Knowing Cold
+
+**The upper bounds.** The lineage runs E³ (Kearns & Singh, 1998 — the first polynomial PAC guarantee, and the origin of "explicit explore-or-exploit") through R-max (Brafman & Tennenholtz, 2002 — optimistic initialization made algorithmic: unknown states are assumed maximally rewarding, Chapter 2's optimism promoted to MDPs) to the modern regret line: UCRL2 (Jaksch, Ortner & Auer, 2010) with $\tilde{\mathcal{O}}(DS\sqrt{AT})$, and for episodic MDPs **UCBVI** (Azar, Osband & Munos, 2017), achieving
+
+$$
+\mathrm{Regret}(K) \;=\; \tilde{\mathcal{O}}\!\left( \sqrt{H^2 S A\, K} \right)
+\;=\; \tilde{\mathcal{O}}\!\left( \sqrt{H S A\, T} \right)\;\; (T = KH),
+$$
+
+which **matches the lower bound** up to logarithmic factors. Tabular episodic RL is, in the minimax sense, solved.
+
+**The proof shape** — internalize it once and half the theory literature becomes readable. (1) *Confidence sets:* from visit counts, empirical transitions $\hat P$ concentrate around the truth: $\| \hat P(\cdot \mid s,a) - P(\cdot \mid s,a) \|_1 \lesssim \sqrt{S / N(s,a)}$ (Hoeffding/Bernstein + union bound over all $(s,a)$ and time). (2) *Optimism:* plan in the most favorable MDP inside the confidence set (equivalently, add a bonus $\propto 1/\sqrt{N(s,a)}$ to rewards — UCB's bonus, verbatim). The resulting $\tilde V$ satisfies $\tilde V \ge V^*$ with high probability — you never *underestimate* the world. (3) *Regret ≤ optimism's width:* per episode, $V^* - V^{\pi_k} \le \tilde V - V^{\pi_k} \le$ (sum of confidence widths along the trajectory the agent actually follows) — the simulation lemma telescoping errors along visited states. (4) *Pigeonhole:* each visit shrinks its own width; summing $\sqrt{1/N}$ over all visits gives $\sqrt{N}$ totals, hence $\sqrt{T}$ overall. Optimism converts exploration from a dilemma into an accounting identity: *the agent only errs where it is uncertain, and erring there is precisely what destroys the uncertainty.*
+
+**The lower bound's picture** is equally worth carrying: build an MDP that is a bandit in disguise — a tree of states whose leaves are near-identical arms, one of them ε better. Distinguishing the good leaf needs $\Omega(1/\epsilon^2)$ samples *of that leaf*; there are $SA$-many places the needle could hide; horizon H scales the payoff units. No algorithm beats information theory, and the $\sqrt{HSAT}$ shape is exactly (bandit lower bound) × (state-action count) × (horizon accounting).
+
+**Generative-model setting** (a simulator answering arbitrary $(s,a)$ queries — exploration deleted): the sample complexity of producing an ε-optimal policy is
+
+$$
+\Theta\!\left( \frac{S A}{(1-\gamma)^3\, \epsilon^2} \right)
+$$
+
+(Azar et al., 2013; matching bounds), and the $(1-\gamma)^{-3}$ is a number to memorize: one $(1-\gamma)^{-1}$ because values scale with horizon, one because variance of returns does, one because errors compound through the Bellman recursion. Every "long-horizon tasks are hard" intuition you have acquired is this exponent talking.
+
+## 3. Convergence of the Classical Algorithms
+
+What is actually proven about the workhorses of Parts I–II:
+
+**Stochastic approximation (the umbrella).** Updates of the form $\theta_{t+1} = \theta_t + \alpha_t \left( h(\theta_t) + \text{noise} \right)$ converge (a.s.) to the fixed points of $h$ under: Robbins–Monro step sizes ($\sum \alpha_t = \infty$, $\sum \alpha_t^2$ finite), martingale-difference noise with bounded variance, and a stability/contraction condition on $h$. Chapters 2, 6, and 9 already used this; the precise machinery is Borkar's ODE method — the iterates shadow the ODE $\dot\theta = h(\theta)$.
+
+**TD(0), tabular:** converges a.s. to $V^\pi$ (Jaakkola–Jordan–Singh 1994; Tsitsiklis 1994). **Q-learning, tabular, asynchronous:** converges a.s. to $Q^*$ provided every pair is updated infinitely often (same papers) — note what is *not* claimed: nothing about the behavior policy being any good, and the *rate* can be catastrophic; with polynomial step sizes the convergence time scales polynomially in $1/(1-\gamma)$, but naive step sizes give exponential dependence (Even-Dar & Mansour 2003) — "converges" and "converges before the sun dies" are different theorems. **TD(0), linear, on-policy:** converges to the projected fixed point with the $\frac{1}{1-\gamma}$ quality bound — Chapter 9's Tsitsiklis & Van Roy theorem, the crown jewel of this row. **Off-policy + linear + bootstrapping:** diverges (Baird) — a *theorem about the algorithm*, not an open question; convergent variants (GTD-family) exist with weaker fixed-point quality stories. **SARSA with GLIE:** converges to $Q^*$ (Singh et al., 2000). **Deep anything:** no convergence theorem exists, none is close, and the field's working substitute is the empirical-science toolkit (seeds, ablations, probes) of Chapters 10–13.
+
+**Policy gradients** deserve their own accounting, because the results are newer and change the folklore. What was long believed: PG converges to a stationary point of a nonconvex $J$, and that's all (standard SGD-on-nonconvex reasoning). What is now proven (Agarwal, Kakade, Lee & Mahajan, 2021 — the "theory of policy gradient methods" paper): for **tabular softmax policies**, $J$ satisfies a gradient-domination (PL-type) property — *stationary points are global optima*; vanilla PG converges globally (at rates degrading with how badly the optimal state distribution is covered), and **natural PG achieves dimension-free $\mathcal{O}(1/t)$ convergence** with rate constants *independent of state-space size* — a genuinely striking result that partially explains Chapter 12's empirical story. The fine print is the third character of this chapter in miniature: every PG rate carries a **distribution-mismatch coefficient** $\left\| d^{\pi^*}/\mu \right\|_\infty$ — the price of the start-state distribution μ failing to cover where the optimal policy goes. If exploration is unsolved, the coefficient is infinite and the guarantee is vacuous: *policy gradient methods provably cannot fix exploration by themselves*. The theory thus cleanly divides RL's difficulty into optimization (solved-ish for softmax; NPG is fast) and coverage (not solved by PG at all) — a division your practice has felt since Chapter 11.
+
+<Check q="Tabular Q-learning provably converges to Q* from any sufficiently exploratory data, yet tabular optimistic algorithms like UCBVI were still worth inventing. What, precisely, does UCBVI guarantee that Q-learning's convergence theorem does not?">
+Q-learning's theorem is asymptotic and conditional: *if* every pair is visited infinitely often, the estimates converge — it says nothing about who supplies the visits or how much reward is forfeited while waiting (with ε-greedy behavior, exponential-time traps like Chapter 15's chain satisfy the hypothesis uselessly). UCBVI guarantees a *finite-time, on-the-way* property: cumulative regret $\tilde O(\sqrt{H^2SAK})$, which bounds the total suboptimality ever incurred, and its optimism *generates* the requisite visits itself. The gap between "eventually correct given exploration" and "explores well enough to be near-optimal soon, provably" is the entire content of the PAC/regret frameworks.
+</Check>
+
+## 4. Function Approximation: the Possible and the Impossible
+
+Now the setting where you actually live. The state space is enormous; values/policies are represented by a function class $\mathcal{F}$. When does *sample-efficient* RL — complexity polynomial in the *dimension* of $\mathcal F$, not in $S$ — exist?
+
+**The positive island: linear structure.** In a **linear MDP** (Jin, Yang, Wang & Jordan, 2020) — transitions and rewards are linear in a known d-dimensional feature map, $P(s' \mid s,a) = \phi(s,a)^\top \mu(s')$, $r = \phi^\top w$ — the algorithm **LSVI-UCB** (least-squares value iteration with an elliptical confidence bonus $\beta \|\phi(s,a)\|_{\Lambda^{-1}}$ — UCB's bonus generalized from visit counts to feature-space leverage) achieves
+
+$$
+\mathrm{Regret}(K) \;=\; \tilde{\mathcal{O}}\!\left( \sqrt{d^3 H^3 T} \right)
+$$
+
+— *no dependence on $S$ or $A$ whatsoever*. This is the proof of concept that generalization and provable exploration can coexist: the confidence-set/optimism/pigeonhole skeleton of Section 2 survives intact, with "visits to (s,a)" replaced by "information in direction φ." Around the island, a taxonomy of structural conditions charts how far the recipe extends — Bellman rank, Eluder dimension, bilinear classes, decision-estimation coefficients — each a formalization of "the environment cannot hide too many independent surprises from this function class." You should know these names as a map, not memorize their definitions.
+
+**The negative mainland.** Delete the structural assumptions and keep only what deep RL actually has — a function class that *realizes* the true $Q^*$ — and sample-efficient RL is **provably impossible** in the worst case. The sharpest form (Weisz, Amortila & Szepesvári, 2021): even with *linear* realizability of $Q^*$ in $d$ dimensions and a *generative model*, any algorithm needs $\min\left( 2^{\Omega(d)}, 2^{\Omega(H)} \right)$ queries. Realizability is not enough; approximate closure of the class under the Bellman operator (completeness), or low-rank interaction structure, is what separates possible from hopeless — and nothing certifies that image-based robot MDPs have it. Read the impossibility results the right way: they are not "deep RL cannot work" (your Chapter 10 agent works); they are "deep RL's successes are facts about *benign structure in real environments*, not about the algorithms' worst-case soundness" — which is why transfer to a new domain can fail abruptly, and why empirical methodology (Henderson's seeds, ablation discipline, probe metrics) is not a poor substitute for theory but the *appropriate* science for the regime.
+
+**Offline theory**, one paragraph, since Chapter 17 leaned on it: the fundamental quantity is **concentrability** — how badly the target policy's visitation outruns the data's. Classical results need all-policy concentrability (data covers everything anyone might do — absurd in practice); the modern pessimism line (Rashidinejad et al., 2021; Xie et al., 2021) needs only **single-policy concentrability** — the data need cover *one* good policy, and pessimistic value estimates (penalize uncertainty, exactly Chapter 17's CQL/MOPO instinct) achieve it with matching lower bounds. Pessimism is thus not an engineering hack but the information-theoretically correct response to fixed data — the offline mirror of optimism's role online. The symmetry is worth savoring: **optimism when you can experiment, pessimism when you cannot.**
+
+## 5. The Honest Ledger
+
+The chapter's cash value — what is guaranteed, where:
+
+| Setting | Guarantee | Caveat that matters |
+| --- | --- | --- |
+| Bandits | $\Theta(\log T)$ regret, matching bounds | The one fully closed case |
+| Tabular episodic RL | $\tilde\Theta(\sqrt{H^2SAT})$ regret (UCBVI) | Polynomial compute; S, A small |
+| Generative model | $\Theta(SA(1-\gamma)^{-3}\epsilon^{-2})$ samples | Exploration assumed away |
+| Tabular TD / Q-learning | a.s. convergence | Asymptotic; rates fragile in $(1-\gamma)$, step sizes |
+| Linear on-policy TD | Fixed point within $\frac{1}{1-\gamma}\times$ best | The projection is μ-weighted: on-policy only |
+| Linear off-policy TD | **Diverges** (Baird) | GTD variants converge, weaker guarantees |
+| Softmax PG (tabular) | Global convergence; NPG $\mathcal{O}(1/t)$ dimension-free | × distribution-mismatch coefficient: coverage not solved |
+| Linear MDP | $\tilde{\mathcal{O}}(\sqrt{d^3H^3T})$ regret, no S, A | The linearity is a strong, unverifiable assumption |
+| Realizable $Q^*$ only | **Exponential lower bound** | Realizability ≠ learnability |
+| Offline + single-policy coverage | Pessimism is minimax-optimal | Coverage of a good policy still required |
+| Deep RL | — | Empirical science; benign structure does the work |
+
+## 6. How to Use Theory as a Practitioner
+
+Four operational habits this chapter should install. **Scaling instincts:** when a task's horizon doubles, expect (at least) the $(1-\gamma)^{-3}$-flavored costs — theory tells you which knob made things hard. **Failure taxonomies:** when off-policy + approximation + bootstrapping misbehaves, you are not debugging your code against bad luck; you are inside a regime where divergence is *permitted* — reach for the structural fixes (Chapters 9–10), not the learning rate. **Algorithmic priors:** optimism online, pessimism offline, baselines and trust regions for PG — each is a theorem's shadow, and knowing the theorem tells you when the shadow misleads (optimism under model misspecification; pessimism under great coverage). **Claim hygiene:** when a paper says "provably efficient," find the structural assumption (linear? low Bellman rank? coverage coefficient?) and ask whether your problem plausibly has it — the assumption *is* the result.
+
+## 7. Summary
+
+- Three frameworks: **PAC-MDP** (bounded mistakes), **regret** (cumulative shortfall; $\sqrt T$ is gold), computational complexity (separate, sometimes binding).
+- Tabular RL is closed: UCBVI's $\tilde{\mathcal{O}}(\sqrt{H^2SAT})$ meets the lower bound. The proof skeleton — confidence sets → optimism → regret ≤ uncertainty width → pigeonhole — is the master template of exploration theory.
+- Generative-model complexity $\Theta(SA(1-\gamma)^{-3}\epsilon^{-2})$: memorize the cube.
+- Classical convergence: tabular TD/Q-learning converge (asymptotically, fragile rates); linear on-policy TD converges with the $\frac{1}{1-\gamma}$ quality bound; off-policy linear TD diverges; SARSA needs GLIE.
+- PG theory (Agarwal et al.): tabular-softmax stationary points are global; NPG converges at dimension-free $\mathcal{O}(1/t)$ — but every rate is multiplied by a coverage coefficient: **PG does not solve exploration.**
+- Function approximation: linear MDPs admit $S$-free regret (LSVI-UCB — optimism in feature space); mere realizability admits exponential lower bounds. Deep RL's guarantees are the environment's benign structure plus empirical method, and that is a scientific position, not an apology.
+- Offline: pessimism + single-policy concentrability is minimax-optimal — the mirror theorem to optimism. Optimism when you can experiment; pessimism when you cannot.
+
+## 8. Papers & Further Reading
+
+- **Agarwal, Jiang, Kakade & Sun, *Reinforcement Learning: Theory and Algorithms* (monograph, in progress)** — [rltheorybook.github.io](https://rltheorybook.github.io/). "AJKS": the standard graduate text for everything in this chapter; free.
+- **Szepesvári, *Algorithms for Reinforcement Learning* (2010)** — [sites.ualberta.ca/~szepesva/papers/RLAlgsInMDPs.pdf](https://sites.ualberta.ca/~szepesva/papers/RLAlgsInMDPs.pdf). The concise rigorous companion promised in Chapter 3.
+- **Kearns & Singh, "Near-Optimal Reinforcement Learning in Polynomial Time" (Machine Learning, 2002)** — [doi.org/10.1023/A:1017984413808](https://doi.org/10.1023/A:1017984413808) — and **Brafman & Tennenholtz, "R-max" (JMLR, 2002)** — [jmlr.org/papers/v3/brafman02a.html](https://www.jmlr.org/papers/v3/brafman02a.html). The PAC-RL founders.
+- **Jaksch, Ortner & Auer, "Near-optimal Regret Bounds for Reinforcement Learning" (JMLR, 2010)** — [jmlr.org/papers/v11/jaksch10a.html](https://www.jmlr.org/papers/v11/jaksch10a.html) — and **Azar, Osband & Munos, "Minimax Regret Bounds for Reinforcement Learning" (ICML, 2017)** — [arxiv.org/abs/1703.05449](https://arxiv.org/abs/1703.05449). UCRL2; UCBVI and the matched bound.
+- **Azar, Munos & Kappen, "Minimax PAC bounds on the sample complexity of reinforcement learning with a generative model" (Machine Learning, 2013)** — [doi.org/10.1007/s10994-013-5368-1](https://doi.org/10.1007/s10994-013-5368-1). The $(1-\gamma)^{-3}$.
+- **Agarwal, Kakade, Lee & Mahajan, "On the Theory of Policy Gradient Methods: Optimality, Approximation, and Distribution Shift" (JMLR, 2021)** — [jmlr.org/papers/v22/19-736.html](https://www.jmlr.org/papers/v22/19-736.html). The PG results of Section 3.
+- **Jin, Yang, Wang & Jordan, "Provably Efficient Reinforcement Learning with Linear Function Approximation" (COLT, 2020)** — [arxiv.org/abs/1907.05388](https://arxiv.org/abs/1907.05388). Linear MDPs and LSVI-UCB.
+- **Weisz, Amortila & Szepesvári, "Exponential Lower Bounds for Planning in MDPs with Linearly-Realizable Optimal Action-Value Functions" (ALT, 2021)** — [arxiv.org/abs/2010.01374](https://arxiv.org/abs/2010.01374). Realizability is not enough.
+- **Rashidinejad, Zhu, Ma, Jiao & Russell, "Bridging Offline Reinforcement Learning and Imitation Learning: A Tale of Pessimism" (NeurIPS, 2021)** — [arxiv.org/abs/2103.12021](https://arxiv.org/abs/2103.12021). Single-policy concentrability and optimal pessimism.
+
+## 9. Exercises
+
+**21.1 (understand)** Classify each Chapter-of-this-book claim as: theorem / theorem-with-fine-print / empirical regularity. (a) "Value iteration converges geometrically." (b) "DQN converges given enough samples." (c) "PPO improves monotonically." (d) "TD(0) with linear features finds the best linear fit." (e) "Pessimistic offline RL with good-policy coverage competes with that policy." Supply the fine print where it exists.
+
+**21.2 (understand)** The generative-model bound has $(1-\gamma)^{-3}$; UCBVI's regret has $H^2$ inside the root (i.e., $H^{1}$ per unit $\sqrt{T}$... be careful with conversions). Reconcile the horizon dependencies of the two settings: which factor of horizon does *exploration* add, and which factors are shared statistical costs? (Work in the episodic-↔-discounted dictionary $H \leftrightarrow \frac{1}{1-\gamma}$.)
+
+**21.3 (derive)** Prove the optimism lemma at the heart of UCB-style analyses: if reward bonuses $b(s,a) \ge$ the true confidence widths hold at every pair (high-probability event), then the optimistic value iteration's output satisfies $\tilde V_h(s) \ge V^*_h(s)$ for all $s, h$, by backward induction on $h$. Identify precisely where the union bound over $(s, a, h)$ enters.
+
+**21.4 (derive)** The simulation lemma: for two MDPs differing only in transitions ($\|P - \hat P\|_1 \le \epsilon_P$ per pair) and rewards ($|r - \hat r| \le \epsilon_r$), bound $|V^\pi - \hat V^\pi|$ for any fixed policy by $\frac{\epsilon_r}{1-\gamma} + \frac{\gamma \epsilon_P V_{\max}}{(1-\gamma)}$-type telescoping. This one lemma powers Section 2's step (3), Chapter 14's Exercise 14.2, and Chapter 17's Exercise 17.5 — write it once carefully and cite yourself thereafter.
+
+**21.5 (derive)** Reconstruct the regret lower bound's needle: specify a family of $K$-armed episodic MDPs (depth-2 trees suffice) where one leaf's reward is ε above the rest, and use the bandit lower bound (Chapter 2's Lai–Robbins or a KL/Le Cam two-point argument) to conclude $\Omega(\sqrt{SAT})$-flavored regret. Where does $H$ enter your construction?
+
+**21.6 (derive)** Gradient domination for softmax-tabular PG: following Agarwal et al.'s Lemma-level structure, show that for direct policy parameterization, $J(\pi^*) - J(\pi) \le \left\| \frac{d^{\pi^*}}{\mu} \right\|_\infty \max_{\bar\pi} \langle \nabla_\pi J(\pi), \bar\pi - \pi \rangle$-style bounds hold (the performance-difference lemma of Chapter 12 does the heavy lifting). Interpret: why does a stationary point with *full-support μ* have to be optimal, and what happens as μ's coverage of $d^{\pi^*}$ degrades?
+
+**21.7 (derive)** In the linear MDP model, show that $Q^\pi(s,a)$ is *exactly* linear in $\phi(s,a)$ for every policy π (not just $Q^*$): expand one Bellman backup and use $P(s' \mid s,a) = \phi(s,a)^\top \mu(s')$. This closure property — the class maps to itself under the Bellman operator — is what the realizability-only lower bound says you cannot live without; state the contrast in one sentence.
+
+**21.8 (implement)** Build UCBVI and ε-greedy Q-learning on a 10-state, 2-action "river swim" MDP (the standard hard-exploration tabular instance: rightward progress is slow and stochastic, big reward at the right end, small at the left). Plot cumulative regret over $10^5$ steps, 20 seeds. Verify: ε-greedy's regret grows linearly for a long stretch (find the phase change); UCBVI's follows $\sqrt{T}$ (plot on log-log and fit the slope). Then multiply the horizon by 3 and check the regret ratio against the theory's $H$-dependence.
+
+**21.9 (implement)** Baird's counterexample, one more time, now as theory lab: implement (a) semi-gradient off-policy TD, (b) TDC (from its two-timescale update equations), and (c) on-policy TD, and confirm the ledger's three rows: divergence, convergence-to-MSPBE-minimum, convergence. Then perturb TDC's second timescale (make the auxiliary step size equal to the main one) and report what breaks — the two-timescale condition is load-bearing, and you should see it bear.
+
+**21.10 (research)** The deep-RL guarantee gap: pick one structural condition from Section 4's taxonomy (Bellman completeness, low Bellman rank, or Eluder dimension) and design a *measurement* of it — an empirical statistic computable on a trained network and a replay buffer that estimates how badly the condition is violated on an actual task (e.g., regress $\mathcal{T}Q$ onto the function class and measure the residual for Bellman completeness). Predict how your statistic should correlate with observed DQN instability across environments, then check whether anyone has measured it (the "approximate Bellman completeness" empirical literature is thin — this exercise is a real paper waiting for an author).

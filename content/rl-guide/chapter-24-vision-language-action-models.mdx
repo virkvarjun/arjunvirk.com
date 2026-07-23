@@ -1,0 +1,179 @@
+Chapter 22 ended with three gaps — per-task cost, generalization, specification — and Chapter 16 left a loaded gun on the table: behavioral cloning is simple and scales with data, *if* someone solves covariate shift, multimodality, and the data supply itself. Between 2022 and 2025, robot learning bet its future on exactly that: **collect teleoperated demonstrations at unprecedented scale, pool them across labs and robot types, initialize from vision-language models that already understand the visual world, and train generalist policies by (mostly) supervised learning.** The result is the **vision-language-action model**: a network that consumes camera images and a natural-language instruction and emits motor commands — the same artifact whether asked to fold laundry or bus a table.
+
+This chapter teaches the line of primary sources that built the recipe: the action-representation breakthroughs (ACT, Diffusion Policy) that made imitation *work* on fine manipulation; the generalist precursors (Gato, PaLM-E); the RT-1 → RT-2 arc that turned a VLM into a robot policy; Open X-Embodiment's cross-robot data pooling; the open generalists (Octo, OpenVLA); and π0/π0.5, the current frontier's flow-matching, hierarchically prompted systems that fold laundry in homes they have never seen. Throughout, keep Chapter 16's theorems in your pocket — every design choice below is an engineering response to a limitation you can already name — and keep Chapter 25 in view: what VLAs *cannot* do (surpass their demonstrators, correct themselves online) is where RL re-enters.
+
+## 1. The Action-Representation Problem Comes First
+
+Before any 55-billion-parameter anything, imitation had to solve a small, brutal problem: **what should the policy output?** Human teleoperation data has two properties that break the naive "MSE on the next action" head. **Multimodality** (Chapter 16's pitfall): demonstrators pass left or right around the obstacle, pause or push through — and a unimodal regression averages the modes into an action nobody demonstrated (into the obstacle; a half-pause). **Temporal incoherence**: predicting one action at a time lets every control step re-decide among modes, so the policy dithers between valid strategies — and pauses in human demos ("idle actions") make single-step prediction grind to a stall. The two fixes that define the modern stack:
+
+**Action chunking**: predict a *sequence* of the next $k$ actions (k ≈ 8–100) and execute several before re-predicting. Chunking commits to a mode (coherence), shortens the *effective decision horizon* by a factor of k (Chapter 16's compounding-error bound operates per-decision, not per-control-tick — fewer decisions, less compounding), and steps over demonstrator pauses. Its price is open-loop-ness within the chunk (Chapter 14's MPC lesson, inverted) — hence receding-horizon execution and ensembling, below.
+
+**Expressive generative heads**: replace the Gaussian with a distribution family that can represent many modes over the chunk — a categorical over *discretized action tokens* (the LLM-native choice: RT-1/RT-2/OpenVLA), a **diffusion model** over continuous chunks (Diffusion Policy, Octo — Chapter 18's substrate as a policy head), or **flow matching** (π0 — diffusion's faster deterministic-ODE cousin, built for high-rate control). Tokens buy seamless VLM integration and inherit the entire LLM toolchain; continuous heads buy precision (no quantization error) and rate (no 7-token-per-step autoregression at 50 Hz). This single trade — *tokens versus continuous generative heads* — is the axis along which every system below differentiates.
+
+## 2. ACT and ALOHA: Fine Manipulation Goes Open-Source
+
+**The paper:** Zhao, Kumar, Levine, Finn & Wu, "Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware" (RSS 2023). Two contributions, deliberately coupled: **ALOHA**, a ~$20k open-source bimanual teleoperation rig (two leader arms puppeteering two follower arms — joint-space mirroring, no gloves or mocap), and **ACT**, the Action Chunking Transformer trained on its output.
+
+**The method:** a transformer encoder-decoder consuming four camera views + joint positions, decoding a chunk of $k = 100$ future joint targets (at 50 Hz: two seconds of commitment). Two details carry the performance. It is trained as a **conditional VAE** — a latent "style" variable absorbs the demonstrator's mode choice, so the decoder is unimodal *given* the latent (multimodality handled by architecture, exactly the Chapter 16 prescription). And at test time, **temporal ensembling**: the policy re-predicts every step, and the action actually executed is an exponentially weighted average of all still-live chunk predictions for the current tick — chunking's coherence without its full open-loop blindness. **Results:** 80–90% success on tasks that had simply been outside imitation's reach at this budget — slotting a battery, opening a translucent condiment cup, threading a zip tie, *unzipping a ziploc bag* — from **50 demonstrations per task**, ~10 minutes of data. **Why it mattered:** it reset the community's prior on what BC could do (fine, contact-rich, bimanual, from a hobbyist-priced rig), and its lineage — ALOHA 2, Mobile ALOHA (adding a wheeled base; cooking shrimp, calling elevators) — became the data-collection substrate for much of the field, π0's fleet included.
+
+## 3. Diffusion Policy: the Generative Head, Perfected
+
+**The paper:** Chi, Feng, Du, Xu, Cousineau, Burchfiel & Song, "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion" (RSS 2023). The other action-head solution: model $\pi(a_{t:t+k} \mid o)$ as a **conditional diffusion process** — sample Gaussian noise in chunk-space, denoise through ~10–100 learned steps conditioned on the observation encoding, execute the first few actions, repeat (receding horizon).
+
+**Why diffusion specifically,** in this book's terms: it represents *arbitrary multimodal* distributions over high-dimensional chunks (both demonstrated routes stay alive — Chapter 16's mean-collapse dead, by substrate, as Chapter 18 promised); its iterative refinement produces smooth, dynamically consistent action sequences; and — the paper's subtle point — training via denoising score matching sidesteps the instabilities of energy-based-model alternatives (no negative sampling, no partition function). **Results:** across 15 simulation + real benchmarks, an average **+46.9%** absolute success over the strongest priors (LSTM-GMM, IBC, BET) — not an increment; a regime change — with real-robot demonstrations of sauce-spreading (fluid dynamics!), mug flipping, and 6-DoF tasks. **Its cost** is inference-time denoising at control rate (managed by DDIM-style few-step samplers, latency-aware execution, and later by consistency/flow distillations), and everything Chapter 16 says still binds: it is a *better clone*, not a self-improver. Diffusion Policy is today's default action head for single-task imitation, and — with chunking — one of the two representational pillars every VLA below stands on.
+
+## 4. The Generalist Precursors: Gato and PaLM-E
+
+**Gato** (Reed et al., DeepMind 2022): one 1.2B transformer, one weights-set, trained on ~600 tasks — Atari, image captioning, chat, *and real robot block-stacking* — by tokenizing everything (images to patches, text to subwords, continuous actions to discrete bins) into one sequence-modeling problem (Chapter 18's program at maximum breadth). What it proved: a single network *can* host hundreds of embodied competencies without catastrophic interference. What it conspicuously did not show: strong *positive transfer* — the generalist roughly matched, rarely exceeded, specialists, and its robot skills didn't visibly borrow from its Atari skills. Capacity is not synergy; the missing ingredient diagnosis pointed at *shared structure in the data* — which vision-language pretraining would supply.
+
+**PaLM-E** (Driess et al., 2023): the opposite pole — take a 540B-parameter language model, interleave *continuous* image and state embeddings directly into its token stream ("multimodal sentences"), and fine-tune for embodied questions: visual QA, and crucially **robot task planning** — emitting *textual* step sequences ("1. go to the drawer 2. open the drawer...") executed by separate low-level skills, with the loop closed through re-observation (failed grasp → the next plan step adapts). At 562B total, PaLM-E showed **positive transfer running the right direction**: web-scale vision-language training measurably improved embodied planning, and embodied training barely dented language competence. Its architecture named the gap the next paper would close: PaLM-E *plans in words* and delegates to hand-built skills — the semantic ceiling and the motor floor were still separate systems.
+
+## 5. RT-1: the Robotics Transformer, and What the Data Taught
+
+**The paper:** Brohan et al., "RT-1: Robotics Transformer for Real-World Control at Scale" (Google, 2022; RSS 2023). The dataset was the point: **~130,000 real teleoperated episodes, 700+ language-instructed tasks, 13 robots, 17 months** of kitchen-office collection — the first robot dataset with genuine breadth, and the direct ancestor of every "scale it" argument since.
+
+**The method:** deliberately efficient — instruction-conditioned FiLM layers modulating an EfficientNet image encoder; TokenLearner compressing visual tokens; a decoder-only transformer over the last 6 frames emitting **discretized actions** (each of 11 dimensions — arm pose deltas, gripper, base — binned into 256 tokens); 3 Hz control. **Results:** 97% success on seen tasks, **76% on unseen instructions** (novel combinations of trained verbs/objects), 83% robustness to distractors, 59% to new backgrounds — all substantially above contemporaneous baselines (Gato's architecture, trained on the same data, managed far less: architecture *and* data both mattered). And the ablations delivered the era's most-quoted empirical law: **data diversity beat data quantity** — removing the least-represented *tasks* hurt generalization far more than removing an equal volume of common-task episodes; heterogeneous data (simulation, other-robot episodes) folded in without hurting and extended skills. **The ceiling:** RT-1 generalizes across *combinations of things it was shown*; concepts absent from 130k kitchen episodes — novel object categories, semantic reasoning, written symbols — remain out of reach. The web knows those things; RT-1's encoder had never read the web.
+
+## 6. RT-2: the VLM Becomes the Policy
+
+**The paper:** Brohan et al., "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control" (2023) — the chapter's namesake move. Take a pretrained vision-language model (PaLI-X 55B / PaLM-E 12B — models that already do VQA, OCR, and commonsense grounding), and fine-tune it to emit **actions as text tokens**: the 256-bin discretization of RT-1, but expressed *in the model's own vocabulary* (literally strings of integers), so that "output the action" is just another language-generation task. The essential training decision is **co-fine-tuning**: robot episodes are mixed with the original web-scale vision-language data throughout, so the model never leaves the distribution where its knowledge lives (catastrophic forgetting held at bay — the same logic as Chapter 20's KL-to-reference, implemented as data mixing).
+
+**Results, and the reason this paper reoriented the field:** on unseen objects/backgrounds/instructions, roughly **2× RT-1's generalization** (~62% vs ~32% in their hardest splits) — but the qualitative wins are the point: "pick up the extinct animal" → grasps the toy dinosaur; "move the Coke can to Taylor Swift" → correct photo; "pick the drink appropriate for someone who is tired" → the energy drink; instructions *in other languages* — none of which appears anywhere in robot data. The web's semantics flowed through the shared token interface into motor behavior — **transfer, finally running from internet to actuator**. Chain-of-thought variants ("plan: ... action: ...") added multi-step reasoning at the action interface. **The honest limits:** skills themselves don't exceed the teleoperators' (semantic generalization ≠ new motor competence — Chapter 16's ceiling, unbroken); 55B parameters need cloud TPUs to hit a few Hz; and closed weights + closed data made it a proof of concept the community couldn't build on directly. The next three papers are the community building on it anyway.
+
+<Check q="RT-2's semantic feats ('the extinct animal') never appear in its robot demonstrations. Through exactly what mechanism does web knowledge become motor behavior — and why did co-fine-tuning, rather than sequential fine-tuning, protect it?">
+The VLM already binds images of dinosaurs to the words/concepts around "extinct"; fine-tuning teaches a *format* — map (image, instruction) to action-tokens — using the same representation space. At test time, the instruction routes through the pretrained semantic circuitry to select the visual target, and the newly learned format head converts target-conditioned features into bins the robot executes. The knowledge was never in the robot data; only the *interface* was. Sequential fine-tuning on robot-only data would shift the representation toward the narrow robot distribution (catastrophic forgetting), collapsing exactly the semantic circuitry the trick depends on; co-fine-tuning keeps the web distribution in every batch, anchoring the representations — Chapter 20's stay-near-the-reference principle, enforced with data instead of a KL term.
+</Check>
+
+## 7. Open X-Embodiment: the Field Pools Its Data
+
+**The paper/effort:** "Open X-Embodiment: Robotic Learning Datasets and RT-X Models" (2023–24) — 21+ institutions pooling **60 datasets, 22 robot embodiments, over one million real episodes, 500+ skills** into a standardized format (RLDS), the explicit "ImageNet moment" attempt for robotics. Two models trained on the pool: **RT-1-X** (efficient architecture) and **RT-2-X** (55B VLA).
+
+**The measured findings, which are the point:** (1) On *underrepresented-lab* benchmarks — platforms with modest data of their own — RT-1-X beat each lab's own specialist model by **~50% mean success**: cross-embodiment data transfers, positively, across different arms, cameras, and action conventions. (2) On data-rich domains, the small pooled model *underperformed* specialists (capacity bound), while the 55B RT-2-X did not — scale is what converts pooled diversity into uniform gains. (3) RT-2-X exhibited **emergent cross-robot skill flow**: on the Google robot's evaluations, spatial-relation skills present only in Berkeley's Bridge data (a different robot entirely) appeared — held out from one embodiment, learned through another. The consortium's dataset became the field's shared substrate: everything in the next two sections trains on it. Its limits are equally instructive: coverage skews heavily toward single-arm tabletop pick-and-place; "500 skills" counts verbs, not competence distribution; and pooling *evaluation* remains unsolved (every lab still measures on its own rig — see Section 10).
+
+## 8. The Open Generalists: Octo and OpenVLA
+
+**Octo** (Octo Model Team, Berkeley et al., RSS 2024): the first *open-source* generalist trained on Open X (800k episodes): a modest transformer (27M/93M) with deliberately **flexible interfaces** — arbitrary combinations of camera views, proprioception, language *or goal-image* conditioning, and a **diffusion action head** (Section 3's pillar, in a generalist) — designed above all to be *fine-tuned*: adapting to new sensor suites, new action spaces, new robots within a few hours on consumer GPUs. Octo's contribution is less a benchmark number than a proof of workflow: pretrain-then-finetune, robotics edition, actually practiced by other labs.
+
+**OpenVLA** (Kim et al., CoRL 2024): the open RT-2 — a **7B** VLA built on a Llama-2 backbone with a fused DINOv2 + SigLIP visual encoder (geometry-aware + semantically aligned features), trained on 970k Open X episodes, actions as tokens. **The headline:** it outperforms RT-2-X (55B) by **16.5% absolute** across 29 evaluation tasks — *with 7× fewer parameters* — and fine-tunes on a single consumer GPU via LoRA (Chapter 20's parameter-efficient machinery, crossing over) with quantized inference. Open weights, open code, open recipe: OpenVLA is the reference implementation on which a long tail of academic VLA research now runs. What its gap to π0 (next) marks: token-autoregressive action decoding tops out at coarse, low-rate control — the tokens-vs-continuous axis of Section 1, about to be settled for the dexterous regime.
+
+## 9. π0 and π0.5: Flow Matching Meets the Open World
+
+**The papers:** Physical Intelligence, "π0: A Vision-Language-Action Flow Model for General Robot Control" (2024) and "π0.5: a Vision-Language-Action Model with Open-World Generalization" (2025).
+
+**π0's architecture** resolves Section 1's axis with a hybrid: a PaliGemma-based VLM backbone (3B — web semantics, instruction understanding) feeding a separate ~300M **action expert** trained by **flow matching** to generate *continuous* action chunks (H = 50) at up to **50 Hz** — the deterministic-ODE sibling of diffusion (learn a velocity field transporting noise to actions; integrate ~10 steps at inference), chosen precisely for high-frequency dexterity where token autoregression and many-step denoising both miss the control budget. Trained on ~10k hours across 7+ embodiments (single-arm, bimanual, mobile) — the ALOHA lineage's rigs among them — plus Open X, then post-trained on curated task data. **The demonstrations that moved the field's goalposts:** folding laundry from a dryer *end-to-end* (deformables, long horizon, bimanual), busing a real restaurant table, assembling boxes — tasks whose durations (many minutes) and contact richness had no precedent in the literature.
+
+**π0.5** attacks the remaining wall: *whose house?* Everything above evaluates in environments resembling the training distribution; π0.5 targets **entirely unseen homes**. The recipe is a **hierarchical VLA** — one model, two inference granularities: given the scene and command ("clean the kitchen"), it first *generates a semantic subtask in language* ("pick up the plate"), then conditions its own flow-matching action expert on that self-generated subtask — Chapter 19's goal-conditioned hierarchy with language as the interface between levels, inside a single set of weights. Training is **co-training across heterogeneity**: mobile-manipulation data in ~100 homes, static-robot data, cross-embodiment lab data, web vision-language tasks, verbal-instruction data — with ablations showing the *non-robot and cross-embodiment* sources are precisely what buys open-world transfer (semantic breadth from the web; motor breadth from other robots' homes). **Result:** multi-step cleaning behaviors — dishes to sink, clothes to hamper, spills wiped — in kitchens and bedrooms the model has never seen, running 10+ minutes autonomously. It is the closest existing artifact to Chapter 22's impossible ask ("a policy that works in a new house"), and its authors are explicit about what it is not: success rates remain well below product thresholds, recovery behavior is thin, and everything is still, at bottom, imitation.
+
+## 10. Evaluation: the Field's Weakest Instrument
+
+A section the papers above earn by their own caveats. Real-robot evaluation is expensive (a 29-task, 3-seed comparison is *weeks* of human-supervised trials), non-reproducible across labs (no two rigs share lighting, cameras, wear, or object sets), and statistically thin (20 trials distinguish 50% from 90%, not 70% from 80% — most published deltas are within noise at per-task granularity; aggregate over many tasks or don't conclude). The partial remedies you should know: simulated proxies calibrated to real rigs (SIMPLER — sim evaluations shown to correlate with real RT/Octo-class rankings), standardized low-cost platforms (ALOHA kits, LIBERO benchmarks) — and the sobering norm that *policy A beats policy B* claims in this literature deserve the same skepticism Chapter 13's Henderson audit taught you for sim RL, with fewer seeds and more confounds. When you read a VLA paper — or write one — the evaluation section *is* the paper.
+
+## 11. Worked Example: the Price of a Chunk
+
+Chunking (Section 1) trades reactivity for coherence. The trade is measurable in an afternoon-sized system — BC on CartPole from the Chapter 16 scripted expert, with the policy predicting $k$ actions executed open-loop before re-observing:
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+
+env = gym.make("CartPole-v1")
+rng = np.random.default_rng(0)
+
+def expert(s):
+    return int(s[2] + 0.5 * s[3] > 0)
+
+# ---- demonstrations (states + the expert's next-8 actions from each state)
+S, A8 = [], []
+for _ in range(80):
+    s, _ = env.reset(seed=int(rng.integers(10**6)))
+    states, acts, done = [], [], False
+    while not done:
+        a = expert(s)
+        states.append(s); acts.append(a)
+        s, r, term, trunc, _ = env.step(a)
+        done = term or trunc
+    for i in range(len(states) - 8):
+        S.append(states[i]); A8.append(acts[i:i + 8])
+S = torch.as_tensor(np.array(S), dtype=torch.float32)
+A8 = torch.as_tensor(np.array(A8), dtype=torch.float32)
+
+# ---- one policy head per chunk length is overkill: train the 8-step head
+net = nn.Sequential(nn.Linear(4, 128), nn.ReLU(),
+                    nn.Linear(128, 128), nn.ReLU(), nn.Linear(128, 8))
+opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+for _ in range(3_000):
+    i = torch.randint(len(S), (256,))
+    loss = nn.functional.binary_cross_entropy_with_logits(net(S[i]), A8[i])
+    opt.zero_grad(); loss.backward(); opt.step()
+
+def evaluate(k, episodes=30):
+    """Execute k of the 8 predicted actions open-loop before re-observing."""
+    total = 0.0
+    for ep in range(episodes):
+        s, _ = env.reset(seed=5_000 + ep)
+        done, t = False, 0
+        while not done and t < 500:
+            with torch.no_grad():
+                chunk = (net(torch.as_tensor(s, dtype=torch.float32))
+                         > 0).long().tolist()
+            for a in chunk[:k]:
+                s, r, term, trunc, _ = env.step(a)
+                total += r; t += 1
+                done = term or trunc
+                if done:
+                    break
+    return total / episodes
+
+for k in [1, 2, 4, 8]:
+    print(f"execute {k}/8 predicted actions open-loop -> "
+          f"avg return {evaluate(k):5.1f}")
+```
+
+Measured decay (30 episodes each): $k = 1$ and $k = 2$ score a perfect 500; $k = 4$ drops to ≈ 401; $k = 8$ to ≈ 153 — CartPole is unstable and reactive, the worst case for open-loop commitment, which is exactly why it makes the cost visible. Now hold the other side of the ledger in mind (this environment cannot show it): no pauses to stall on, no modes to dither between, one decision per tick of compounding — the benefits that made $k = 100$ *win* on ALOHA. Receding-horizon execution (predict 8, execute 2–4) and ACT's temporal ensembling are the field's chosen points on the curve you just plotted.
+
+<Pitfall title="Common pitfalls — VLA practice">
+**Evaluation optimism** (Section 10): in-lab success on trained scenes is the *training set*; report unseen-object/scene/instruction splits or report nothing. **The demonstrator ceiling travels quietly**: VLAs inherit teleoperators' speed, hesitations, and failure-recovery habits — data curation (filtering slow/failed demos, or weighting by quality) changes policies more than most architecture choices. **Action-space conventions bite at pooling time**: absolute vs. delta actions, joint vs. end-effector space, gripper binarization, control rates — Open X's per-dataset heterogeneity means "just add more data" can *hurt* without normalization audits. **Chunk/execute mismatches**: train-time chunk statistics assume the executed prefix matches the demonstrated cadence; latency spikes silently shift it (the ACT ensembling machinery exists for this). **Language is the least-tested input**: instruction paraphrase robustness lags visual robustness badly — augment instructions or watch "pick up the cup" work while "grab that mug" fails. **And Chapter 16's ghost is undead**: everything here is still BC — off-manifold states remain unsupervised, and long-horizon autonomy amplifies exactly those excursions (the π0.5 caveat, the Chapter 25 agenda).
+</Pitfall>
+
+## 12. Summary
+
+- The VLA recipe: web-pretrained vision-language backbone + large-scale teleoperated demonstrations + an action representation that respects multimodality and horizon — trained by supervised learning; RL's chapter-25 role is fine-tuning and surpassing.
+- **Action heads first**: chunking (fewer decisions → less compounding; coherence; pause-robustness; open-loop tax) and expressive generative heads — tokens (RT-2/OpenVLA), diffusion (Diffusion Policy: +46.9% average, multimodality by substrate), flow matching (π0: continuous 50 Hz chunks). **ACT** adds the CVAE latent and temporal ensembling; ALOHA made the data rig a commodity.
+- **Gato**: one transformer, 600 tasks — capacity without synergy. **PaLM-E**: web→embodied transfer proven, but planning in words over hand-built skills.
+- **RT-1**: 130k episodes/700 tasks — 97%/76% seen/unseen; *diversity beats quantity*. **RT-2**: VLM fine-tuned to emit action tokens with co-fine-tuning — web semantics reach the actuator ("the extinct animal"); ~2× unseen-task generalization; skills still capped at the demonstrator's.
+- **Open X-Embodiment**: 22 embodiments, 1M+ episodes pooled; RT-1-X +50% at underrepresented labs; scale converts diversity into uniform gains; emergent cross-robot skill flow.
+- **Octo** (open, flexible, diffusion-headed, finetune-first) and **OpenVLA** (7B open VLA beating 55B RT-2-X by 16.5%; LoRA on one GPU) put the recipe in everyone's hands.
+- **π0/π0.5**: flow-matching action expert on a VLM backbone — laundry-folding dexterity at 50 Hz; π0.5's language-interfaced self-hierarchy + heterogeneous co-training reaches *unseen homes*, the open-world milestone — still imitation, still below product-grade reliability.
+- Evaluation is the field's weakest instrument; treat cross-paper comparisons accordingly.
+
+## 13. Papers & Further Reading
+
+- **Zhao, Kumar, Levine, Finn & Wu, "Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware" (RSS, 2023)** — [arxiv.org/abs/2304.13705](https://arxiv.org/abs/2304.13705). ACT/ALOHA.
+- **Chi et al., "Diffusion Policy: Visuomotor Policy Learning via Action Diffusion" (RSS, 2023)** — [arxiv.org/abs/2303.04137](https://arxiv.org/abs/2303.04137).
+- **Reed et al., "A Generalist Agent" (TMLR, 2022)** — [arxiv.org/abs/2205.06175](https://arxiv.org/abs/2205.06175). Gato. — **Driess et al., "PaLM-E: An Embodied Multimodal Language Model" (ICML, 2023)** — [arxiv.org/abs/2303.03378](https://arxiv.org/abs/2303.03378).
+- **Brohan et al., "RT-1: Robotics Transformer for Real-World Control at Scale" (2022)** — [arxiv.org/abs/2212.06817](https://arxiv.org/abs/2212.06817) — and **"RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control" (2023)** — [arxiv.org/abs/2307.15818](https://arxiv.org/abs/2307.15818).
+- **Open X-Embodiment Collaboration, "Open X-Embodiment: Robotic Learning Datasets and RT-X Models" (ICRA, 2024)** — [arxiv.org/abs/2310.08864](https://arxiv.org/abs/2310.08864).
+- **Octo Model Team et al., "Octo: An Open-Source Generalist Robot Policy" (RSS, 2024)** — [arxiv.org/abs/2405.12213](https://arxiv.org/abs/2405.12213). — **Kim et al., "OpenVLA: An Open-Source Vision-Language-Action Model" (CoRL, 2024)** — [arxiv.org/abs/2406.09246](https://arxiv.org/abs/2406.09246).
+- **Black et al. (Physical Intelligence), "π0: A Vision-Language-Action Flow Model for General Robot Control" (2024)** — [arxiv.org/abs/2410.24164](https://arxiv.org/abs/2410.24164) — and **Physical Intelligence, "π0.5: a Vision-Language-Action Model with Open-World Generalization" (2025)** — [arxiv.org/abs/2504.16054](https://arxiv.org/abs/2504.16054).
+- **Surveys:** Ma et al., "A Survey on Vision-Language-Action Models for Embodied AI" (2024) — [arxiv.org/abs/2405.14093](https://arxiv.org/abs/2405.14093) — for the map this chapter walked one path through.
+
+## 14. Exercises
+
+**24.1 (understand)** For each system — ACT, Diffusion Policy, RT-1, RT-2, Octo, OpenVLA, π0 — specify: action representation (tokens/CVAE-chunk/diffusion-chunk/flow-chunk), conditioning (language? goal image?), backbone provenance (from-scratch / VLM), and control rate. Which combinations are *absent* from the table, and which absence is a real research gap vs. a dominated design?
+
+**24.2 (understand)** RT-1's ablation says diversity beats quantity; Open X says cross-embodiment pooling helps small labs ~50%; π0.5's ablations say non-robot data is what buys unseen-home transfer. State the single hypothesis about generalization that unifies all three findings, and the experiment that would falsify it.
+
+**24.3 (derive)** Chunking vs. compounding error: adapt Chapter 16's $T^2\epsilon$ argument to a chunked policy making $T/k$ decisions with per-decision error $\epsilon_k$. Under what relationship between $\epsilon_k$ and $\epsilon_1$ does chunking strictly improve the bound — and what does the open-loop within-chunk dynamics error add back? Formalize the trade as a function of environment stability (contraction vs. expansion rate of state perturbations — your CartPole result is the expanding case).
+
+**24.4 (derive)** Flow matching vs. diffusion for action heads: both learn transport from noise to the action-chunk distribution. Sketch each objective (denoising score matching vs. conditional flow matching's velocity regression), and give the two concrete reasons a 50 Hz controller prefers the flow: inference-step count and variance of the sampling path. What does *tokenized autoregression* cost at the same control rate for an 18-dim action (count the sequential decodes)?
+
+**24.5 (understand)** π0.5's high level generates language subtasks consumed by its own low level. Compare this interface choice against (a) HIRO's latent-state subgoals (Chapter 19) and (b) PaLM-E's plans over hand-built skills, on: pretrainability of the interface, off-policy relabelability, expressiveness for contact-rich subtasks, and debuggability. Which single property most explains why language won this round?
+
+**24.6 (implement)** Run the chunking experiment; add temporal ensembling (re-predict every step; execute the exponentially weighted average of live predictions — for discrete actions, average the logits) and show it recovers most of $k=1$'s return while touching the policy 8× less per decision. Then add 0.05-std observation noise and re-sweep: does the ensemble's advantage grow or shrink, and why?
+
+**24.7 (implement)** Multimodality meets the heads: revive Chapter 16's two-mode expert (Exercise 16.9) and train three chunk-heads on its demos — MSE regression, a 2-component mixture density network, and a tiny diffusion head (10 denoising steps over an 8-action chunk). Report success and *mode-consistency within chunks* (fraction of chunks that stay in one mode). You are reproducing the reason Section 3 exists.
+
+**24.8 (implement)** Instruction robustness on the cheap: condition your chunk policy on a 2-word "instruction" embedding ("balance left" / "balance right" — reward shaping the expert to prefer one cart-region each). Train on one phrasing; test on paraphrases via a frozen sentence encoder. Measure the paraphrase gap, then close half of it with instruction augmentation at training time. (This is the Section-11-pitfall, minus the robot.)
+
+**24.9 (extend)** Design the data-normalization audit for pooling two datasets (your CartPole chunks + a delta-action variant of them): enumerate the convention mismatches (action space, frequency, normalization statistics), implement the naive pool (watch it underperform either alone), then the audited pool. Write the checklist you'd hand a lab joining Open X. 
+
+**24.10 (research)** The evaluation crisis, quantitatively: model a VLA comparison as Bernoulli trials (task success), and compute how many trials per task distinguish 70% from 80% at p ≤ 0.05 across 20 tasks with multiple-comparison correction. Now read two recent VLA papers' evaluation protocols against your number. Propose the minimal reporting standard (trials, splits, confidence intervals, seen/unseen taxonomy) you would demand as a reviewer — then check it against the SIMPLER paper's correlation methodology and note what real-to-sim evaluation can and cannot replace.

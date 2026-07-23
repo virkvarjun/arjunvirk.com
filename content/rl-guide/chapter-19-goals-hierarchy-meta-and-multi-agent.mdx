@@ -1,0 +1,191 @@
+Everything so far has trained one agent, on one task, from one reward, as one monolithic policy. Each of those four "ones" is a simplification the real world declines to honor. A warehouse robot is not asked to "maximize the reward function"; it is asked to *put that box there* — then a different box, somewhere else: tasks are **goals**, and they vary by the minute. Long tasks decompose — "make coffee" is not 4,000 torque decisions but five subroutines: **hierarchy**. A robot dropped into a new kitchen should not learn from scratch; it should *adapt*: **meta-learning**. And the moment two agents share a world — warehouse fleets, traded markets, a game of poker — the environment contains other learners, and the very notion of "optimal" changes: **multi-agent RL**.
+
+This chapter extends the machinery of Parts I–II along all four axes. It is a wider chapter than the ones before it, deliberately: these four extensions share a family resemblance (each turns some fixed ingredient of the MDP into a *variable* the agent must handle), they interlock (hierarchies are built from goal-conditioned policies; meta-RL is multi-task RL with adaptation; self-play is multi-agent meta-adaptation), and Part IV draws on all of them at once. The centerpiece is one of RL's genuinely beautiful tricks — hindsight experience replay — which you will implement and watch turn an unsolvable sparse-reward task into an easy one.
+
+## 1. Goal-Conditioned RL and Universal Value Functions
+
+Fix the machinery, vary the objective: augment states with a **goal** $g \in \mathcal{G}$, drawn per episode from $p(g)$, with goal-parameterized reward $r(s, a, g)$ — canonically the sparse indicator $r = -\mathbb{1}\left[ \lVert m(s) - g \rVert > \epsilon \right]$ (−1 until the goal-relevant part of state, $m(s)$, is within tolerance). Policies and values gain an argument:
+
+$$
+\pi(a \mid s, g),
+\qquad
+Q(s, a, g) \;=\; \E\left[ G_t \mid S_t = s, A_t = a; g \right].
+$$
+
+Schaul et al. (2015) named the value object a **universal value function approximator (UVFA)** and made the point that matters: train $Q(s, a, g)$ as *one network over the joint space* and it generalizes across goals like any network generalizes across inputs — nearby goals share structure, and a trained UVFA can act toward goals never trained on. One policy, a continuum of tasks; "task" has become an input rather than a training run. This representation is quietly everywhere downstream: Chapter 24's language-conditioned robot policies are UVFAs whose goal space is natural language; Chapter 15's Go-Explore "return to cell" needs exactly a goal-conditioned policy; hierarchy (Section 3) will use goals as the interface between layers.
+
+The catch is the reward. Sparse goal rewards are the honest specification (Chapter 1: say *what*, not *how*) and, per Chapter 15, nearly unlearnable: a random 7-DoF arm essentially never places a block within ε of a target, so every episode returns the same $-T$, and no gradient distinguishes any behavior from any other. Reward shaping (distance-to-goal) re-invites hacking and local optima (push the block off the table toward the target's projection...). The escape is one of the field's best ideas.
+
+## 2. Hindsight Experience Replay
+
+**The observation:** a failed episode is only a failure *relative to the goal it was assigned*. The arm that tried to push a block to position A and left it at position B has produced a *flawless demonstration* of "push the block to B." Failure is success, described wrongly.
+
+**The algorithm** (Andrychowicz et al., 2017): store transitions in replay as usual, tagged with the episode's intended goal $g$ — and *additionally* store copies **relabeled** with hindsight goals $g'$ actually achieved later in the same episode (the standard `future` strategy: for each transition, sample $k \approx 4$ achieved-states from its own future as substitute goals; recompute rewards under $g'$ — sparse indicators make that recomputation trivial). Train any off-policy learner (DQN, DDPG, SAC — off-policy-ness is what makes relabeling legal: the data was never on-policy anyway, and Q-learning's fixed point doesn't care who chose the goals) on the mixed buffer.
+
+**Why it works,** in this book's vocabulary: HER manufactures a **curriculum** out of the agent's own incompetence. Early on, achieved outcomes are wherever the flailing arm happens to leave things — so relabeled goals are exactly the goals the current policy *can* reach, and learning starts immediately (reward density is now ~100% by construction). As competence grows, achieved states track intended goals more closely, and the UVFA's generalization (Section 1) carries value from mastered goals toward assigned ones. It is also honest data augmentation: one trajectory becomes $k+1$ training tasks' worth of experience, none of it fabricated — every relabeled transition really happened, under a description the agent was free to choose. (Connect: Chapter 5's lesson that off-policy learning is "learning about one thing from data generated while doing another" — HER learns about *goals* from data generated while pursuing *other goals*.)
+
+The original results remain the cleanest advertisement: DDPG+HER solved pushing, sliding, and pick-and-place on a simulated Fetch arm with purely sparse rewards, where DDPG alone flatlined at zero success — and the pick-and-place policy transferred to a physical robot. The bit-flip toy in Section 7 reproduces the phenomenon in one minute of CPU.
+
+<Check q="HER requires an off-policy learner. Point to the exact step of the algorithm that an on-policy method like PPO cannot digest, and explain why Q-learning can.">
+The relabeled transitions were generated by a policy pursuing goal g, but are used to learn about behavior under goal g′ — under PPO's on-policy contract, the data must come from the *current policy on the same task*; relabeled experience is doubly foreign (old policy, different conditioning), and the surrogate objective's state distribution $d^\pi$ (Chapter 12) is wrong in a way no action-level ratio fixes. One-step Q-learning's target $r + \gamma\max_a Q(s',a,g')$ needs only that the transition $(s, a) \to s'$ obey the environment's dynamics — which it does regardless of intent — and that rewards match the conditioning goal, which relabeling recomputes. The dynamics don't know what the agent wanted; that indifference is the entire legality of hindsight.
+</Check>
+
+## 3. Hierarchical RL: Options and Learned Subgoals
+
+Two timescales of decision-making, formalized twice.
+
+**Options** (Sutton, Precup & Singh, 1999) — the classical frame: an option $\omega = (I_\omega, \pi_\omega, \beta_\omega)$ is an initiation set, an internal policy, and a termination probability — "go-to-the-door" as a callable temporally extended action. An MDP plus a set of options is a **semi-Markov decision process** (SMDP): the high-level policy chooses among options, each running for a random duration τ, with the Bellman equation generalizing cleanly —
+
+$$
+Q(s, \omega) \;=\; \E\left[ r_{t+1} + \cdots + \gamma^{\tau - 1} r_{t+\tau} + \gamma^{\tau} \max_{\omega'} Q(s_{t+\tau}, \omega') \right],
+$$
+
+discounting by *elapsed time*, so all of Part I's theory lifts. Options buy exactly what Chapter 15 said exploration needs: a random walk *over options* travels coherent multi-step distances (jumpy exploration), and credit assignment contracts by a factor of mean option length. The hard problem was never using options — it is *discovering* them: **option-critic** (Bacon, Harb & Precup, 2017) differentiates through the whole SMDP to learn $\pi_\omega, \beta_\omega$ end-to-end, and promptly exhibits the field's signature failure — **option collapse**: terminations drift toward zero-length (the high level micromanages every step) or one option swallows the task (hierarchy in name only), because nothing in the end-to-end objective *pays for* temporal abstraction. Regularizers (deliberation costs) patch, not cure.
+
+**Goal-conditioned hierarchy** — the modern frame, built directly on Sections 1–2: the high level emits a *subgoal* $g_t$ every $c$ steps; the low level is a UVFA policy $\pi(a \mid s, g)$ rewarded for reaching it. The interface is semantic and pre-trainable (HER trains the low level without any high level). **HIRO** (Nachum et al., 2018) made it off-policy and confronted the frame's own pathology: as the low level improves, old high-level transitions lie — the subgoal $g$ stored last week now induces *different* low-level behavior, so the high-level's replayed action no longer means what it did (nonstationarity *inside* the hierarchy — the multi-agent problem of Section 5, smuggled home). HIRO's fix is elegantly hindsight-flavored: **relabel the stored subgoal** with the one that best explains the low-level behavior actually observed. The honest summary of HRL at large: indispensable *idea* (Part IV's systems are all hierarchical in architecture — a VLA setting chunked subgoals over a low-level controller is exactly this section), while *end-to-end learned* hierarchy remains temperamental, and flat agents with good exploration embarrass it on many benchmarks. Structure helps most when it is imposed, not discovered.
+
+## 4. Meta-RL: Learning to Adapt
+
+Standard RL optimizes a policy for one MDP; **meta-RL** optimizes, across a *distribution* of MDPs $p(\mathcal{M})$, the ability to become good at a new one quickly:
+
+$$
+\max_\theta\; \E_{\mathcal{M} \sim p(\mathcal{M})}\left[ J_{\mathcal{M}}\!\left( U_{\mathcal{M}}(\theta) \right) \right],
+$$
+
+where $U_{\mathcal{M}}$ is an *adaptation procedure* (a few episodes of experience in $\mathcal M$) and the meta-objective scores post-adaptation performance. The three families differ in what $U$ is:
+
+- **Recurrence (RL², Duan et al., 2016; Wang et al., 2016):** the "policy" is an RNN that runs *across episode boundaries* within a task, receiving (s, a, r, done); adaptation is just the hidden state updating. Train it with ordinary PPO across tasks and the network *learns a learning algorithm* in its recurrent dynamics — on distributions of bandit tasks, trained RL² agents rediscover exploration strategies with regret approaching Chapter 2's Gittins/Thompson-grade solutions. Adaptation is a forward pass: fast, black-box, and bounded by what the hidden state can carry.
+- **Gradients (MAML, Finn, Abbeel & Levine, 2017):** adaptation is $k$ steps of policy-gradient ascent; meta-training differentiates *through* the adaptation, $\nabla_\theta J(\theta - \alpha \nabla_\theta J(\theta))$, seeking an initialization from which one gradient step travels far (a second-order objective — the gradient-through-a-gradient is the point, not a detail). Model-agnostic, principled, and in RL practice high-variance (a policy-gradient *of* a policy-gradient compounds Chapter 11's noise) — more influential as an idea than as a deployed robot algorithm.
+- **Context inference (PEARL, Rakelly et al., 2019):** treat the unknown task as a latent variable $z$; train an encoder from experience to a posterior $q(z \mid \text{context})$ and a $z$-conditioned SAC. Adaptation = posterior inference; exploration = posterior sampling over *tasks* — Thompson sampling (Chapter 2) resurfacing at the task level, and the family's practical sweet spot: off-policy (sample-efficient) with disentangled task inference.
+
+The framing to keep: meta-RL turns exploration-for-adaptation into a *learned* behavior optimized end-to-end — the agent explores a new kitchen the way meta-training discovered kitchens are efficiently explored. Its structural cost is the task distribution itself: someone must build hundreds of related-but-varied training MDPs (the real bottleneck in practice), and generalization is only as broad as that distribution — a lesson domain randomization (Chapter 22) will repeat at full volume. And note what large sequence models did to this section: a transformer trained across diverse histories is RL² at scale — "in-context learning" is meta-learning by recurrence under a new name, one of several places this chapter quietly becomes Chapter 24.
+
+## 5. Multi-Agent RL: When the Environment Learns Back
+
+Put $n$ learners in one environment (a Markov game: joint state, per-agent actions, per-agent rewards) and the single-agent contract shatters at its foundation: from agent $i$'s perspective, the "environment" includes the other agents' policies — which are *changing as they learn*. The world is **nonstationary by construction**, every convergence result resting on a fixed MDP (most of Parts I–II) is void, and experience replay becomes actively poisonous (a stored transition embeds opponents who no longer exist). Even the *objective* needs game theory: with conflicting rewards there is no "optimal policy," only equilibria — best responses to others' best responses — and which equilibrium, in games with many, is a coordination question no gradient answers.
+
+The two structures that organize practice:
+
+**Competition → self-play.** In two-player zero-sum games, playing against copies of yourself turns the arms race into a curriculum: the opponent is always exactly as strong as you, and the minimax value gives a well-defined target (fictitious self-play and its descendants converge toward it under conditions). This is AlphaZero's engine (Chapter 14) — and at scale it needs one more ingredient, **population diversity**: pure self-play forgets (A beats B, C beats A, but C lost the ability to beat B — strategy cycling), so AlphaStar trained an explicit *league* of mains and exploiters, and OpenAI Five mixed in past checkpoints; both reached top-human play (StarCraft II Grandmaster; Dota 2 world champions) on this recipe plus outrageous quantities of Chapter 12's PPO.
+
+**Cooperation → CTDE.** Fleets and teams usually allow **centralized training, decentralized execution**: at training time, share everything (global state, others' actions); at execution, each agent acts on local observations. **MADDPG** (Lowe et al., 2017): per-agent actors $\pi_i(a_i \mid o_i)$, but critics $Q_i(s, a_1, \dots, a_n)$ that see *all* actions — conditioning on others' actions makes the critic's world stationary again (the nonstationarity is moved inside the critic's inputs, where it belongs), while the actors stay deployable. **QMIX** (Rashid et al., 2018) handles the cooperative credit-assignment version: factor a team value $Q_{\text{tot}}$ into per-agent utilities through a monotonic mixing network — monotonicity guaranteeing that each agent's greedy local action is the team's greedy joint action (the "individual-global-max" property), at the price of representable team strategies. The open frontiers — equilibrium selection, emergent communication, social dilemmas where selfish gradients destroy the commons — are one honest step beyond this book; Section 8's readings map them.
+
+## 6. One Lens on All Four
+
+The chapter's four extensions are one move performed on four different slots of the MDP tuple. Goal-conditioning makes the *reward* an input. Hierarchy makes the *action* an extended, learnable object. Meta-RL makes the *MDP itself* a sample from a distribution. Multi-agent RL makes the *transition function* contain other minds. In each case the resolution is also the same: enlarge what the policy conditions on (goals; subgoals; task beliefs; others' models) and train the enlarged object across the variation rather than against one instance. That — condition on more, train across more — is arguably *the* design pattern of frontier RL, and Part IV is what it looks like industrialized: language-goal-conditioned (Section 1), architecturally hierarchical (Section 3), pretrained-across-embodiments-for-adaptation (Section 4) robot policies.
+
+## 7. Worked Example: HER on Bit-Flipping
+
+The canonical minimal demonstration (from the HER paper itself). State: $n$ bits; actions: flip bit $i$; goal: a target bit-string; reward: $-1$ unless state = goal exactly. At $n = 15$ the chance of randomly hitting one specific string of 32,768 is nil — vanilla DQN never sees a distinguishing reward. HER relabels, and the problem falls:
+
+```python
+import numpy as np, torch, torch.nn as nn
+from collections import deque
+import random
+
+N = 15
+def env_step(s, a):
+    s = s.copy(); s[a] ^= 1
+    return s
+
+def make_q():
+    return nn.Sequential(nn.Linear(2 * N, 256), nn.ReLU(),
+                         nn.Linear(256, 256), nn.ReLU(), nn.Linear(256, N))
+
+def train(use_her, epochs=40, seed=0):
+    rng = np.random.default_rng(seed)
+    torch.manual_seed(seed)
+    q, qt = make_q(), make_q()
+    qt.load_state_dict(q.state_dict())
+    opt = torch.optim.Adam(q.parameters(), lr=1e-3)
+    buf = deque(maxlen=100_000)
+    success_hist = []
+    for ep in range(epochs * 50):
+        s = rng.integers(0, 2, N); g = rng.integers(0, 2, N)
+        if np.array_equal(s, g):
+            continue
+        traj = []
+        for t in range(N):
+            x = torch.as_tensor(np.concatenate([s, g]), dtype=torch.float32)
+            eps = max(0.02, 0.3 - ep / 1000)
+            a = int(rng.integers(N)) if rng.random() < eps \
+                else int(q(x).argmax())
+            s2 = env_step(s, a)
+            done = np.array_equal(s2, g)
+            traj.append((s, a, s2))
+            buf.append((s, a, s2, g, float(done)))
+            s = s2
+            if done:
+                break
+        success_hist.append(float(np.array_equal(s, g)))
+        if use_her:                                    # relabel: future strategy
+            for i, (s0, a, s2) in enumerate(traj):
+                for _ in range(4):
+                    j = rng.integers(i, len(traj))     # a future step
+                    g2 = traj[j][2]                    # ...its achieved state
+                    buf.append((s0, a, s2, g2,
+                                float(np.array_equal(s2, g2))))
+        for _ in range(20):                            # learn
+            if len(buf) < 256:
+                break
+            S, A, S2, G, D = zip(*random.sample(buf, 256))
+            X  = torch.as_tensor(np.concatenate([S, G], 1), dtype=torch.float32)
+            X2 = torch.as_tensor(np.concatenate([S2, G], 1), dtype=torch.float32)
+            A_t = torch.as_tensor(A); D_t = torch.as_tensor(D)
+            with torch.no_grad():
+                y = -1 * (1 - D_t) + 0.98 * (1 - D_t) * qt(X2).max(1).values
+            loss = (q(X).gather(1, A_t[:, None]).squeeze(1) - y).pow(2).mean()
+            opt.zero_grad(); loss.backward(); opt.step()
+        if ep % 100 == 0:
+            qt.load_state_dict(q.state_dict())
+    return np.mean(success_hist[-200:])
+
+print(f"n={N} bits  DQN alone: {train(False):.2f}   DQN+HER: {train(True):.2f}")
+```
+
+Expected outcome: vanilla DQN's success rate stays ≈ 0.00 — in the entire run it may never once collect a reward that distinguishes anything — while DQN+HER climbs to ≈ 0.9+ success on the *same* environment, same network, same budget. Nothing about exploration changed; what changed is that every episode, however aimless, became labeled training signal for *some* goal, and the UVFA generalized from reachable goals to assigned ones. One idea, forty lines, three orders of magnitude.
+
+<Pitfall title="Common pitfalls — the four extensions in practice">
+**Goal-conditioned:** relabeling with a *shaped* reward silently breaks HER's logic (the relabeled reward must be recomputable and meaningful under g′ — sparse indicators are; "progress toward g" often isn't); and beware goal distributions at train vs. test (a UVFA interpolates, rarely extrapolates). **Hierarchy:** check for collapse first (log option durations / subgoal distances) — most "hierarchical" gains in ablation-poor papers come from the added exploration noise, not the abstraction; impose structure before learning it. **Meta-RL:** the task distribution is the product — meta-overfitting to a narrow family looks like magic until one test task falls outside it; report adaptation curves, not just post-adaptation means. **Multi-agent:** stale replay embeds dead opponents (recency-weight or re-run them); evaluation against a fixed opponent measures exploitation of *that* opponent, not strength (use populations/Elo); and in cooperative settings, per-agent reward hacking of a shared objective (lazy-agent free-riding) is the default outcome QMIX-style factorizations exist to expose.
+</Pitfall>
+
+## 8. Summary
+
+- **Goal-conditioning**: task as input — $\pi(a \mid s, g)$, UVFA $Q(s, a, g)$; one network, a continuum of tasks; the substrate of language-conditioned robot policies.
+- **HER**: relabel trajectories with goals they *did* achieve; legal exactly because dynamics are goal-indifferent and the learner is off-policy; manufactures a curriculum from failure; sparse-reward manipulation goes from unsolvable to routine.
+- **Hierarchy**: options make temporal abstraction formal (SMDP Bellman equations); discovery remains fragile (collapse); goal-conditioned two-level designs (HIRO) work best, with hindsight-style subgoal relabeling curing the hierarchy's internal nonstationarity. Imposed structure beats discovered structure, for now.
+- **Meta-RL**: optimize post-adaptation performance across a task distribution; adaptation by recurrence (RL² — learned exploration, ancestor of in-context learning), by gradients (MAML — elegant, noisy in RL), or by task inference (PEARL — Thompson sampling over tasks). The task distribution is the real engineering artifact.
+- **Multi-agent**: other learners make the world nonstationary and the objective game-theoretic; self-play + population diversity conquers competition (AlphaStar, OpenAI Five); CTDE (MADDPG's centralized critics, QMIX's monotonic factorization) organizes cooperation.
+- The unifying move: condition on more, train across more — the design pattern Part IV industrializes.
+
+## 9. Papers & Further Reading
+
+- **Schaul, Horgan, Gregor & Silver, "Universal Value Function Approximators" (ICML, 2015)** — [proceedings.mlr.press/v37/schaul15.html](https://proceedings.mlr.press/v37/schaul15.html). Goals become inputs.
+- **Andrychowicz et al., "Hindsight Experience Replay" (NeurIPS, 2017)** — [arxiv.org/abs/1707.01495](https://arxiv.org/abs/1707.01495). The relabeling trick, bit-flipping included.
+- **Sutton, Precup & Singh, "Between MDPs and semi-MDPs: A Framework for Temporal Abstraction in Reinforcement Learning" (Artificial Intelligence, 1999)** — [doi.org/10.1016/S0004-3702(99)00052-1](https://doi.org/10.1016/S0004-3702(99)00052-1) — and **Bacon, Harb & Precup, "The Option-Critic Architecture" (AAAI, 2017)** — [arxiv.org/abs/1609.05140](https://arxiv.org/abs/1609.05140). Options, and learning them end-to-end.
+- **Nachum, Gu, Lee & Levine, "Data-Efficient Hierarchical Reinforcement Learning" (NeurIPS, 2018)** — [arxiv.org/abs/1805.08296](https://arxiv.org/abs/1805.08296). HIRO and off-policy subgoal relabeling.
+- **Duan, Schulman, Chen, Bartlett, Sutskever & Abbeel, "RL²: Fast Reinforcement Learning via Slow Reinforcement Learning" (2016)** — [arxiv.org/abs/1611.02779](https://arxiv.org/abs/1611.02779); **Finn, Abbeel & Levine, "Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks" (ICML, 2017)** — [arxiv.org/abs/1703.03400](https://arxiv.org/abs/1703.03400); **Rakelly, Zhou, Quillen, Finn & Levine, "Efficient Off-Policy Meta-Reinforcement Learning via Probabilistic Context Variables" (ICML, 2019)** — [arxiv.org/abs/1903.08254](https://arxiv.org/abs/1903.08254). The three meta-RL families. (Survey: Beck et al., "A Tutorial on Meta-Reinforcement Learning," 2023 — [arxiv.org/abs/2301.08028](https://arxiv.org/abs/2301.08028).)
+- **Lowe, Wu, Tamar, Harb, Abbeel & Mordatch, "Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments" (NeurIPS, 2017)** — [arxiv.org/abs/1706.02275](https://arxiv.org/abs/1706.02275) — and **Rashid et al., "QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning" (ICML, 2018)** — [arxiv.org/abs/1803.11485](https://arxiv.org/abs/1803.11485). CTDE's two pillars.
+- **Vinyals et al., "Grandmaster level in StarCraft II using multi-agent reinforcement learning" (Nature, 2019)** — [doi.org/10.1038/s41586-019-1724-z](https://doi.org/10.1038/s41586-019-1724-z) — and **Berner et al., "Dota 2 with Large Scale Deep Reinforcement Learning" (2019)** — [arxiv.org/abs/1912.06680](https://arxiv.org/abs/1912.06680). Self-play with leagues, at civilization-scale compute.
+
+## 10. Exercises
+
+**19.1 (understand)** Recast each as goal-conditioned RL, specifying $\mathcal{G}$, $m(s)$, and the sparse reward: (a) a robot reaching arbitrary end-effector positions; (b) Chapter 15's Go-Explore "return to archive cell" subroutine; (c) an instruction-following policy ("put the red block in the bowl"). For (c), what replaces the ε-ball success test, and why is that the hard part (Chapter 24 will answer)?
+
+**19.2 (understand)** HER's `future` strategy relabels with goals achieved *later in the same episode*. Compare against `final` (only the episode's last state) and `random` (any achieved state in the buffer): predict the curriculum each induces and the failure mode of `random` (hint: which relabeled transitions get reward −1 under it, and how often?).
+
+**19.3 (derive)** Show that HER relabeling introduces *no dynamics bias*: for any goal distribution used at relabeling time, the transition kernel of the relabeled data equals the true $P(s' \mid s, a)$. Then find the bias it *does* introduce: the joint distribution of (state, goal) in the buffer differs from the deployment distribution $p(g) \times d^\pi$ — construct a two-goal example where this skews the learned Q toward easy goals, and connect to the pitfall about train/test goal distributions.
+
+**19.4 (derive)** SMDP discounting: derive the options Bellman equation of Section 3 from first principles, treating an option's execution as a compound transition with random duration τ, and verify it reduces to the ordinary equation when all options are primitive (τ ≡ 1). Where exactly does the $\gamma^\tau$ enter, and why does mis-implementing it (using γ) inflate long options' values?
+
+**19.5 (derive)** MAML's meta-gradient: for a one-step inner update $\theta' = \theta + \alpha \nabla_\theta J_{\mathcal M}(\theta)$, expand $\nabla_\theta J_{\mathcal M}(\theta')$ and identify the Hessian-vector term that first-order MAML (FOMAML) drops. In the RL case, both J's are policy-gradient estimates: enumerate the *three* distinct sources of estimator variance in the full meta-gradient, and explain why PEARL's posterior-inference route sidesteps all three.
+
+**19.6 (implement)** Run the bit-flip experiment; reproduce the ≈0 vs ≈0.9 split at n = 15. Then sweep n ∈ $\{5, 10, 15, 20, 25\}$ and plot both agents' final success. Where does vanilla DQN's cliff sit, and does HER's curve degrade gracefully or also cliff? Explain both shapes via reward density and UVFA generalization.
+
+**19.7 (implement)** Implement HER's relabeling-strategy ablation from Exercise 19.2 (`final`, `future` k ∈ $\{1, 4, 8\}$, `random`) at n = 20, and additionally log the fraction of relabeled minibatch transitions whose reward is 0 (success under the relabeled goal). Relate that single logged number to each variant's learning speed — you are watching the manufactured curriculum's density directly.
+
+**19.8 (implement)** Two-agent nonstationarity in miniature: independent Q-learners on iterated matching pennies (zero-sum, mixed equilibrium at 50/50). Show their policies cycle rather than converge (plot each agent's P(heads) over time). Then give agent 1 a centralized critic (condition on agent 2's last action distribution, estimated from a recent window) and show the stabilization. You have built the smallest possible MADDPG.
+
+**19.9 (extend)** Build a two-level goal-conditioned agent for a 40×40 four-rooms gridworld with sparse far-goal reward: low level = your bit-flip-style UVFA trained with HER on nearby goals; high level = tabular Q-learning over subgoals on a coarse 5×5 grid, invoked every c = 10 steps. Compare against flat Q-learning with count bonuses (Chapter 15). Then break it: freeze the low level halfway through high-level training and quantify the staleness problem HIRO's relabeling addresses.
+
+**19.10 (research)** In-context RL: a transformer trained on across-episode histories from a task distribution is RL² with attention. Design an experiment probing whether such a model *explores* or merely *infers*: construct a task family where optimal identification requires actions that are strictly suboptimal for every task in the family (pure information-gathering), and specify the behavioral signature separating learned exploration from Bayesian filtering over memorized task types. Compare your design against the "algorithm distillation" literature and note which of your conditions it already runs.

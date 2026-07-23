@@ -1,0 +1,215 @@
+Every model-free method in Part II shares an extravagance: it throws experience away. A transition trains a value or a policy and is never consulted about *how the world works* — knowledge that would transfer across tasks, survive reward changes, and multiply every real step into thousands of imagined ones. Chapter 8 built the case in tables; this chapter rebuilds it with neural networks, where it becomes the story of modern sample-efficient RL and the direct ancestor of Part IV's world models.
+
+The chapter's tension is one sentence long: **a learned model is wrong, and planning is an optimizer, and optimizers exploit wrongness.** Every algorithm here is a different treaty with that fact. PILCO signs it with Gaussian-process uncertainty, PETS with ensembles and short-horizon replanning, MBPO with rollouts kept so short the error cannot compound, and MuZero — the chapter's destination — with the radical move of never asking the model to be *right* about the world at all, only about values. En route we finally pay the debt from Chapter 8 and treat AlphaGo and AlphaZero properly.
+
+## 1. Why Models, and What Goes Wrong
+
+The case for: **sample efficiency** (simulate at silicon speed what hardware pays for in wear and hours — model-based methods routinely need 10–100× less real data); **transfer** (dynamics are reward-independent: relearn the task, keep the physics); **foresight** (planning evaluates actions *before* taking them — decisive when mistakes are expensive); and, later, **representation** (predicting the world is a rich training signal even when control is the goal — the world-models thesis, Chapter 23).
+
+The case against is a single mechanism with many faces: **compounding error**. Roll a one-step model forward $H$ steps and per-step error $\epsilon$ does not add — it feeds back, because step $k$'s prediction is evaluated at step $k-1$'s *erroneous output*, generalizing progressively off-distribution. Under a Lipschitz assumption ($L$ the model's sensitivity to state perturbation), worst-case deviation grows like $\epsilon \sum_{k=0}^{H-1} L^k$ — linear in $H$ for $L \le 1$, exponential for $L$ above 1 (Exercise 14.2 derives this and its consequence for value estimates). Worse than the passive drift: **model exploitation.** A planner searching for high reward searches, indifferently, over real reward and model bugs — and the bug is usually easier to find (the imagined hover, the frictionless glide, the reward hallucinated at the edge of the training set). A planner is an adversary your model did not train against. Everything below is uncertainty-management engineering aimed at exactly this adversary.
+
+One more distinction before the algorithms, inherited from Chapter 8 and now load-bearing: **background planning** (use the model to generate training data or gradients for a policy/value function — Dyna, PILCO, MBPO) versus **decision-time planning** (use the model *now*, from *this* state, to choose the next action — MPC/PETS, MCTS/MuZero). Background planning amortizes; decision-time planning focuses and can react to states never seen in training. The best systems mix them.
+
+## 2. Learning the Model
+
+The supervised problem looks innocent: from $\mathcal{D} = \{(s, a, s')\}$, fit $\hat{p}_\psi(s' \mid s, a)$ — in practice predicting the *delta* $s' - s$, which centers targets and helps at slow timescales. The design choices that matter:
+
+**Deterministic vs. probabilistic.** A deterministic $\hat{f}_\psi$ trained on MSE learns the *conditional mean* — which in stochastic or multimodal dynamics is a state that may never occur (the mean of "ball bounces left or right" is "ball goes straight"). Probabilistic heads — typically Gaussian, $\hat p_\psi = \mathcal{N}(\mu_\psi(s,a), \Sigma_\psi(s,a))$ trained by negative log-likelihood — capture **aleatoric** uncertainty: noise that is *in the world* and no amount of data removes.
+
+**Ensembles.** Train $B$ models (5–7 in practice) on the same data from different initializations (bootstrapping the data adds little; the initialization diversity does the work). Their *disagreement* estimates **epistemic** uncertainty: ignorance that more data would cure, large exactly where the planner has dragged the rollout off-distribution. The distinction is operational, not philosophical: aleatoric uncertainty you *sample* (the world really is random there); epistemic uncertainty you *penalize or avoid* (the model has no idea — do not let the optimizer cash imaginary checks there). Confusing the two — e.g., an over-confident deterministic model in a stochastic world, or treating disagreement as noise to average away — is the root of most model-based failures, and the "probabilistic ensemble" of PETS exists precisely to represent both at once.
+
+## 3. PILCO: the Sample-Efficiency Landmark
+
+PILCO (Deisenroth & Rasmussen, 2011) remains the cleanest statement of "uncertainty-aware model-based RL," and its sample efficiency is still startling: cartpole swing-up from scratch in **17.5 seconds of physical interaction**; a low-cost robot manipulator learning block stacking from a few dozen trials.
+
+The pieces: dynamics modeled by a **Gaussian process** — a nonparametric posterior over functions, giving calibrated epistemic uncertainty in closed form; policy evaluation by **analytic moment matching** — push a Gaussian state distribution through the GP dynamics, approximate the output as Gaussian, iterate $H$ steps, integrating the *entire distribution* of trajectories, not samples; policy improvement by **analytic gradients** of the expected cost through the whole rollout (no likelihood-ratio estimators — the model is differentiable end to end, the ancestor of Chapter 23's backprop-through-dreams). The philosophical core: *never plan with a point estimate.* Predictions where the GP is ignorant come with wide variance, the expected-cost integral automatically discounts them, and the policy is optimized against the model's honest confusion rather than its best guess — which is why PILCO does not exploit its own model the way naive Dyna-with-networks does.
+
+The limits are equally instructive: GPs scale cubically with data and poorly with dimension; moment matching forces smooth dynamics (contacts hurt) and unimodal state distributions; the method is batch and offline between episodes. PILCO is the proof of concept that uncertainty-respecting models buy orders of magnitude in data — the rest of the chapter is about buying (most of) that with neural networks that scale.
+
+## 4. PETS: Ensembles + Sampling + MPC
+
+PETS (Chua et al., 2018) is the neural translation, and its full name is the recipe: **P**robabilistic **E**nsembles with **T**rajectory **S**ampling. Model: an ensemble of $B$ probabilistic networks — the ensemble spread carrying epistemic uncertainty, each member's Gaussian head carrying aleatoric. Prediction: propagate *particles* — each imagined trajectory pinned to one ensemble member (or resampled per step), sampling the Gaussian at each transition, so the particle cloud's spread is an honest sample-based picture of both uncertainties over the horizon (the "TS" that replaces PILCO's moment matching, with no smoothness requirements).
+
+Control is decision-time: **model-predictive control**. At every real step, optimize an $H$-step action sequence against the particle-averaged return, execute *only the first action*, observe, replan. The inner optimizer is the **cross-entropy method (CEM)** — sample $N$ action sequences from a Gaussian, keep the top-$k$ "elites," refit the Gaussian, iterate a few rounds; embarrassingly simple, embarrassingly effective in the smooth, low-dimensional action spaces of robotics. MPC's replanning is itself an error-management device: the model is trusted for only $H$ steps (compounding error truncated by construction), and every real observation resets the plan to reality.
+
+The result that made the field notice: on MuJoCo benchmarks (half-cheetah, reacher, pusher), PETS matched or approached the *asymptotic* performance of SAC/PPO-class model-free methods with **10–100× fewer samples** — and its ablations localized the credit: deterministic models underperform badly (aleatoric matters), single probabilistic networks get exploited (epistemic matters), and the full ensemble-particle machinery is what closes the gap. The costs: per-step planning compute (CEM at control frequency), a task-specific reward function the planner can query, and horizons limited by both compute and compounding error.
+
+<Check q="PETS executes one action and replans, rather than executing the whole optimized H-step sequence. What two distinct failure sources does replanning defend against?">
+First, model error: the H-step plan was optimized inside an imperfect simulation whose predictions degrade with depth; executing beyond the first step means acting on the stalest, most-compounded part of the plan. Replanning re-anchors on the true observed state each step. Second, stochasticity and disturbance: even a perfect model of a stochastic world yields plans that are only optimal in expectation over its own particles; the realized world draws one sample, and the optimal continuation from *that* sample generally differs from the plan's. (This is the classical open-loop vs. closed-loop control gap — MPC is the standard bridge, and the same logic returns in TD-MPC, Chapter 23.)
+</Check>
+
+## 5. MBPO: Short Branched Rollouts into a Model-Free Learner
+
+MBPO — model-based policy optimization (Janner et al., 2019) — asks the Dyna question at neural scale: rather than plan at decision time, why not *generate synthetic experience* and feed it to the best model-free learner we have (SAC)? Its two design decisions define the modern background-planning recipe:
+
+**Branch from real states.** Rollouts start from states sampled from the *real* replay buffer — never from imagined states of previous rollouts — so the model is always queried near the data distribution.
+
+**Keep rollouts short.** Length $k$ = 1 to a few steps only. The paper's theory says why with unusual candor: their bound on true-vs-model performance,
+
+$$
+J(\pi) \;\ge\; J^{\text{model}}(\pi) \;-\; C\!\left( \epsilon_m, \epsilon_\pi, k \right),
+$$
+
+has an error term that *grows* with rollout length $k$ through compounding model error $\epsilon_m$ — naively suggesting $k = 0$ (no model at all). The escape is the branch structure: short branches from real states buy fresh, policy-relevant data whose model-error cost is bounded by only $k$ compounding steps, while the *coverage* benefit (synthetic data from the current policy's perspective, filling the buffer at 20–40× real-data rate) dominates. In practice: ensemble model as in PETS, $k$ annealed from 1 to ~15, SAC trained with a synthetic-to-real data ratio around 95:5 — matching SAC's asymptotic performance on MuJoCo with ~5–10× fewer real samples.
+
+MBPO versus PETS is the cleanest background-vs-decision-time comparison in the literature: MBPO pays model queries at *training* time and deploys a fast reactive policy; PETS pays at *decision* time and needs no policy at all. Robotics uses both descendants — and the hybrid (a policy proposing, a model-planner refining) is where Chapter 23's TD-MPC lands.
+
+## 6. AlphaGo, AlphaZero: Planning as the Improvement Operator
+
+Now the given-model branch, where the model is a perfect game simulator and the challenge is scale: Go's $10^{170}$ states and branching factor ~250 had made it the canonical "impossible for computers" domain.
+
+**AlphaGo** (Silver et al., 2016) beat Lee Sedol with a pipeline: a policy network imitating human expert moves (supervised); that policy improved by self-play policy gradients; a value network trained on self-play outcomes; and at play time, MCTS (Chapter 8) guided by both — the policy network narrowing the search prior, the value network (mixed with rollout evaluations) replacing random playouts. The engineering framing: **networks make the search tractable; search makes the networks superhuman.**
+
+**AlphaZero** (Silver et al., 2018) deleted everything human and everything ad hoc: no expert data, no handcrafted features, no rollouts — one network $f_\theta(s) = (p, v)$, pure self-play, and the loop this book has been building toward since Chapter 4:
+
+$$
+\text{search: } \pi_{\text{MCTS}}(s) \gg p_\theta(s)
+\qquad\Longrightarrow\qquad
+\text{train: } p_\theta \to \pi_{\text{MCTS}},\;\; v_\theta \to z,
+$$
+
+MCTS (with the network-prior UCT rule from Chapter 8, ~800 simulations per move) produces move distributions *stronger than the raw network*; the network is trained to imitate the search's conclusions and predict the game outcome $z$; the stronger network makes the next search stronger. **Generalized policy iteration with MCTS as the improvement operator** — the purest large-scale instance of the book's central pattern, and it mastered Go, chess, and shogi with one algorithm and zero domain knowledge beyond the rules.
+
+## 7. MuZero: Planning Without the Rules
+
+AlphaZero still needed the rules — a perfect simulator to walk the tree. **MuZero** (Schrittwieser et al., 2020) removed that last dependence and, in doing so, redefined what "model" means. Three learned functions:
+
+$$
+\text{representation: } h_\theta(o_{1:t}) = z_t,
+\qquad
+\text{dynamics: } g_\theta(z, a) = (z', \hat{r}),
+\qquad
+\text{prediction: } f_\theta(z) = (p, v),
+$$
+
+and MCTS runs entirely in the **latent space** $z$ — the tree's "states" are hidden vectors no human can decode. The training signal is the radical part: the latent model is *never trained to predict observations*. Unrolled $K$ steps along real trajectories, it is trained only so that at every imagined depth the predicted **reward, value, and policy** match reality (search-improved targets, as in AlphaZero). The model is free to be wrong about everything about the world that does not bear on those three quantities — pixels, irrelevant dynamics, all of it. This is **value equivalence**: a model need only be equivalent to the environment *with respect to the computations the planner performs*. It is the cleanest available answer to model exploitation — there is no "fidelity" for the planner to diverge from, because fidelity to decisions is the only training target — and the counterpoint to the reconstruction-based world models of Chapter 23 (which bet, instead, that predicting the world buys representations and generality that value-targets alone cannot; the tension between those two bets is a live research front).
+
+Results: AlphaZero-level Go/chess/shogi *without rules*, then state-of-the-art Atari — the first time one planning agent spanned board games and pixels — and industrial descendants (video-codec optimization; Sampled MuZero for continuous actions; Stochastic MuZero for chance nodes; EfficientZero reaching strong Atari performance from two hours of experience by adding self-supervised consistency losses, a first concession back toward reconstruction).
+
+## 8. Worked Example: a Minimal PETS on Pendulum
+
+An ensemble of probabilistic dynamics models plus CEM-MPC, end to end — the known reward function of Pendulum is queried by the planner, as in PETS proper:
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+
+env = gym.make("Pendulum-v1")
+B, H, POP, ELITE, CEM_IT, PART = 5, 20, 400, 40, 4, 4
+A_MAX = 2.0
+
+def reward_fn(obs, act):
+    # Pendulum's known reward: -(theta^2 + 0.1*thdot^2 + 0.001*a^2)
+    th = torch.atan2(obs[..., 1], obs[..., 0])
+    return -(th**2 + 0.1 * obs[..., 2]**2 + 0.001 * act[..., 0]**2)
+
+class ProbModel(nn.Module):                     # predicts delta-obs
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(4, 200), nn.SiLU(),
+                                 nn.Linear(200, 200), nn.SiLU(),
+                                 nn.Linear(200, 6))       # 3 mu + 3 logvar
+    def forward(self, s, a):
+        out = self.net(torch.cat([s, a], -1))
+        mu, logvar = out.chunk(2, -1)
+        return mu, logvar.clamp(-8, 2)
+
+models = [ProbModel() for _ in range(B)]
+opts = [torch.optim.Adam(m.parameters(), lr=1e-3) for m in models]
+DATA_S, DATA_A, DATA_D = [], [], []
+
+def train_models(epochs=300):
+    S = torch.as_tensor(np.array(DATA_S), dtype=torch.float32)
+    A = torch.as_tensor(np.array(DATA_A), dtype=torch.float32)
+    Dl = torch.as_tensor(np.array(DATA_D), dtype=torch.float32)
+    for m, opt in zip(models, opts):
+        for _ in range(epochs):
+            idx = torch.randint(len(S), (min(256, len(S)),))
+            mu, logvar = m(S[idx], A[idx])
+            # Gaussian NLL on the observed delta
+            loss = ((mu - Dl[idx])**2 / logvar.exp() + logvar).mean()
+            opt.zero_grad(); loss.backward(); opt.step()
+
+def plan(obs):
+    """CEM over H-step action sequences; particle-averaged return."""
+    mean = torch.zeros(H, 1)
+    std = torch.ones(H, 1) * A_MAX / 2
+    for _ in range(CEM_IT):
+        acts = (mean + std * torch.randn(POP, H, 1)).clamp(-A_MAX, A_MAX)
+        total = torch.zeros(POP)
+        for p in range(PART):
+            m = models[np.random.randint(B)]            # one member/particle
+            s = torch.as_tensor(obs, dtype=torch.float32).repeat(POP, 1)
+            with torch.no_grad():
+                for t in range(H):
+                    mu, logvar = m(s, acts[:, t])
+                    s = s + mu + logvar.exp().sqrt() * torch.randn_like(mu)
+                    total += reward_fn(s, acts[:, t]) / PART
+        elite = acts[total.topk(ELITE).indices]
+        mean, std = elite.mean(0), elite.std(0) + 1e-4
+    return float(mean[0, 0])
+
+s, _ = env.reset(seed=0)
+ep_ret, rets = 0.0, []
+for step in range(6_000):
+    if step < 400:
+        a = env.action_space.sample()                    # seed the dataset
+    else:
+        a = np.array([plan(s)], dtype=np.float32)
+    s2, r, term, trunc, _ = env.step(a)
+    DATA_S.append(s); DATA_A.append(a); DATA_D.append(s2 - s)
+    ep_ret += r; s = s2
+    if term or trunc:
+        rets.append(ep_ret); ep_ret = 0.0; s, _ = env.reset()
+        train_models()
+        print(f"step {step:5d}  episodes {len(rets):3d}  "
+              f"last return {rets[-1]:8.1f}")
+```
+
+Expect near-random returns for the first two episodes (400 random steps = two Pendulum episodes of seed data), then an abrupt jump: by episodes 3–5 — some 600–1,000 real steps — returns reach the −120 to −250 band, territory that took SAC roughly 10× longer in Chapter 13. That step-change *is* the model-based value proposition, measured. And its fragilities are equally on display for you to poke at (Exercise 14.7): shrink the ensemble to one deterministic member and watch CEM find and ride its errors; stretch H to 60 and watch compounding blur the plan.
+
+<Pitfall title="Common pitfalls — planning with learned neural models">
+**Model exploitation is the default, not the edge case**: any optimizer against a point-estimate network will find its artifacts; ensembles/uncertainty penalties are load-bearing, not decoration. **Validate the model like an ML artifact**: held-out one-step error, and — more diagnostic — H-step open-loop rollouts against real trajectories; a model can have splendid one-step numbers and useless 20-step rollouts. **Aleatoric/epistemic conflation** (Section 2): sampling where you should penalize lets the planner gamble with hallucinated luck. **Stale models**: retrain as the policy shifts the visitation distribution, or the planner optimizes against last week's world (the tabular "world changed" problem of Chapter 8, continuous edition). **Reward models**: if the reward is learned too, the planner exploits *it* preferentially — reward-model error is worth more to the optimizer than dynamics error (this foreshadows RLHF's central pathology, Chapter 20). **Termination handling in imagination**: rollouts that sail through would-be-terminal states inflate synthetic returns — predict termination or mask, exactly like Chapter 8's `done` in the model table.
+</Pitfall>
+
+## 9. Summary
+
+- Models multiply data and enable foresight; their tax is compounding error ($\epsilon \sum L^k$) plus **model exploitation** — planners are adversaries of their own models. All designs are uncertainty treaties.
+- **Aleatoric** (world noise: sample it) vs. **epistemic** (ignorance: penalize/avoid it); probabilistic heads carry the first, **ensembles** the second.
+- **PILCO**: GP dynamics + analytic moment-matched rollouts + gradients through the model — never plan with a point estimate; ~20 s of experience for cartpole; limited by GP scaling and smoothness.
+- **PETS**: probabilistic ensembles + particle trajectory sampling + CEM-MPC replanning each step — model-free asymptotics at 10–100× less data; compute moved to decision time.
+- **MBPO**: short branched rollouts from real states feeding SAC (synthetic:real ≈ 95:5); the improvement bound's $k$-dependence is why rollouts stay short.
+- **AlphaGo → AlphaZero**: networks make search tractable, search improves networks — GPI with MCTS as improvement operator, from human data to none.
+- **MuZero**: latent dynamics trained only to predict reward/value/policy — **value equivalence**; planning without rules, no fidelity for the planner to exploit; the conceptual counterpoint to reconstruction-based world models (Chapter 23).
+
+## 10. Papers & Further Reading
+
+- **Deisenroth & Rasmussen, "PILCO: A Model-Based and Data-Efficient Approach to Policy Search" (ICML, 2011)** — [mlg.eng.cam.ac.uk/pilco](https://mlg.eng.cam.ac.uk/pub/pdf/DeiRas11.pdf). GP dynamics, moment matching, and the sample-efficiency record that framed the field.
+- **Chua, Calandra, McAllister & Levine, "Deep Reinforcement Learning in a Handful of Trials using Probabilistic Dynamics Models" (NeurIPS, 2018)** — [arxiv.org/abs/1805.12114](https://arxiv.org/abs/1805.12114). PETS: the ensemble/particle/MPC recipe and the ablations that assign credit.
+- **Janner, Fu, Zhang & Levine, "When to Trust Your Model: Model-Based Policy Optimization" (NeurIPS, 2019)** — [arxiv.org/abs/1906.08253](https://arxiv.org/abs/1906.08253). MBPO and the branched-rollout bound.
+- **Silver et al., "Mastering the Game of Go with Deep Neural Networks and Tree Search" (Nature, 2016)** — [doi.org/10.1038/nature16961](https://doi.org/10.1038/nature16961); **"A General Reinforcement Learning Algorithm that Masters Chess, Shogi, and Go through Self-Play" (Science, 2018)** — [doi.org/10.1126/science.aar6404](https://doi.org/10.1126/science.aar6404). AlphaGo; AlphaZero.
+- **Schrittwieser et al., "Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model" (Nature, 2020)** — [doi.org/10.1038/s41586-020-03051-4](https://doi.org/10.1038/s41586-020-03051-4) / [arxiv.org/abs/1911.08265](https://arxiv.org/abs/1911.08265). MuZero.
+- **Grimm, Barreto, Singh & Silver, "The Value Equivalence Principle for Model-Based Reinforcement Learning" (NeurIPS, 2020)** — [arxiv.org/abs/2011.03506](https://arxiv.org/abs/2011.03506). The theory of what MuZero's model is.
+- **Moerland, Broekens, Plaat & Jonker, "Model-Based Reinforcement Learning: A Survey" (Foundations and Trends in ML, 2023)** — [arxiv.org/abs/2006.16712](https://arxiv.org/abs/2006.16712). The map of this entire design space; read after this chapter to place everything.
+- **Ye, Liu, Kurutach, Abbeel & Gao, "Mastering Atari Games with Limited Data" (NeurIPS, 2021)** — [arxiv.org/abs/2111.00210](https://arxiv.org/abs/2111.00210). EfficientZero: MuZero + self-supervised consistency at 100k frames — the sample-efficiency frontier of this lineage.
+
+## 11. Exercises
+
+**14.1 (understand)** Classify along both axes (background vs. decision-time; distribution/sample/latent model): Dyna-Q, PILCO, PETS, MBPO, AlphaZero, MuZero, and Chapter 13's SAC (trick question — justify). Which systems could keep working if the reward function changed at deployment, and why?
+
+**14.2 (derive)** Compounding error: assume true dynamics $f$ and model $\hat f$ with one-step error $\|\hat f(s,a) - f(s,a)\| \le \epsilon$ on-distribution, and both $L$-Lipschitz in $s$. Prove open-loop state deviation after $H$ steps is at most $\epsilon \frac{L^H - 1}{L - 1}$ (or $H\epsilon$ at $L = 1$). Then, with reward $L_r$-Lipschitz, bound the H-step return-estimate error, and compute the bound for $\epsilon = 0.01, L = 1.05, L_r = 1, H \in \{10, 50, 200\}$. At which H does the bound become vacuous for Pendulum-scale returns?
+
+**14.3 (derive)** MBPO's branch length: using Exercise 14.2's machinery plus a policy-shift term $\epsilon_\pi$ (the current policy's divergence from the data-collecting policy), sketch why the branched-rollout return gap scales like $\mathcal{O}\!\left( \frac{\gamma^{k+1}}{(1-\gamma)^2}\epsilon_\pi + \frac{k}{1-\gamma}\epsilon_m \right)$ and derive the optimal $k$ trade-off qualitatively: what makes $k = 0$ suboptimal if the bound says error grows in $k$? (Hint: what does the bound *not* model about the value of on-policy synthetic data?)
+
+**14.4 (derive)** CEM as inference: show that the cross-entropy method's elite-refit step is exactly minimizing $\KL(p_{\text{elite}} \| \mathcal{N}(\mu, \Sigma))$, and that with elite fraction → 0 and infinite samples it performs a soft-to-hard annealing toward the argmax of expected return. What failure mode appears when the return landscape is multimodal and the Gaussian is diagonal? Connect to why MPPI (an exponentially weighted variant) is often preferred on real robots.
+
+**14.5 (understand/derive)** Value equivalence: construct a two-state, two-action MDP and a "wrong" model whose transition probabilities differ from the truth but whose $k$-step reward/value predictions under all policies coincide (Grimm et al.'s construction in miniature). What does your construction say about the claim "MuZero learns a model of the world"?
+
+**14.6 (implement)** Run the mini-PETS code. Log, per episode: mean ensemble disagreement along planned trajectories and realized return. Verify the negative correlation (high-disagreement plans underperform their imagined returns), then add a disagreement penalty (subtract β·std across members from the planning reward) and measure the change in both the exploitation gap and final performance.
+
+**14.7 (implement)** Ablate mini-PETS: (a) B = 1 deterministic model (MSE loss, no sampling); (b) B = 1 probabilistic; (c) full ensemble but H = 60; (d) full but no replanning (execute all H actions). For each, report return curves and one sentence naming the mechanism from Sections 1–4 that the ablation removed.
+
+**14.8 (implement)** Mini-MBPO: reuse Chapter 13's SAC, add the ensemble model, and populate SAC's buffer with k-step branched rollouts (k = 1, 5, 20) from real states at synthetic:real ratio 20:1. Compare real-steps-to-threshold against pure SAC, and show the k = 20 variant's failure mode via the critic's value estimates on synthetic vs. real states.
+
+**14.9 (implement)** AlphaZero-lite: for Connect-Four (or tic-tac-toe if compute-bound), implement self-play MCTS (100 simulations, network-prior UCT) + a small policy/value network trained on search visit-counts and outcomes. Plot Elo (vs. fixed snapshots) over generations. Then halve and double the simulation budget: how does search depth trade against network quality across generations? (You are measuring the GPI operator's strength.)
+
+**14.10 (research)** The reconstruction-vs-value-equivalence tension: MuZero's model ignores observations; Dreamer-class models (Chapter 23) reconstruct them; EfficientZero splits the difference with a latent-consistency loss. Formulate the trade as a hypothesis about *task transfer*: which model type should adapt faster when the reward changes but dynamics don't? When observations gain distractors (a TV in the room)? Design the two-condition experiment, predict outcomes, then check your predictions against the DeepMind Control "distracting suite" literature after Chapter 23.

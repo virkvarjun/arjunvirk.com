@@ -1,0 +1,57 @@
+Every code sample in this book runs on a laptop CPU in minutes, using a deliberately small toolchain. This appendix is the complete setup, the roster of environments the book returns to, and the conventions the code follows — so that any listing in Chapters 1–24 can be pasted into a file and run.
+
+## 1. Setup
+
+Python 3.10+ with three libraries:
+
+```bash
+python -m venv rl-bible && source rl-bible/bin/activate
+pip install numpy torch gymnasium
+```
+
+- **NumPy** carries all tabular work (Parts 0–I): bandits, gridworlds, cliff walking, Dyna, the random walks.
+- **PyTorch** (CPU is sufficient for everything in the book) carries Parts II–IV: DQN, REINFORCE, PPO, SAC, the world-model and imitation demos.
+- **Gymnasium** (the maintained successor of OpenAI Gym) supplies the standard control environments and the interface convention the whole field shares:
+
+```python
+import gymnasium as gym
+env = gym.make("CartPole-v1")
+obs, info = env.reset(seed=0)
+obs, reward, terminated, truncated, info = env.step(action)
+```
+
+The five-tuple deserves one paragraph, because the book harps on it: **`terminated`** means the MDP genuinely ended (pole fell, goal reached) — bootstrap targets there are just $r$; **`truncated`** means the episode was *cut off* (time limit) — the state was not terminal, and correct code bootstraps $\gamma \max_a Q(s', a)$ (or $\gamma V(s')$) through it. Conflating the two is the book's most-repeated bug (Chapters 3, 6, 10, 12, 17): it teaches the agent that time itself is lethal.
+
+## 2. The Book's Environments
+
+**The 4×4 Gridworld (Chapters 3–4)** — built from scratch in a dozen lines (Chapter 3, Section 7): 16 states, 4 actions, −1 per step, two terminal corners. Small enough to solve exactly by linear algebra, which is the point: every later method can be checked against truth here. Variants used in exercises: windy drift, γ below 1.
+
+**Cliff walking (Chapters 6–7)** — 4×12, a −100 cliff along the bottom edge: the canonical stage for on-policy vs. off-policy (SARSA's detour vs. Q-learning's edge-walk) and for traces.
+
+**The mazes and chains (Chapters 8, 15)** — the 6×9 Dyna maze (planning speedup), and the length-N chain (exploration's exponential wall, measured). Both defined inline in their chapters.
+
+**The random walks (Chapters 7, 9)** — 19-state and 1,000-state: prediction-only testbeds where true values are computable, making bias/variance and approximation error *measurable* rather than argued.
+
+**Blackjack (Chapter 5)** — 200 states, model-free Monte Carlo's showcase; built inline (the deck is easier to sample than to integrate).
+
+**Bit-flipping (Chapter 19)** — $n$ bits, flip one per step, match a target string: HER's minimal demonstration (0% → 100% at $n = 15$).
+
+**CartPole-v1 (Chapters 10–12, 16, 17, 18, 22, 24)** — the book's deep-RL workhorse: 4-D state, 2 actions, +1 per step, solved at 475+/500. Cheap enough for multi-seed honesty; rich enough to exhibit DQN's sawtooth, PPO's stability, BC's drift, chunking's open-loop tax. A two-line PD controller ($a = \mathbb{1}[\theta + 0.5\dot\theta > 0]$) serves as the scripted "expert" for the imitation and offline chapters.
+
+**Pendulum-v1 (Chapters 13, 14, 23)** — 3-D observation, 1-D torque in $[-2, 2]$, dense cost: the smallest honest continuous-control task; SAC solves it in minutes, mini-PETS in ~1k steps, the micro-Dreamer from imagination. Returns: random ≈ −1,200; strong ≈ −150.
+
+**Beyond the book's code** — when you outgrow these: MuJoCo locomotion via `gymnasium[mujoco]` (the Chapter 13/14 benchmark suite), MinAtar (Atari's ideas at 1% of the compute), and for Part IV's territory: LIBERO and ManiSkill (manipulation suites), LeRobot (real-hardware stack + datasets), and Isaac Lab (massively parallel sim for locomotion). Links in Chapter 25, Section 7.
+
+## 3. Code Conventions
+
+The listings follow rules chosen for readability-first pedagogy:
+
+- **Self-contained**: each chapter's main listing runs alone — no shared utils file, no config system; the cost is small repetitions (the ε-greedy helper, the MLP factory) that make each listing independently pasteable.
+- **Variables mirror the math**: `gamma`, `alpha`, `td_error`, `q_values`, `adv` — if the code and the equations disagree, one of them has a bug (usually the code).
+- **Seeded but honest**: single-seed results are quoted as "seed 0"; claims about methods are checked across seeds in the exercises. Deep-RL variance is real (Chapter 13's Henderson discussion); the book's numbers are reproduction targets, not guarantees.
+- **CPU-sized**: hyperparameters are tuned for minutes-scale runs, not benchmark leaderboards. Where the small-scale setting changes a conclusion (DQN's instability on CartPole vs. Atari-scale configs), the text says so.
+- **The three checks before believing any run** (assembled from the Pitfall boxes): Is `terminated`/`truncated` handled? Are value magnitudes physical ($\le R_{\max}/(1-\gamma)$)? Is evaluation separated from exploration (greedy/mean-action eval, reported apart from training returns)?
+
+## 4. Debugging Order of Operations
+
+When an implementation misbehaves, the book's accumulated advice, in the order that finds bugs fastest: (1) **environment plumbing** — render or print a full episode; verify rewards, terminals, and action meanings match your beliefs (a wrong action mapping produces beautifully converging garbage). (2) **Scales** — observations and rewards within an order of magnitude of unit scale; value estimates within physical bounds. (3) **The target** — print one Bellman/GAE/relabeled target by hand and recompute it on paper. (4) **Learning signal** — loss decreasing on a *frozen* batch (can the network fit at all?); gradients neither vanishing nor exploding (norms 1e-4–1e1). (5) **Only then** touch hyperparameters — and change one, with seeds, at a time. The uncomfortable truth the book models repeatedly (PPO's shared-trunk fix in Chapter 12, the offline dataset-narrowness discovery in Chapter 17): most "RL doesn't work" is a correctness bug in steps 1–3 wearing a tuning costume.

@@ -1,0 +1,180 @@
+Every algorithm in Part I stored its knowledge in a table: one cell per state, one number per cell. Go has $10^{170}$ states; a robot's camera sees a continuum. Tables are over. From here to the end of the book, value functions are **parameterized functions** — $V_\theta(s)$ or $Q_\theta(s, a)$ with weight vector $\theta \in \R^d$, $d$ vastly smaller than $\lvert \mathcal{S} \rvert$ — and learning means adjusting θ. What we buy is **generalization**: an update at one state now moves the values of similar states, so the agent can be sensible in states it has *never visited*. What we sell is everything Part I proved: with approximation, an update that helps one state can hurt another, the exact Bellman fixed points may be unrepresentable, and — the punchline of this chapter — the field's favorite algorithm can diverge to infinity on a six-line counterexample.
+
+This chapter is where RL's theory meets its practice and both blink. We set up the approximation objective, derive gradient and semi-gradient TD, prove what linear methods guarantee, then stare directly at the **deadly triad** — function approximation, bootstrapping, off-policy data — whose three-way interaction is the fundamental instability of value-based deep RL. Chapter 10's DQN is engineering built to live with the triad; you cannot understand why its tricks exist until you have watched Baird's counterexample blow up.
+
+## 1. The Prediction Objective
+
+Fix a policy π; we want $V_\theta \approx V^\pi$. With fewer parameters than states, perfection is impossible — errors must go *somewhere* — so we need to say which errors matter. Weight them by how often states occur: let $\mu(s)$ be the state distribution under π (the on-policy distribution; for continuing tasks, the stationary distribution). The **mean squared value error**:
+
+$$
+\overline{\mathrm{VE}}(\theta) \;=\; \sum_{s} \mu(s) \left[ V^\pi(s) - V_\theta(s) \right]^2 .
+$$
+
+Two honest remarks about this objective. First, μ's presence is not decoration — *which distribution weights the errors* will turn out to be exactly the hinge on which stability turns (Section 5). Second, minimizing value error is a proxy: what we ultimately want is a good *policy*, and a value function can have large $\overline{\mathrm{VE}}$ yet rank actions correctly (and vice versa). No better general objective is known; keep the caveat in your pocket.
+
+**Where do targets come from?** We cannot descend $\overline{\mathrm{VE}}$ directly — $V^\pi$ is unknown. But Part I built a whole menu of unbiased-or-nearly targets $U_t$ for $V^\pi(S_t)$: the Monte Carlo return $G_t$, the TD target $R_{t+1} + \gamma V_\theta(S_{t+1})$, the n-step and λ returns. General recipe: stochastic gradient descent on the squared error to the target,
+
+$$
+\theta \leftarrow \theta + \alpha \left[ U_t - V_\theta(S_t) \right] \nabla_\theta V_\theta(S_t).
+$$
+
+The template of Chapter 1 one last time, now with a gradient telling the error which *directions in weight space* to flow — and every state whose value depends on the touched weights inherits a piece of the update. That is generalization, mechanically.
+
+## 2. Gradient MC and Semi-Gradient TD
+
+**Monte Carlo with function approximation** uses $U_t = G_t$. Since $\E[G_t \mid S_t] = V^\pi(S_t)$, this is *true* stochastic gradient descent on $\overline{\mathrm{VE}}$ (Exercise 5.4 proved the tabular case; the general case is identical), and it inherits SGD's guarantees: convergence to a local optimum — for linear approximation, the *global* optimum of $\overline{\mathrm{VE}}$. Unbiased, principled, slow: all of MC's variance, now paid per gradient step.
+
+**TD with function approximation** uses $U_t = R_{t+1} + \gamma V_\theta(S_{t+1})$ — and here a subtlety with teeth. The target *contains θ*. Honest gradient descent on the squared TD error would differentiate through both occurrences, but the TD idea is to treat the target as a fixed label — bootstrap now, apologize later. So we differentiate only the prediction, not the target:
+
+$$
+\theta \leftarrow \theta + \alpha \left[ R_{t+1} + \gamma V_\theta(S_{t+1}) - V_\theta(S_t) \right] \nabla_\theta V_\theta(S_t)
+\;=\; \theta + \alpha\, \delta_t\, \nabla_\theta V_\theta(S_t).
+$$
+
+This is **semi-gradient TD(0)** — "semi" because it is *not the gradient of any objective function*. (Differentiating both sides gives the "residual gradient" method, which does descend a true objective — the Bellman *residual* — but converges to the wrong answer in stochastic environments without double sampling, and is slow besides; the field chose semi-gradient and lives with the consequences.) Everything Chapter 6 loved about TD survives: online, incremental, low variance. What does not survive is the guarantee that following the update direction improves anything — semi-gradient TD is a fixed-point iteration wearing SGD's clothes, and its convergence must be re-earned case by case. For the on-policy linear case it can be; beyond that, dragons.
+
+## 3. Linear Methods: What Can Still Be Proven
+
+Represent states by feature vectors $\phi(s) \in \R^d$ and let value be linear in them:
+
+$$
+V_\theta(s) \;=\; \theta^\top \phi(s), \qquad \nabla_\theta V_\theta(s) = \phi(s).
+$$
+
+Semi-gradient TD(0) becomes $\theta \leftarrow \theta + \alpha\,\delta_t\,\phi(S_t)$. Taking expectations under the on-policy distribution, the expected update is affine, $\E[\Delta\theta] = \alpha(b - A\theta)$ with
+
+$$
+A \;=\; \E_\mu\left[ \phi(S_t)\left( \phi(S_t) - \gamma \phi(S_{t+1}) \right)^\top \right],
+\qquad
+b \;=\; \E_\mu\left[ R_{t+1}\, \phi(S_t) \right],
+$$
+
+so if the iteration settles anywhere it settles at the **TD fixed point** $\theta_{\mathrm{TD}} = A^{-1} b$. The landmark result — Tsitsiklis & Van Roy (1997) — is that *on-policy* linear semi-gradient TD converges to $\theta_{\mathrm{TD}}$ with probability 1 (Robbins–Monro steps, ergodic chain), because sampling states from μ makes the matrix $A$ positive definite: the same "updates weighted by the visitation distribution" structure you met in Exercise 6.3, now doing real work. And the fixed point is provably decent:
+
+$$
+\overline{\mathrm{VE}}(\theta_{\mathrm{TD}}) \;\le\; \frac{1}{1 - \gamma}\, \min_\theta \overline{\mathrm{VE}}(\theta).
+$$
+
+Read the bound with both eyes. Comfort: TD's solution is at worst $\frac{1}{1-\gamma}$ times the best any linear function could do — if the features can represent $V^\pi$ well, TD finds something nearly as good. Discomfort: as γ → 1 the bound explodes; bootstrapping *amplifies* representational error by the effective horizon, while MC (which converges to the $\min_\theta$ itself) does not. This is the bias TD's variance discount has always charged, finally priced in closed form. Geometrically, $\theta_{\mathrm{TD}}$ solves a **projected Bellman equation**: the Bellman operator's output usually leaves the representable subspace; TD converges to the fixed point of *(Bellman map, then μ-weighted projection back)* — $V_\theta = \Pi_\mu \mathcal{T}^\pi V_\theta$. The projection is where approximation and bootstrapping shake hands; the weighting μ of that projection is where, off-policy, they will stop shaking.
+
+**Features** decide what "similar states" means, and classical RL developed a craft of building them: polynomials and **Fourier basis** (global, smooth; a strong default for low-dimensional continuous states), **coarse coding** and **tile coding** (overlapping binary receptive fields; sparse, cheap, constant-time — the workhorse of pre-deep RL, still unbeatable for fast experimentation on small control problems), **RBFs** (soft tiles). The craft's limit is the curse again — tiling a 20-dimensional space is hopeless — and its modern resolution is to *learn* the features: $V_\theta$ becomes a neural network, $\nabla_\theta V$ comes from backprop, the semi-gradient updates are unchanged, and all linear-case guarantees are forfeit. The rest of the book pays that bill; this chapter's job is to show the invoice.
+
+<Check q="Semi-gradient TD ignores the θ inside the target. Why not just use the true gradient of the squared TD error — what goes wrong?">
+Two things. First, the true-gradient ("residual gradient") objective — the mean squared Bellman error — has its own pathology in stochastic environments: its gradient contains a product of two expectations over the same next-state distribution, and estimating it without bias needs two independent next-state samples from the same $(s,a)$ ("double sampling"), which the world does not offer. With a single sample it converges to the wrong fixed point. Second, even done right, the Bellman-residual solution is often worse than the TD fixed point in practice, and slower. Semi-gradient's sin (no objective) buys speed and, on-policy, provable convergence; the residual's virtue (a real objective) buys the wrong minimum, slowly.
+</Check>
+
+## 4. Baird's Counterexample: Divergence, Live
+
+Now the demolition. Baird (1995) built the minimal MDP on which semi-gradient TD — off-policy — diverges to infinity. Everything about it is innocent-looking.
+
+**The MDP.** Seven states; two actions. The *dashed* action jumps to one of states 1–6 uniformly; the *solid* action goes to state 7. All rewards are **zero**, γ = 0.99. So $V^\pi = 0$ for every policy — the easiest prediction problem imaginable, and exactly representable.
+
+**The setup.** Behavior policy $b$: dashed with probability 6/7 (so the agent spends its time bouncing among states 1–6). Target policy π: always solid (so every TD target looks at state 7). Features: linear, 8 weights for 7 states, overparameterized in a specific pattern — each of states 1–6 has $V_\theta(s_i) = 2\theta_i + \theta_8$, while state 7 has $V_\theta(s_7) = \theta_7 + 2\theta_8$.
+
+**The explosion.** Run semi-gradient TD(0) with off-policy corrections (importance ratio 7 on solid transitions, 0 on dashed — or equivalently Q-learning-style expected updates under π). The weights do not merely fail to converge: they grow **without bound**, oscillating with exponentially increasing amplitude, on a problem whose answer is "all zeros, which the features can represent."
+
+**Why.** Follow one update cycle. The behavior visits states 1–6 constantly, and their TD target is always $\gamma V_\theta(s_7)$. Suppose $\theta_8$ is slightly positive, making $V_\theta(s_7) = \theta_7 + 2\theta_8$ positive. Every visited state's target exceeds its value, so updates *raise* the weights of states 1–6 — including the **shared** weight $\theta_8$, which each of the six states' updates increments. But raising $\theta_8$ raises $V_\theta(s_7)$ *twice as fast* (its coefficient there is 2), so the target has moved up *more* than the values chasing it. Meanwhile the one state that could correct $V_\theta(s_7)$ — state 7 itself — is *almost never updated under the behavior distribution*. The mismatch is the whole disease: **the updates are weighted by where the behavior goes (μ_b), but the bootstrap targets are evaluated where the target policy goes**, and the projection that made on-policy TD a contraction is now weighted by the wrong distribution. In matrix terms, the expected-update matrix $A$ loses positive definiteness; the iteration $\theta \leftarrow \theta + \alpha(b - A\theta)$ has an eigenvalue in the wrong half-plane, and off it goes. No step size saves you — shrinking α slows the divergence without changing its direction — and even *exact expected* updates (no sampling noise at all) diverge. The instability is in the operator, not the noise.
+
+**The deadly triad**, named by Sutton & Barto: divergence requires all three of
+
+1. **function approximation** (shared weights let updates at some states move values at others),
+2. **bootstrapping** (targets contain the moving estimates),
+3. **off-policy training** (update distribution ≠ target-evaluation distribution).
+
+Delete any leg and stability returns: tabular off-policy Q-learning converges (no shared weights — nothing couples state 7 to the others); MC with approximation converges (targets are returns, not estimates — real SGD); on-policy TD with linear approximation converges (Tsitsiklis & Van Roy — the projection uses the right μ). Keep all three and you are, in general, out of the guaranteed zone. Now notice, with appropriate dread, what DQN is: a neural network (1), trained on TD targets (2), from a replay buffer of stale off-policy experience (3). Deep value-based RL *lives inside the deadly triad*, and Chapter 10 is the story of the engineering — target networks, replay-ratio discipline, double estimators — that makes residence survivable in practice, without ever making it safe in theory.
+
+## 5. Living with the Triad: the Principled Escapes
+
+Before the engineering, the theory's own answers — worth knowing both for research literacy and because their ideas leak into practice.
+
+**Stay on-policy (or near it).** The cheapest fix: sample updates from (approximately) the same distribution the targets are evaluated under. This is one deep reason on-policy actor-critic methods (A2C, PPO — Chapters 11–12) exhibit far fewer value-divergence pathologies than off-policy value learners, and why even DQN implementations quietly benefit from keeping replay data *recent* (a buffer of fresh-ish experience is "less off-policy" than it looks).
+
+**True-gradient methods.** Sutton et al.'s **GTD2/TDC** (2009) construct an actual objective — the mean squared *projected* Bellman error — and descend it with an auxiliary set of weights estimating part of the gradient (a two-timescale scheme dodging the double-sampling problem). Provably convergent off-policy with linear approximation, $\mathcal{O}(d)$ per step. **Emphatic TD** (Sutton, Mahmood & White, 2016) instead reweights updates with "emphasis" so the effective distribution restores positive definiteness. Both are beautiful; neither has displaced semi-gradient methods at scale, where their extra variance and machinery haven't paid for themselves — an honest gap between what theory recommends and what practice runs, still open.
+
+**Fix the target.** If the bootstrap target is computed from a *frozen* copy $\theta^-$ of the weights, updated only every $K$ steps, then within each interval the learner faces a *stationary* supervised regression — no self-reference, no chase. This is the **target network**, and though it converts the divergence into (at worst) oscillation-between-regressions rather than provable convergence, it is the single trick most responsible for making deep value learning work. Born as engineering in DQN, it is best understood from this chapter: *it temporarily deletes leg 2 of the triad.*
+
+## 6. Worked Example: the 1,000-State Random Walk
+
+Scale Chapter 7's random walk to 1,000 states (jumps of up to 100 left/right, uniform; terminals at both ends, rewards ±1) and approximate with **state aggregation** — the bluntest linear features: 10 groups of 100 states, $\phi(s)$ = one-hot group indicator.
+
+```python
+import numpy as np
+
+NS, GROUPS, JUMP = 1000, 10, 100
+G_SIZE = NS // GROUPS
+
+def feat(s):                       # s in 1..NS -> one-hot group vector
+    x = np.zeros(GROUPS)
+    x[(s - 1) // G_SIZE] = 1.0
+    return x
+
+def episode(rng):
+    s, traj = 500, []
+    while True:
+        jump = rng.integers(1, JUMP + 1) * (1 if rng.random() < 0.5 else -1)
+        s2 = s + jump
+        if s2 < 1:   return traj + [(s, -1.0, None)]
+        if s2 > NS:  return traj + [(s, +1.0, None)]
+        traj.append((s, 0.0, s2)); s = s2
+
+def semi_gradient_td(episodes=50_000, alpha=0.01, seed=0):
+    rng = np.random.default_rng(seed)
+    theta = np.zeros(GROUPS)
+    for _ in range(episodes):
+        for (s, r, s2) in episode(rng):
+            v = theta @ feat(s)
+            target = r + (theta @ feat(s2) if s2 is not None else 0.0)
+            theta += alpha * (target - v) * feat(s)      # gamma = 1
+    return theta
+
+theta = semi_gradient_td()
+print(np.round(theta, 2))
+# -> approx [-0.71 -0.47 -0.29 -0.11 0.01 0.14 0.27 0.41 0.54 0.76]
+#    (true group-center values run from -0.86 to +0.86)
+```
+
+The learned step function tracks the true near-linear value function, with two instructive artifacts. Within each group the approximation is constant, so it splits the difference across 100 states — the error is worst at group boundaries: generalization's price, localized. And the outermost groups' values are pulled toward the center relative to the true values, the TD-fixed-point bias in miniature (run gradient MC and the asymmetry shrinks toward the best least-squares step function — Exercise 9.6 quantifies both effects). Swap `feat` for tile coding or a Fourier basis and watch resolution buy accuracy; swap it for a two-layer network and you are doing deep RL, one chapter early, with no safety net and (on this on-policyish problem) no disaster either.
+
+<Pitfall title="Common pitfalls — approximation edition">
+**Divergence is quiet at first.** Baird-style instability at scale looks like values slowly inflating (watch max-Q on held-out states; DQN debugging 101 — an unbounded upward drift is the triad knocking). **Feature scale = effective step size.** With $\theta^\top\phi$, α multiplies $\|\phi\|^2$; unnormalized features make one component dominate learning. Normalize, and prefer sparse features (tile coding) for large stable α. **The interference axis.** Generalization has a dark twin: an update helping state $s$ *interferes* with states sharing features — in neural networks this appears as catastrophic forgetting of rarely revisited regions, and replay (Chapter 10) exists substantially to fight it. **γ near 1 amplifies everything**: the $\frac{1}{1-\gamma}$ in the quality bound is real; long-horizon value approximation is intrinsically harder, and shortening the horizon (or reward shaping, Chapter 1) is sometimes the honest fix.
+</Pitfall>
+
+## 7. Summary
+
+- Approximation replaces the table with $V_\theta$; the objective is $\overline{\mathrm{VE}}$, errors weighted by the state distribution μ — and the choice of μ is where stability lives.
+- Gradient MC = true SGD on $\overline{\mathrm{VE}}$: converges (linear: to the global optimum). **Semi-gradient TD** ignores the θ in the target — not a gradient method, but fast, online, and on-policy-linear provably convergent (Tsitsiklis & Van Roy) to the **TD fixed point** of the *projected* Bellman equation, with quality bound $\frac{1}{1-\gamma} \min \overline{\mathrm{VE}}$.
+- Features are the craft: Fourier, coarse/tile coding, RBFs; neural networks learn them and void the warranties.
+- **Baird's counterexample**: zero-reward, exactly-representable, and semi-gradient off-policy TD diverges — updates weighted by the behavior's distribution, targets evaluated under the target's, shared weights carrying the mismatch to infinity. **The deadly triad**: approximation + bootstrapping + off-policy; any two are safe, all three are not.
+- Escapes: stay near-on-policy; true-gradient (GTD/TDC) and emphatic methods (principled, niche); freeze targets (the target network — deleting leg 2 temporarily) — the bridge to DQN.
+
+## 8. Papers & Further Reading
+
+- **Sutton, "Learning to Predict by the Methods of Temporal Differences" (1988)** — [doi.org/10.1007/BF00115009](https://doi.org/10.1007/BF00115009). Already introduced linear TD and anticipated much of this chapter.
+- **Tsitsiklis & Van Roy, "An Analysis of Temporal-Difference Learning with Function Approximation" (IEEE TAC, 1997)** — [doi.org/10.1109/9.580874](https://doi.org/10.1109/9.580874). The convergence theorem, the projected Bellman equation, the $\frac{1}{1-\gamma}$ bound — the most important theory paper in value approximation.
+- **Baird, "Residual Algorithms: Reinforcement Learning with Function Approximation" (ICML, 1995)** — [doi.org/10.1016/B978-1-55860-377-6.50013-X](https://doi.org/10.1016/B978-1-55860-377-6.50013-X). The counterexample *and* the residual-gradient alternative, with its double-sampling problem, in one paper.
+- **Sutton, Maei, Precup, Bhatnagar, Silver, Szepesvári & Wiewiora, "Fast Gradient-Descent Methods for Temporal-Difference Learning with Linear Function Approximation" (ICML, 2009)** — [doi.org/10.1145/1553374.1553501](https://doi.org/10.1145/1553374.1553501). GTD2 and TDC: convergent off-policy TD via a true objective and two timescales.
+- **Sutton, Mahmood & White, "An Emphatic Approach to the Problem of Off-policy Temporal-Difference Learning" (JMLR, 2016)** — [jmlr.org/papers/v17/14-488.html](https://jmlr.org/papers/v17/14-488.html). Reweighting updates to restore stability; the other principled road.
+- **van Hasselt, Doron, Strub, Hessel, Sonnerat & Modayil, "Deep Reinforcement Learning and the Deadly Triad" (2018)** — [arxiv.org/abs/1812.02648](https://arxiv.org/abs/1812.02648). The triad measured *empirically inside DQN*: which legs, at which strengths, actually cause divergence at scale. The bridge from this chapter's theory to the next chapter's systems.
+- **Sutton & Barto, Chs. 9–11** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). On-policy prediction and control with approximation, and the full off-policy Chapter 11 this chapter distilled.
+
+## 9. Exercises
+
+**9.1 (understand)** Tabular methods are the special case $\phi(s) = $ one-hot(s). Verify that semi-gradient TD(0) then reduces exactly to tabular TD(0), and explain in one sentence why the deadly triad's first leg is absent (which states share weights?).
+
+**9.2 (understand)** Rank for stability, with reasons: (a) linear semi-gradient TD, on-policy; (b) linear semi-gradient TD, off-policy; (c) linear gradient MC, off-policy (with importance weighting); (d) neural semi-gradient TD, on-policy; (e) neural Q-learning from a replay buffer. Which legs of the triad does each stand on?
+
+**9.3 (derive)** Derive the $A$ and $b$ of Section 3 from the linear semi-gradient update, and show $A = \Phi^\top D (I - \gamma P^\pi) \Phi$ where Φ stacks feature vectors and $D = \mathrm{diag}(\mu)$. Prove $A$ is positive definite when μ is the stationary distribution of $P^\pi$ (key lemma: for stationary μ, $\|P^\pi v\|_{D} \le \|v\|_D$), and exhibit how off-policy μ breaks the lemma.
+
+**9.4 (derive)** Prove the quality bound $\overline{\mathrm{VE}}(\theta_{\mathrm{TD}}) \le \frac{1}{1-\gamma}\min_\theta \overline{\mathrm{VE}}(\theta)$ from the projected-Bellman fixed point: use $\|V_{\theta_{\mathrm{TD}}} - V^\pi\|_\mu \le \|\Pi V^\pi - V^\pi\|_\mu + \|\Pi \mathcal{T} V_{\theta_{\mathrm{TD}}} - \Pi \mathcal{T} V^\pi\|_\mu$, non-expansiveness of the μ-projection, and the contraction of $\mathcal{T}^\pi$ in $\|\cdot\|_\mu$. (Careful: the norm is $\sqrt{1-\gamma^2}$-flavored in the tight version — deriving the loose $\frac{1}{1-\gamma}$ is enough.)
+
+**9.5 (implement)** Build Baird's counterexample exactly as specified (7 states, the 8-weight features, behavior 6/7 dashed, target all-solid, γ = 0.99, expected updates) and plot all eight weights for 1,000 sweeps from $\theta_0 = (1,1,1,1,1,1,10,1)$. Confirm divergence; then (a) verify tabular features converge, (b) verify on-policy training (behavior = target) converges, (c) verify MC targets converge. You have amputated each leg of the triad in turn.
+
+**9.6 (implement)** On the 1,000-state walk, compare semi-gradient TD(0), gradient MC, and n-step semi-gradient TD (n = 10) under state aggregation: plot final $\sqrt{\overline{\mathrm{VE}}}$ (compute true values by DP on the known chain) and the per-group bias pattern. Then swap in tile coding (50 tilings, width 200) and report the improvement — features vs. algorithm, disentangled.
+
+**9.7 (implement)** Reproduce a miniature of van Hasselt et al. (2018): neural semi-gradient Q-learning on cliff walking with a 2-hidden-layer MLP on (x, y) input, replay buffer, no target network. Track max-Q over a fixed probe set. Find hyperparameters (γ close to 1, high replay ratio, aggressive α) that induce soft divergence — values climbing over 1,000× the true max — then add a target network (K = 100) and watch it stabilize. Write two paragraphs on which triad leg you weakened.
+
+**9.8 (derive)** The target network computes targets from θ⁻ frozen for K steps. Model the idealized limit: each phase exactly solves the regression $\min_\theta \E_\mu[(r + \gamma V_{\theta^-}(s') - V_\theta(s))^2]$. Show the phase map is $V_{k+1} = \Pi_\mu \mathcal{T}^\pi V_k$ — fitted value iteration — and that its convergence needs $\Pi_\mu \mathcal{T}^\pi$ to be a contraction, which the μ-mismatch can still break. Conclude precisely what target networks do and do not fix.
+
+**9.9 (research)** GTD-family methods are provably convergent yet rarely used at scale, where semi-gradient + target networks rule. Read the deadly-triad paper's experiments and propose an explanation grounded in *variance* and *fixed-point quality*, then design the experiment that would settle whether TDC's fixed point or DQN's empirical fixed point is better on one Atari game. What would you measure, and what confound must you control?
+
+**9.10 (research)** The interference axis (updates at one state harming another) is the neural-network analog of shared linear weights, but no accepted metric quantifies it at scale. Propose one (e.g., expected dot product of per-example gradients under μ), compute what it predicts for tabular, tile-coded, and MLP features on the 1,000-state walk, and relate high interference to both faster early learning and triad instability. (This is an open research area — "loss of plasticity" and "churn" in the recent literature are neighboring probes of the same axis.)

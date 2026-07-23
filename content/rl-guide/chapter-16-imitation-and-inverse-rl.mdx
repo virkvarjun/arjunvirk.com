@@ -1,0 +1,215 @@
+Everything so far assumed someone wrote down a reward function. But for most tasks worth automating — driving through a city, folding laundry, setting a table — nobody can. The honest reward ("drive well") is unspecifiable; the specifiable proxies ("minimize jerk + lane deviation + ...") get hacked (Chapter 1). Yet demonstrations are everywhere: every human commute is an expert trajectory. **Imitation learning** asks the direct question — can we learn the policy from demonstrations? — and **inverse RL** asks the deeper one: can we learn *the reward the demonstrator was optimizing*, and re-optimize it ourselves?
+
+This chapter matters twice over. Once on its own terms: behavioral cloning's compounding-error pathology, DAgger's fix, maximum-entropy IRL, and GAIL are foundational results with clean mathematics. And once as the load-bearing wall of Part IV: the vision-language-action models of Chapter 24 — the current frontier of robot learning — are, at their core, *behavioral cloning at scale*, and every one of this chapter's failure modes (covariate shift above all) reappears there with a billion parameters attached. Learn the disease in two dimensions before meeting it in a robot kitchen.
+
+## 1. The Setting
+
+An expert (human teleoperator, scripted controller, another agent) provides demonstrations $\mathcal{D} = \{\tau_1, \dots, \tau_M\}$, trajectories of state–action pairs from the expert policy $\pi^*$. No reward is observed. Two problems:
+
+- **Imitation learning:** recover a policy $\hat\pi$ whose *behavior* matches the expert's.
+- **Inverse RL (IRL):** recover a reward $\hat r$ under which the expert's behavior is (near-)optimal — then obtain the policy by RL on $\hat r$.
+
+Why ever take the indirect road? Because the reward is the *most transferable* description of a task: a policy for "drive to work" breaks when the map changes; the reward ("reach destination, obey law, don't alarm passengers") survives. IRL also promises to *outperform* a suboptimal demonstrator — optimize the inferred intent better than its author did. The price, as we'll see, is a fundamentally ill-posed inference problem.
+
+## 2. Behavioral Cloning, and Why It Drifts
+
+**Behavioral cloning (BC)** is the obvious move: treat $\mathcal{D}$ as a supervised dataset and fit
+
+$$
+\hat\pi \;=\; \argmin_\pi \sum_{(s, a) \in \mathcal{D}} \ell\left( \pi(s),\, a \right)
+$$
+
+— cross-entropy for discrete actions, MSE or NLL for continuous. It is old (ALVINN steered a real van down highways in 1989 on a 3-layer network), simple, and *the right first thing to try*, always. It also carries a structural defect no amount of data-per-state fixes.
+
+Supervised learning's guarantee holds **on the training distribution**: $\hat\pi$ matches the expert on states *the expert visits*. But at execution time, the learner's own small errors move it to states slightly off the expert's manifold — states the dataset never covered, where the learner has no supervision, where it errs *more*, drifting further, into states still less covered. The feedback loop between acting and data (Chapter 1's defining feature of RL) is here a doom loop: **covariate shift compounds**. A car cloned from perfect-center-lane driving has never seen "slightly off center, heading for the shoulder" — the expert never got there — so the first drift is met with an undefined response, and the second drift is larger.
+
+Ross & Bagnell (2010) made this a theorem. If $\hat\pi$ errs with probability at most ε on the expert's state distribution, its expected cost over a horizon of $T$ steps satisfies
+
+$$
+J(\hat\pi) \;\le\; J(\pi^*) + \mathcal{O}\!\left( T^2 \epsilon \right),
+$$
+
+and the bound is *tight* — there are MDPs achieving it. Compare the supervised intuition of $T\epsilon$ (ε errors per step, $T$ steps): the extra factor of $T$ is the drift — one early error can forfeit *all* remaining steps' performance, because the learner leaves the region where its error guarantee applies at all. (The proof constructs exactly that: a first mistake transitions to an absorbing "off-manifold" region where the policy was never trained; expected cost = probability of early error × remaining horizon. Notice this is the same compounding-distribution-shift mathematics as TRPO's $(1-\gamma)^{-2}$ bound — Chapter 12, Exercise 12.9 — the two literatures proving the same theorem about acting under a shifted distribution.)
+
+## 3. DAgger: Buying Back the Linear Rate
+
+If the disease is "no labels where the learner goes," the cure is blunt: **get labels where the learner goes.** DAgger — Dataset Aggregation (Ross, Gordon & Bagnell, 2011):
+
+<Pseudocode title="DAgger">
+<L>Initialize $\mathcal{D} \leftarrow$ expert demos; train $\hat\pi_1$ by BC</L>
+<L>For $i = 1, 2, \dots, N$:</L>
+<L i={1}>Run $\hat\pi_i$ in the environment; collect the visited states $s_1, \dots, s_k$</L>
+<L i={1}>Query the expert for labels: $\mathcal{D}_i = \{ (s_j,\, \pi^*(s_j)) \}$ $\quad$ (expert labels, learner's states)</L>
+<L i={1}>$\mathcal{D} \leftarrow \mathcal{D} \cup \mathcal{D}_i$; retrain $\hat\pi_{i+1}$ by BC on $\mathcal{D}$</L>
+<L>Return the best $\hat\pi_i$ on validation</L>
+</Pseudocode>
+
+The learner drives; the expert back-seat-labels. Each round adds supervision precisely on the current policy's own visitation distribution, and the no-regret analysis (DAgger is Follow-the-Leader on a sequence of losses defined by the evolving state distributions) yields
+
+$$
+J(\hat\pi) \;\le\; J(\pi^*) + \mathcal{O}\!\left( T \epsilon \right) + o(1)
+$$
+
+— the supervised rate, restored. The practice matches the theory (DAgger-trained drone controllers flew forest trails on which BC crashed), and so does the cost: **the expert must be interactively available**, labeling thousands of states including mid-mistake states a human demonstrator finds unnatural to label ("what would you do *here*?" — while pointed at a tree). Where interactive querying is too expensive, the field's practical middle path is **noise injection** (DART): perturb the expert during demonstration so the dataset itself contains recovery behavior — covariate shift attacked at collection time. File that trick; teleoperated robot datasets (Chapter 24) use exactly it.
+
+<Check q="DAgger queries the expert at learner-visited states. Why is labeling those states enough — why doesn't the learner also need expert *trajectories* through them?">
+Because a policy is a per-state object: to act well at s, the learner needs the right action at s, not the history that brought the expert there. Once every state the learner actually visits carries a correct label, the learner's own distribution becomes self-consistent — it errs at rate ε on the states it sees, and the compounding argument collapses back to Tε. What *would* require expert trajectories is learning from observation alone (no action labels) or long-horizon strategy the state doesn't summarize (partial observability — where "state" isn't Markov and history matters, the per-state argument genuinely weakens; Chapter 24's action-chunking is partly a response).
+</Check>
+
+## 4. Inverse RL: the Ill-Posed Inverse
+
+Now the deeper road: infer $\hat r$ such that the expert is optimal under it. Immediately, a wall: the problem is **fundamentally underdetermined**. The zero reward $r \equiv 0$ makes *every* policy optimal, expert included; so does any constant, and any potential-based shaping (Chapter 1) of any solution. Worse, finitely many demonstrations are consistent with infinitely many meaningfully different rewards. All of IRL is choosing a principle to break the ties.
+
+**Feature matching (apprenticeship learning; Abbeel & Ng, 2004).** Assume $r(s) = w^\top \phi(s)$, and note that a policy's value is then linear in its **feature expectations** $\mu(\pi) = \E_\pi\left[ \sum_t \gamma^t \phi(s_t) \right]$. If a candidate policy matches the expert's feature expectations, $\|\mu(\hat\pi) - \mu(\pi^*)\| \le \delta$, its value is within $\|w\|\,\delta$ of the expert's *under every reward in the class* — you never need the true $w$. Their max-margin algorithm alternates: find the $w$ that most separates the expert from all policies so far (a quadratic program), run RL under that $w$, add the new policy, repeat. Clean, and limited by linearity and the margin machinery.
+
+**Maximum-entropy IRL (Ziebart et al., 2008)** gives the modern resolution of the ambiguity: among all trajectory distributions consistent with the demonstrations' feature expectations, commit to the one with **maximum entropy** — no structure beyond what the data forces (Jaynes' principle, imported into control). The constrained maximization has a closed-form family: trajectory probabilities exponential in reward,
+
+$$
+p(\tau) \;=\; \frac{\exp\left( \sum_t r_w(s_t, a_t) \right)}{Z(w)},
+$$
+
+— high-reward trajectories exponentially preferred, suboptimality allowed but priced. Fitting $w$ by maximum likelihood on the demonstrations gives a gradient with a beautiful reading:
+
+$$
+\nabla_w \mathcal{L} \;=\; \underbrace{\E_{\mathcal{D}}\left[ \textstyle\sum_t \phi(s_t) \right]}_{\text{demonstrated features}} \;-\; \underbrace{\E_{p_w}\left[ \textstyle\sum_t \phi(s_t) \right]}_{\text{features the current reward predicts}},
+$$
+
+— *raise the reward on what the expert did; lower it on what the current reward says agents would do* — a contrastive update whose fixed point is exact feature matching, with the max-ent tie-break built in. (You have seen this distribution before: it is Chapter 13's max-ent optimal policy — soft-optimal control and max-ent IRL are one framework viewed from opposite ends, the deep symmetry Levine's tutorial formalizes.) The gradient's second term is the trouble: computing $\E_{p_w}$ means *solving the (soft) RL problem under the current reward* — dynamic programming per gradient step in the original (which routed 25,000 real taxi trips well enough to predict drivers' routes), and the central cost that deep successors (Guided Cost Learning; Finn et al., 2016) attack with sample-based approximations. That expense — an RL solve inside an inference loop — is IRL's congenital burden, and the direct motivation for the next idea.
+
+## 5. GAIL: Skip the Reward, Match the Occupancy
+
+Ho & Ermon (2016) proved a reframing theorem: the composition "IRL (with a convex reward regularizer ψ), then RL on the recovered reward" is equivalent to a single primal problem —
+
+$$
+\min_\pi\; \psi^*\!\left( \rho_\pi - \rho_{\pi^*} \right) \;-\; \lambda H(\pi),
+$$
+
+where $\rho_\pi(s, a)$ is the policy's **occupancy measure** (discounted state–action visitation) and $\psi^*$ a convex conjugate. In words: *imitation is occupancy-measure matching* — the reward was never the point; it was a dual variable. Choosing ψ so that $\psi^*$ becomes the Jensen–Shannon divergence yields **Generative Adversarial Imitation Learning**: a discriminator $D_\omega(s, a)$ trained to distinguish expert pairs from policy pairs; a policy trained (by TRPO/PPO — Chapter 12's machinery, verbatim) with reward $-\log D_\omega(s, a)$; the GAN game's equilibrium is $\rho_\pi = \rho_{\pi^*}$.
+
+$$
+\min_\pi \max_\omega\;\; \E_{\pi}\left[ \log D_\omega(s, a) \right] + \E_{\pi^*}\left[ \log\left( 1 - D_\omega(s, a) \right) \right] - \lambda H(\pi).
+$$
+
+Note precisely what is and isn't happening: the discriminator's confusion signal is a *reward proxy* that guides the policy toward expert-like state–action visitation — using environment interaction, but no true reward and no interactive expert. GAIL cloned MuJoCo locomotion from a handful of trajectories where BC needed far more, and spawned a large family (AIRL recovering transferable rewards; f-divergence variants; DrQ-style regularizations). Its inherited GAN pathologies are real: discriminator overfitting with few demos, training instability, and reward-proxy hacking (the policy finds states the discriminator happens to score as expert-ish) — plus the quiet cost that adversarial imitation needs *lots of environment interaction*, trading BC's data problem for an RL sample-complexity problem.
+
+## 6. Choosing, and Combining, the Tools
+
+The decision guide practice actually uses:
+
+- **Reward specifiable + simulator cheap → plain RL** (Parts II–III).
+- **Expert data plentiful, task horizon short or recovery easy → BC**, always tried first; its simplicity and offline-ness are unbeatable when they suffice. Scale the data and add recovery-rich collection (DART-style noise, multiple operators) before adding algorithm.
+- **Interactive expert available → DAgger**-family; the query cost is usually worth the $T^2 \to T$ upgrade when it's affordable (scripted experts in simulation: always).
+- **Need to outperform or transfer the demonstrator's intent → IRL** (max-ent lineage) — the only member that yields a *portable task description*.
+- **Moderate demos + cheap interaction + no reward → GAIL**-family.
+- **Everything real at once → combine**: BC-initialize then RL-fine-tune (AlphaGo's exact recipe, and the dominant pattern in robot learning — Chapters 22, 24, 25); demonstrations seeded into replay buffers (DDPGfD, DQfD); BC as a regularizer inside offline RL (TD3+BC — Chapter 17, one page away). The modern robot-learning stack is best read as *imitation for competence, RL for surpassing it*.
+
+## 7. Worked Example: Watching BC Drift, Watching DAgger Not
+
+CartPole with a scripted expert (a two-line PD controller balances it indefinitely — our stand-in for the human), and deliberately *few, noiseless* demonstrations to expose the pathology:
+
+```python
+import numpy as np, torch, torch.nn as nn, gymnasium as gym
+
+env = gym.make("CartPole-v1")
+
+def expert(s):
+    # PD controller on pole angle + angular velocity: a perfect demonstrator
+    return int(s[2] + 0.5 * s[3] > 0)
+
+def rollout(policy, n_steps=10_000, collect=False):
+    states, actions, returns, ep = [], [], [], 0.0
+    s, _ = env.reset(seed=np.random.randint(10**6))
+    for _ in range(n_steps):
+        a = policy(s)
+        if collect:
+            states.append(s); actions.append(a)
+        s, r, term, trunc, _ = env.step(a)
+        ep += r
+        if term or trunc:
+            returns.append(ep); ep = 0.0
+            s, _ = env.reset()
+    return states, actions, returns
+
+def make_net():
+    return nn.Sequential(nn.Linear(4, 64), nn.ReLU(),
+                         nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 2))
+
+def bc_train(net, S, A, epochs=200):
+    S_t = torch.as_tensor(np.array(S), dtype=torch.float32)
+    A_t = torch.as_tensor(A)
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    for _ in range(epochs):
+        idx = torch.randperm(len(S_t))[:256]
+        loss = nn.functional.cross_entropy(net(S_t[idx]), A_t[idx])
+        opt.zero_grad(); loss.backward(); opt.step()
+
+def as_policy(net):
+    return lambda s: int(net(torch.as_tensor(s, dtype=torch.float32)).argmax())
+
+# --- Behavioral cloning from N expert steps
+for n_demo in [200, 1000, 5000]:
+    S, A, _ = rollout(expert, n_demo, collect=True)
+    net = make_net(); bc_train(net, S, A)
+    _, _, rets = rollout(as_policy(net), 5_000)
+    print(f"BC from {n_demo:5d} expert steps -> avg return {np.mean(rets):6.1f}")
+
+# --- DAgger: same total label budget as BC-1000, but labels on OUR states
+net = make_net()
+S, A, _ = rollout(expert, 200, collect=True)          # 200 seed demos
+bc_train(net, S, A)
+for it in range(4):                                    # 4 rounds x 200 labels
+    Si, _, _ = rollout(as_policy(net), 200, collect=True)
+    S += Si
+    A += [expert(s) for s in Si]                       # expert labels our states
+    bc_train(net, S, A)
+_, _, rets = rollout(as_policy(net), 5_000)
+print(f"DAgger, 1000 total labels     -> avg return {np.mean(rets):6.1f}")
+```
+
+The signature you should see: BC from 200 steps is mediocre; even from 1,000–5,000 *flawless* expert steps, BC's returns are erratic across seeds — the expert is so good that its data occupies a razor-thin manifold (pole nearly vertical, always), and the clone meets its first wobble alone. DAgger, on the **same 1,000-label budget**, is reliably near-perfect: its final 800 labels sit exactly on the wobbles the learner actually produces. Distribution of supervision, not amount, was the binding constraint — the whole chapter in four printed lines.
+
+<Pitfall title="Common pitfalls — imitation in practice">
+**Evaluating on the expert's states.** Held-out action-prediction accuracy is the *wrong metric* — it measures performance on the expert's distribution, precisely where the theorem says nothing breaks; a clone can score 99% and crash instantly (drift lives in the other 1%'s consequences). Evaluate by rollout, always. **Multimodal demonstrations**: two demonstrators passing an obstacle on opposite sides make the MSE-fit continuous policy split the difference — into the obstacle. Use cross-entropy over discretized actions, mixture/energy policies, or (Chapter 24) diffusion policies; this single issue drives much of modern action-head design. **Expert-state leakage**: demonstrators use information the robot won't have (haptics, peripheral vision); clone on the *deployment* observation space or the policy learns to depend on ghosts. **GAIL's discriminator on tiny data** memorizes trajectories — regularize hard, and prefer state-only discriminators when action noise differs between expert and learner. **The silent success case**: BC works far more often than the theory suggests when environments are self-stabilizing (errors damp instead of compound) — knowing *which regime your task is in* is the first diagnostic question.
+</Pitfall>
+
+## 8. Summary
+
+- No reward function → learn from demonstrations: imitate the policy (IL) or infer the reward (IRL — the transferable object).
+- **BC** = supervised learning on demos; fails by **covariate shift**: errors move the learner off the expert's manifold where no supervision exists; $\mathcal{O}(T^2\epsilon)$ regret, tight — one early mistake can cost the whole horizon.
+- **DAgger** restores $\mathcal{O}(T\epsilon)$ by aggregating expert labels *on the learner's states*; costs an interactive expert; noise-injected demonstration (DART) is the collection-time approximation.
+- **IRL is ill-posed** ($r \equiv 0$ explains everything); feature matching bounds value differences without knowing the reward; **max-ent IRL** breaks ties by entropy — $p(\tau) \propto e^{R(\tau)}$, contrastive gradient (demo features minus model features), an RL solve inside each step; dual to max-ent RL (Chapter 13).
+- **GAIL**: IRL∘RL collapses to occupancy-measure matching; a discriminator supplies the reward proxy, PPO/TRPO the optimizer; sample-hungry and GAN-fragile, demo-efficient.
+- Practice combines: BC-init + RL fine-tune, demos in replay, BC-regularized offline RL — the exact spine of modern robot learning, where this chapter's theorems meet Chapter 24's models.
+
+## 9. Papers & Further Reading
+
+- **Pomerleau, "ALVINN: An Autonomous Land Vehicle in a Neural Network" (NeurIPS, 1988)** — [papers.nips.cc](https://papers.nips.cc/paper_files/paper/1988/hash/812b4ba287f5ee0bc9d43bbf5bbe87fb-Abstract.html). BC drives a van, 1988; the field's origin story.
+- **Ross & Bagnell, "Efficient Reductions for Imitation Learning" (AISTATS, 2010)** — [proceedings.mlr.press/v9/ross10a.html](https://proceedings.mlr.press/v9/ross10a.html) — and **Ross, Gordon & Bagnell, "A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning" (AISTATS, 2011)** — [arxiv.org/abs/1011.0686](https://arxiv.org/abs/1011.0686). The $T^2$ lower bound; DAgger and its no-regret analysis.
+- **Laskey, Lee, Fox, Dragan & Goldberg, "DART: Noise Injection for Robust Imitation Learning" (CoRL, 2017)** — [arxiv.org/abs/1703.09327](https://arxiv.org/abs/1703.09327). Covariate shift attacked at collection time.
+- **Abbeel & Ng, "Apprenticeship Learning via Inverse Reinforcement Learning" (ICML, 2004)** — [doi.org/10.1145/1015330.1015430](https://doi.org/10.1145/1015330.1015430). Feature expectations and max-margin IRL.
+- **Ziebart, Maas, Bagnell & Dey, "Maximum Entropy Inverse Reinforcement Learning" (AAAI, 2008)** — [aaai.org/papers/aaai08-227](https://cdn.aaai.org/AAAI/2008/AAAI08-227.pdf). The max-ent resolution; taxi routes as data.
+- **Finn, Levine & Abbeel, "Guided Cost Learning: Deep Inverse Optimal Control via Policy Optimization" (ICML, 2016)** — [arxiv.org/abs/1603.00448](https://arxiv.org/abs/1603.00448). Max-ent IRL with neural costs and sample-based partition functions.
+- **Ho & Ermon, "Generative Adversarial Imitation Learning" (NeurIPS, 2016)** — [arxiv.org/abs/1606.03476](https://arxiv.org/abs/1606.03476). The occupancy-matching theorem and GAIL. (Transferable-reward successor: Fu, Luo & Levine, "AIRL," 2018 — [arxiv.org/abs/1710.11248](https://arxiv.org/abs/1710.11248).)
+- **Osa et al., "An Algorithmic Perspective on Imitation Learning" (Foundations and Trends in Robotics, 2018)** — [arxiv.org/abs/1811.06711](https://arxiv.org/abs/1811.06711). The survey; the map on which this chapter is one path.
+
+## 10. Exercises
+
+**16.1 (understand)** Sort into "errors compound" vs. "errors damp," and hence BC-hostile vs. BC-friendly: (a) highway lane keeping; (b) hovering a quadrotor in still air; (c) chess from grandmaster games; (d) pouring water; (e) walking a bipedal robot. For one compounding case, name the physical stabilizer you could add to move it to the damping column (this is a real robot-design lever).
+
+**16.2 (understand)** Why can't DAgger's interactive queries be replaced by just collecting 10× more expert demonstrations? Answer in terms of *whose* state distribution receives labels, and give the one condition under which more demos genuinely do substitute (hint: what if demonstrations already cover the learner's mistakes?).
+
+**16.3 (derive)** Prove the BC compounding bound in the hard-instance form: construct an MDP + expert where a learner with per-state error ε on the expert distribution suffers $J(\hat\pi) - J(\pi^*) = \Omega(T^2 \epsilon)$ (use an absorbing failure state entered on any error, cost 1 per step thereafter). Then show why the learner's error rate *off* the expert distribution appears nowhere in the assumptions — and everywhere in the outcome.
+
+**16.4 (derive)** Feature matching: prove that if $\|\mu(\hat\pi) - \mu(\pi^*)\|_2 \le \delta$ then $\lvert J_w(\hat\pi) - J_w(\pi^*) \rvert \le \|w\|_2\, \delta$ for every reward $r = w^\top\phi$. Then exhibit the limitation: two policies with identical feature expectations but qualitatively different behavior, for a feature map that misses the distinguishing variable.
+
+**16.5 (derive)** Derive max-ent IRL's gradient: with $p_w(\tau) = e^{R_w(\tau)}/Z(w)$ and $R_w = \sum_t w^\top \phi(s_t)$, differentiate the demonstration log-likelihood and obtain the two-term contrastive form, identifying $\nabla_w \log Z$ as the model's expected features. Where exactly does an RL/soft-DP solve enter, and what does Guided Cost Learning substitute for it?
+
+**16.6 (derive)** GAIL's foundation: show that the occupancy measure ρ_π determines π uniquely (π(a|s) = ρ(s,a)/Σ_a ρ(s,a)) and that J(π) = Σ ρ_π · r is linear in ρ. Then follow Ho & Ermon's Proposition 3.2 at a high level: why does composing max-ent IRL (regularizer ψ) with RL yield occupancy matching under ψ*? One paragraph, no measure theory required.
+
+**16.7 (implement)** Run the Section 7 code, 10 seeds. Report the variance of BC-5000 vs. DAgger-1000. Then instrument the *drift itself*: record the distribution of pole angles visited by the expert vs. each learner; plot histograms. The BC learner's histogram should be visibly wider — you are looking at covariate shift directly.
+
+**16.8 (implement)** Implement DART for the same setup: collect 1,000 expert-labeled steps while injecting ε-random actions into the expert's *execution* (the expert still labels its intended action). Sweep injection rate ∈ $\{0, 0.1, 0.3, 0.5\}$ and compare to BC and DAgger. Explain the U-shape you find in terms of coverage vs. label distribution corruption.
+
+**16.9 (implement)** Multimodality minicase: modify the expert to randomly commit, per episode, to "lean recovery left" vs. "lean recovery right" (two valid strategies distinguishable only by history). Train (a) a unimodal Gaussian BC policy on the *continuous* action interpretation and (b) a categorical policy. Demonstrate the mean-collapse failure of (a) and explain which pitfall-section entry you have reproduced. (Keep this experiment in mind for Diffusion Policy, Chapter 24.)
+
+**16.10 (research)** The $T^2 \to T$ upgrade required interactive expert access. Recent robot-learning practice claims a middle path: *offline* datasets so large and recovery-rich (thousands of operators, forced perturbations) that BC's effective ε off-manifold stays small. Formalize this claim: define a coverage measure of a dataset relative to a learner's reachable tube, conjecture a regret bound interpolating T and T², and specify the experiment (dataset ablations on a manipulation benchmark) that would test it. Then read the data-scaling sections of the OpenVLA/π0 papers (Chapter 24) and note which parts of your conjecture they already probe.

@@ -1,0 +1,339 @@
+The bandit agent of Chapter 2 lives in an eternal present: every pull faces the same situation, and nothing it does changes what it will face next. Almost nothing you actually care about is like that. Move a chess piece and you face a different board; grasp a mug badly and it is now tipping. The moment actions have *consequences* — the moment they change the situation — you need a mathematical object that tracks situations, transitions, and long-run outcomes. That object is the Markov decision process, and it is the stage on which every remaining chapter of this book is set.
+
+This chapter is the most purely mathematical of Part 0, and deliberately so: the definitions made here — return, policy, value function, Bellman equation — are used on every page that follows. We build each one slowly, prove the identities that matter, and end by *exactly solving* a small gridworld, no learning required, so you can see what all the machinery is for. If you internalize one thing, make it the Bellman expectation equation: a one-line statement of temporal consistency from which, it is hardly an exaggeration to say, the entire field unfolds.
+
+## 1. The Markov Property
+
+Start with the word "state." Chapter 1 used it informally as "the situation the agent observes." The formal requirement that makes the theory go is the **Markov property**: a state summarizes the past so completely that the past adds nothing. Formally, a state process has the Markov property if for all histories,
+
+$$
+\Pr\left( S_{t+1} = s', R_{t+1} = r \,\middle|\, S_t, A_t \right)
+\;=\;
+\Pr\left( S_{t+1} = s', R_{t+1} = r \,\middle|\, S_0, A_0, R_1, \dots, S_t, A_t \right).
+$$
+
+The future is conditionally independent of the past, given the present. "The state is a sufficient statistic of the history."
+
+Whether the Markov property holds is a property of *how you define the state*, not of the world. A chess board position is Markov for the rules of chess (the legal moves and outcomes depend only on the position — castling rights and repetition counts included, which is why the official "position" includes them). A single camera frame of a flying ball is *not* Markov: it hides the velocity, and the next frame is not predictable from position alone. Stack two consecutive frames and velocity becomes inferable; the stacked pair is (nearly) Markov. This is precisely why DQN feeds Atari agents four stacked frames (Chapter 10), and the gap between what the agent sees and a true Markov state is the defining problem of robotics (Section 8, and Part IV passim).
+
+<Check q="A poker player's 'state' is defined as the cards they hold plus all bets made so far. Is this state Markov?">
+It is Markov *for the player's information*, but the game is not fully observable: the opponents' hidden cards make the true state of the game unknown. Conditioning on the visible information, the future is as predictable as it can be from any summary of the visible history — that makes it the belief-relevant observation of a partially observable process (a POMDP, Section 8), not a Markov state of the full game. The distinction between "Markov given what I can see" and "Markov, period" is exactly the observability gap.
+</Check>
+
+## 2. The Markov Decision Process
+
+A **finite Markov decision process** is a tuple $(\mathcal{S}, \mathcal{A}, p, \gamma)$:
+
+- $\mathcal{S}$: a finite set of states;
+- $\mathcal{A}(s)$: a finite set of actions available in each state;
+- $p$: the **dynamics function**, the complete physics of the world,
+$$
+p(s', r \mid s, a) \;=\; \Pr\left( S_{t+1} = s', R_{t+1} = r \,\middle|\, S_t = s, A_t = a \right),
+$$
+a proper probability distribution: $\sum_{s'} \sum_r p(s', r \mid s, a) = 1$ for every $(s, a)$;
+- $\gamma \in [0, 1]$: the discount factor, whose job Section 4 explains.
+
+Everything else you will ever need is a marginal or expectation of $p$. The **state-transition function**:
+
+$$
+P(s' \mid s, a) \;=\; \sum_{r} p(s', r \mid s, a),
+$$
+
+the **expected reward function**:
+
+$$
+r(s, a) \;=\; \E\left[ R_{t+1} \mid S_t = s, A_t = a \right] \;=\; \sum_{r} r \sum_{s'} p(s', r \mid s, a),
+$$
+
+and occasionally the three-argument $r(s, a, s') = \E[R_{t+1} \mid S_t = s, A_t = a, S_{t+1} = s']$. Many texts define an MDP as $(\mathcal{S}, \mathcal{A}, P, r, \gamma)$ directly; the two presentations are interchangeable, and we will use whichever is cleaner in context.
+
+The word *finite* buys us clean theory (sums instead of integrals, maxima attained, matrices invertible); Part II onward trades it away for continuous states and neural networks, keeping the same equations with integrals understood. The word *Markov* is what makes $p$ well-defined at all: only because the state screens off history can a memoryless function give the full distribution over what happens next.
+
+**Our running example: the 4×4 Gridworld.** Sixteen cells. The agent starts anywhere, moves North, South, East, or West; moves that would leave the grid leave the agent in place. Two opposite corner cells are terminal. Every transition costs $-1$ reward until termination — so maximizing return means escaping fast. Deterministic dynamics: $p(s', r \mid s, a)$ puts probability 1 on the single outcome. This little world (it is Example 4.1 of Sutton & Barto) will follow us through Chapter 8; small enough to solve by hand, rich enough to watch every algorithm work.
+
+<Figure caption="Fig 3.1, The 4×4 Gridworld. Shaded corners are terminal; every step costs −1; bumping a wall wastes the step. The numbers are the optimal values V*(s) — the negative of the fewest steps out.">
+<svg width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="4 by 4 gridworld with optimal values">
+  <rect x="10" y="10" width="280" height="280" fill="none" stroke="#111" strokeWidth="1.4" />
+  <g stroke="#111" strokeWidth="0.8">
+    <line x1="80" y1="10" x2="80" y2="290" /><line x1="150" y1="10" x2="150" y2="290" /><line x1="220" y1="10" x2="220" y2="290" />
+    <line x1="10" y1="80" x2="290" y2="80" /><line x1="10" y1="150" x2="290" y2="150" /><line x1="10" y1="220" x2="290" y2="220" />
+  </g>
+  <rect x="10" y="10" width="70" height="70" fill="#e5e5e3" />
+  <rect x="220" y="220" width="70" height="70" fill="#e5e5e3" />
+  <g fontSize="14" fill="#111" fontFamily="et-book, Palatino, Georgia, serif" textAnchor="middle">
+    <text x="45" y="50">0</text><text x="115" y="50">−1</text><text x="185" y="50">−2</text><text x="255" y="50">−3</text>
+    <text x="45" y="120">−1</text><text x="115" y="120">−2</text><text x="185" y="120">−3</text><text x="255" y="120">−2</text>
+    <text x="45" y="190">−2</text><text x="115" y="190">−3</text><text x="185" y="190">−2</text><text x="255" y="190">−1</text>
+    <text x="45" y="260">−3</text><text x="115" y="260">−2</text><text x="185" y="260">−1</text><text x="255" y="260">0</text>
+  </g>
+</svg>
+</Figure>
+
+## 3. Episodes, Returns, and the Absorbing-State Trick
+
+The agent's objective is cumulative reward, formalized as the **return**. In an **episodic** task ending at terminal time $T$:
+
+$$
+G_t \;=\; R_{t+1} + R_{t+2} + \cdots + R_T.
+$$
+
+In a **continuing** task there is no $T$, and the plain sum may diverge — an agent earning +1 per step forever has infinite return under any policy, and "maximize infinity" ranks nothing. The fix is **discounting**: with $\gamma \in [0, 1)$,
+
+$$
+G_t \;=\; R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots \;=\; \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}.
+$$
+
+If rewards are bounded, $\lvert R \rvert \le R_{\max}$, the series converges absolutely: $\lvert G_t \rvert \le R_{\max} \sum_k \gamma^k = \frac{R_{\max}}{1 - \gamma}$. That bound, $\frac{R_{\max}}{1-\gamma}$, recurs constantly — it is the scale of every value function, and the $\frac{1}{1-\gamma}$ factor is the "effective horizon": with $\gamma = 0.99$, rewards about 100 steps out still carry meaningful weight; with $\gamma = 0.9$, about 10 steps. Choosing γ *is* choosing how far ahead your agent cares.
+
+Three readings of γ, all useful: an *economic* one (reward tomorrow is worth γ of reward today — interest rates); a *probabilistic* one (the process terminates with probability $1 - \gamma$ each step, and $G_t$ is the undiscounted return of that randomly truncated process — Exercise 3.3); and a *pragmatic* one (γ shrinks the variance of returns and, in Chapter 4, drives the contraction that makes everything converge; practitioners often tune γ below 1 even in episodic tasks purely for this).
+
+The recursion that powers the whole book falls straight out of the definition:
+
+$$
+G_t \;=\; R_{t+1} + \gamma \left( R_{t+2} + \gamma R_{t+3} + \cdots \right) \;=\; R_{t+1} + \gamma\, G_{t+1}.
+$$
+
+Return now equals immediate reward plus discounted return from the next step. Memorize this line; the Bellman equations are its expectations.
+
+Finally, the two task types unify. Convert any episodic task to a continuing one by making termination mean entering an **absorbing state** that transitions only to itself with reward 0 forever. Then the discounted sum equals the finite episodic sum (with $\gamma = 1$ allowed if episodes end with probability 1), and one set of equations serves both. We use this convention silently from now on: terminal states have value zero by construction.
+
+## 4. Policies and Value Functions
+
+A **policy** $\pi(a \mid s)$ maps each state to a probability distribution over actions — the agent's complete behavioral specification. Given a policy, the MDP's randomness and the policy's randomness together make the trajectory a well-defined stochastic process, and we can ask the question at the center of the field: *how good is it to be somewhere, behaving like this?*
+
+The **state-value function** of policy π:
+
+$$
+V^\pi(s) \;=\; \E_\pi\left[ G_t \,\middle|\, S_t = s \right]
+\;=\; \E_\pi\left[ \sum_{k=0}^{\infty} \gamma^k R_{t+k+1} \,\middle|\, S_t = s \right],
+$$
+
+and the **action-value function**, which additionally pins the first action:
+
+$$
+Q^\pi(s, a) \;=\; \E_\pi\left[ G_t \,\middle|\, S_t = s, A_t = a \right].
+$$
+
+($\E_\pi$ means: actions sampled from π, transitions from $p$, forever.) The two interconvert by one step of averaging or lookahead:
+
+$$
+V^\pi(s) = \sum_a \pi(a \mid s)\, Q^\pi(s, a),
+\qquad
+Q^\pi(s, a) = \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma V^\pi(s') \right].
+$$
+
+The first says: the value of a state is the policy-weighted average of its action values. The second says: the value of an action is the expected immediate reward plus the discounted value of where you land. Substituting either into the other gives the Bellman equations of the next section.
+
+Why two functions? $V^\pi$ is enough to *evaluate*, but acting greedily with respect to $V^\pi$ requires a model (you must imagine where each action leads — the second equation above). $Q^\pi$ bakes the one-step lookahead into the function itself: greedy action selection is just $\argmax_a Q(s, a)$, no model needed. That single convenience is why model-free control (Chapters 5–13) runs on $Q$, and why the letter Q may be the most famous letter in RL.
+
+**The advantage function**, $A^\pi(s, a) = Q^\pi(s, a) - V^\pi(s)$, measures how much better action $a$ is than the policy's average behavior in $s$. It is zero in expectation under π (Exercise 3.5), positive exactly for actions worth deviating to, and it will be the central quantity of the policy-gradient chapters (11–12).
+
+## 5. The Bellman Expectation Equations
+
+We now derive the identity that everything else in this book either solves, approximates, or samples. Start from the value definition, use the return recursion $G_t = R_{t+1} + \gamma G_{t+1}$, and unpack the expectation one step:
+
+$$
+\begin{aligned}
+V^\pi(s)
+&= \E_\pi\left[ R_{t+1} + \gamma G_{t+1} \,\middle|\, S_t = s \right] \\[2pt]
+&= \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma\, \E_\pi\left[ G_{t+1} \mid S_{t+1} = s' \right] \right] \\[2pt]
+&= \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma\, V^\pi(s') \right].
+\end{aligned}
+$$
+
+The step that deserves scrutiny is the last one: replacing $\E_\pi[G_{t+1} \mid S_{t+1} = s', S_t = s, A_t = a, R_{t+1} = r]$ with $V^\pi(s')$. That is legal *only because of the Markov property* — given $S_{t+1} = s'$, the future return's distribution is independent of how we arrived, so conditioning on $(s, a, r)$ changes nothing. No Markov, no Bellman equation; this is where the assumption earns its keep.
+
+The result is the **Bellman expectation equation** for $V^\pi$:
+
+$$
+V^\pi(s) \;=\; \sum_a \pi(a \mid s) \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma V^\pi(s') \right]
+\qquad \text{for all } s \in \mathcal{S},
+$$
+
+and its twin for action values:
+
+$$
+Q^\pi(s, a) \;=\; \sum_{s', r} p(s', r \mid s, a) \left[ r + \gamma \sum_{a'} \pi(a' \mid s')\, Q^\pi(s', a') \right].
+$$
+
+<Figure caption="Fig 3.2, Backup diagrams for V^π (left) and Q^π (right). Open circles are states, dots are actions. Value flows backward: each parent's value is the weighted average of one-step lookaheads through its children — π weights the action fan-out, p weights the state fan-out.">
+<svg width="430" height="200" viewBox="0 0 430 200" role="img" aria-label="Backup diagrams for state and action value functions">
+  <g fontFamily="et-book, Palatino, Georgia, serif" fontSize="12" fill="#111">
+    <circle cx="100" cy="25" r="9" fill="none" stroke="#111" strokeWidth="1.3" />
+    <text x="120" y="29" fontStyle="italic">s</text>
+    <line x1="94" y1="32" x2="55" y2="70" stroke="#111" strokeWidth="1" />
+    <line x1="100" y1="34" x2="100" y2="70" stroke="#111" strokeWidth="1" />
+    <line x1="106" y1="32" x2="145" y2="70" stroke="#111" strokeWidth="1" />
+    <text x="55" y="58" fontStyle="italic">π</text>
+    <circle cx="55" cy="75" r="4" fill="#111" /><circle cx="100" cy="75" r="4" fill="#111" /><circle cx="145" cy="75" r="4" fill="#111" />
+    <line x1="52" y1="79" x2="35" y2="115" stroke="#111" strokeWidth="1" />
+    <line x1="58" y1="79" x2="75" y2="115" stroke="#111" strokeWidth="1" />
+    <text x="30" y="102" fontStyle="italic">p</text>
+    <circle cx="35" cy="122" r="7" fill="none" stroke="#111" strokeWidth="1.1" />
+    <circle cx="75" cy="122" r="7" fill="none" stroke="#111" strokeWidth="1.1" />
+    <text x="18" y="155" fontStyle="italic">s′</text>
+    <text x="60" y="180" fontSize="13">V backup</text>
+    <circle cx="330" cy="25" r="4" fill="#111" />
+    <text x="345" y="29" fontStyle="italic">s, a</text>
+    <line x1="326" y1="29" x2="290" y2="65" stroke="#111" strokeWidth="1" />
+    <line x1="334" y1="29" x2="370" y2="65" stroke="#111" strokeWidth="1" />
+    <text x="288" y="50" fontStyle="italic">p</text>
+    <circle cx="290" cy="72" r="8" fill="none" stroke="#111" strokeWidth="1.2" />
+    <circle cx="370" cy="72" r="8" fill="none" stroke="#111" strokeWidth="1.2" />
+    <line x1="285" y1="79" x2="270" y2="112" stroke="#111" strokeWidth="1" />
+    <line x1="295" y1="79" x2="310" y2="112" stroke="#111" strokeWidth="1" />
+    <text x="258" y="100" fontStyle="italic">π</text>
+    <circle cx="270" cy="118" r="4" fill="#111" /><circle cx="310" cy="118" r="4" fill="#111" />
+    <text x="250" y="152" fontStyle="italic">a′</text>
+    <text x="305" y="180" fontSize="13">Q backup</text>
+  </g>
+</svg>
+</Figure>
+
+Three ways to read the Bellman equation, in ascending abstraction:
+
+1. **Consistency check.** It is a self-consistency condition: the value at $s$ must agree with the values one step downstream. Any function violating it at some state is *not* the value function of π. TD learning (Chapter 6) is nothing but nudging estimates toward satisfying it, one sampled transition at a time.
+2. **A linear system.** For fixed π, the equation is linear in the $\lvert \mathcal{S} \rvert$ unknowns $V^\pi(s)$. In matrix form, stacking values into a vector $V \in \R^{\lvert \mathcal{S} \rvert}$, with $P^\pi_{ss'} = \sum_a \pi(a \mid s) P(s' \mid s, a)$ and $r^\pi_s = \sum_a \pi(a \mid s) r(s, a)$:
+$$
+V = r^\pi + \gamma P^\pi V
+\quad \Longleftrightarrow \quad
+V = \left( I - \gamma P^\pi \right)^{-1} r^\pi.
+$$
+The inverse exists whenever $\gamma$ is below 1: $P^\pi$ is a stochastic matrix, its spectral radius is 1, so $\gamma P^\pi$ has spectral radius $\gamma$ below 1 and $I - \gamma P^\pi$ is invertible (Neumann series: $(I - \gamma P^\pi)^{-1} = \sum_{k \ge 0} (\gamma P^\pi)^k$ — which is also exactly the "sum of discounted rewards over all paths" reading). Policy evaluation is, in principle, one matrix inversion at cost $\mathcal{O}(\lvert\mathcal{S}\rvert^3)$ — Section 7 does it numerically for the gridworld.
+3. **A fixed point.** Define the **Bellman expectation operator** $\mathcal{T}^\pi$ acting on any value-function candidate $V$: $(\mathcal{T}^\pi V)(s) = \sum_a \pi(a \mid s) \sum_{s',r} p(s', r \mid s, a) [r + \gamma V(s')]$. The Bellman equation says precisely $V^\pi = \mathcal{T}^\pi V^\pi$: the true value function is the fixed point of $\mathcal{T}^\pi$. Chapter 4 proves $\mathcal{T}^\pi$ is a γ-contraction, so the fixed point is unique and iterating $\mathcal{T}^\pi$ from anywhere converges to it. That theorem is the bedrock under dynamic programming, TD, and (in spirit) DQN.
+
+## 6. Optimal Policies and the Bellman Optimality Equations
+
+Evaluation done; now the point of it all — finding the *best* behavior. Order policies by their value functions: $\pi \ge \pi'$ iff $V^\pi(s) \ge V^{\pi'}(s)$ for **every** state $s$. This is a partial order (two policies can each win somewhere), so the following fact, the fundamental theorem of MDPs, is not obvious:
+
+> For any finite MDP, there exists a policy $\pi^*$ that is at least as good as every other policy in every state simultaneously. All optimal policies share one value function $V^*(s) = \max_\pi V^\pi(s)$ and one action-value function $Q^*(s, a) = \max_\pi Q^\pi(s, a)$, and at least one optimal policy is deterministic.
+
+(The proof route: Chapter 4 shows the Bellman optimality operator has a unique fixed point $V^*$ and that acting greedily with respect to $V^*$ attains it — existence by construction. Take the theorem on credit until then.) Pause on how strong this is: no trade-offs. In a finite MDP you never have to choose which states to be good in; one policy dominates everywhere. And the existence of a *deterministic* optimum tells you stochasticity is never necessary for optimality in a fully observed MDP — randomness in policies earns its keep only for exploration (during learning), under partial observability, or against adaptive opponents.
+
+The optimal value functions obey their own Bellman equations. An optimal policy, at state $s$, must select an action achieving the max over $Q^*$ — intuitively, "behave optimally now, given that you will behave optimally later." Formally, the **Bellman optimality equations**:
+
+$$
+V^*(s) \;=\; \max_a \sum_{s', r} p(s', r \mid s, a)\left[ r + \gamma V^*(s') \right],
+$$
+
+$$
+Q^*(s, a) \;=\; \sum_{s', r} p(s', r \mid s, a)\left[ r + \gamma \max_{a'} Q^*(s', a') \right].
+$$
+
+Structurally identical to the expectation equations with one lethal change: the policy-weighted average over actions became a **max**. That max makes the system *nonlinear* — no matrix inversion, no closed form. Everything from Chapter 4 to Chapter 25 is, at bottom, a strategy for solving or approximating this nonlinear system: dynamic programming iterates it, Q-learning samples it, DQN fits it with a neural network, and MuZero learns the $p$ inside it.
+
+Given $Q^*$, optimal behavior is trivial: $\pi^*(s) = \argmax_a Q^*(s, a)$ — the greedy policy is optimal, no lookahead, no model, no farsightedness required, because $Q^*$ already *contains* the future. This is the sense in which value functions solve credit assignment: all the long-term consequences have been compressed into a number per action.
+
+<Check q="The Bellman expectation equation for a fixed policy is a linear system; the optimality equation is not. What exactly broke the linearity, and why does it matter algorithmically?">
+The max over actions. A max of linear functions is piecewise-linear and convex, not linear — so the system of equations in the unknowns $V^*(s)$ cannot be written as $V = r + \gamma P V$ for any fixed matrix $P$ and solved by inversion. Algorithmically it means optimal control needs iteration (value iteration, policy iteration) rather than one linear solve — though each iteration, as Chapter 4 shows, is still cheap and provably convergent. (One exception: the max can be moved into a linear *program*, which is the third classical exact method.)
+</Check>
+
+## 7. Worked Example: Solving the Gridworld Exactly
+
+Let's make every abstraction above concrete. Take the 4×4 gridworld and the *uniform random* policy: $\pi(a \mid s) = 1/4$ for all four moves, everywhere; $\gamma = 1$ (episodic, so allowed). Because dynamics and policy are known, $V^\pi$ is just the linear system from Section 5, and we can solve it exactly:
+
+```python
+import numpy as np
+
+N = 4                       # grid side; states 0..15, 0 and 15 terminal
+TERMINAL = {0, 15}
+ACTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]   # N, S, W, E
+
+def step(s, a):
+    """Deterministic gridworld dynamics: returns (s', r)."""
+    if s in TERMINAL:
+        return s, 0.0                          # absorbing, reward 0
+    r, c = divmod(s, N)
+    dr, dc = ACTIONS[a]
+    nr, nc = r + dr, c + dc
+    if not (0 <= nr < N and 0 <= nc < N):      # bump: stay in place
+        nr, nc = r, c
+    return nr * N + nc, -1.0
+
+# Build P^pi (16x16) and r^pi (16,) for the uniform random policy
+P = np.zeros((N * N, N * N))
+r = np.zeros(N * N)
+for s in range(N * N):
+    for a in range(4):
+        s2, rew = step(s, a)
+        P[s, s2] += 0.25
+        r[s] += 0.25 * rew
+
+# Terminal rows: absorbing with zero reward already handled by step().
+# Solve (I - gamma * P) V = r with gamma = 1. The system is singular on
+# absorbing states (V_terminal appears as V = 0 + V), so pin them to 0
+# by solving only over non-terminal states.
+free = [s for s in range(N * N) if s not in TERMINAL]
+A = np.eye(len(free)) - P[np.ix_(free, free)]   # gamma = 1
+V = np.zeros(N * N)
+V[free] = np.linalg.solve(A, r[free])
+
+print(V.reshape(N, N).round(1))
+```
+
+The output:
+
+```text
+[[  0.  -14. -20. -22.]
+ [-14. -18. -20. -20.]
+ [-20. -20. -18. -14.]
+ [-22. -20. -14.   0.]]
+```
+
+Under aimless wandering, the center cells expect to blunder around for ~20 steps before stumbling out. Two lessons in these numbers. First, *this is what $V^\pi$ means operationally* — run the random policy from the cell next to a terminal corner a million times, average the returns, and you will measure $-14.0$. Second, compare with Fig 3.1's optimal values ($0$ to $-3$): the gap between $V^\pi$ and $V^*$ is the improvement that control algorithms exist to capture. Chapter 4 will close that gap for this exact grid, iteratively, and you should run its code against this solution as a check.
+
+Note also what the code needed that a learning agent will not have: the loop `for s in range(16), for a in range(4)` — a full sweep over the state space using the known `step` function. When the model $p$ is unknown (Chapter 5 onward) or the state space has $10^{170}$ states (Go) rather than 16, exact solution dies, and sampling and approximation take over. The equations survive; only the method of solving them changes.
+
+## 8. Partial Observability: the POMDP
+
+One honest complication before we go. Real agents rarely see the state. A robot gets pixels, joint encoders, maybe a wrist force sensor — a window, not the world. The formal model is the **partially observable MDP**: an MDP $(\mathcal{S}, \mathcal{A}, p, \gamma)$ plus an observation set $\Omega$ and observation model $O(o \mid s', a)$, with the agent receiving $O_t$, never $S_t$.
+
+The classical theory says: a POMDP is an MDP over **belief states** — the posterior $b_t(s) = \Pr(S_t = s \mid O_{1:t}, A_{1:t-1})$ is itself Markov, updated by Bayes' rule after each observation, and all our machinery applies to belief space. The catch is that belief space is a continuous simplex over $\mathcal{S}$, so "just solve the belief MDP" is computationally hopeless except for tiny problems (exact POMDP planning is PSPACE-hard even for finite horizons).
+
+Practice therefore approximates the belief with learned memory: recurrent networks whose hidden state $h_t$ summarizes $o_{1:t}$ (R2D2, Chapter 10's recurrent cousin), stacked frames (a fixed-window belief proxy), or the latent states of world models — Chapter 23's RSSM is best understood as a *learned, compressed belief state*. We flag partial observability now, treat everything as fully observed through Part II for clarity, and pay the debt properly in Part IV, where it is unavoidable.
+
+<Pitfall title="Common pitfalls — modeling sins that no algorithm survives">
+The MDP you write down, not the world, is what your agent optimizes. The recurring sins: **hidden state** — omitting a variable the dynamics depend on (ball velocity, motor temperature) makes transitions look random, caps performance, and silently breaks every convergence result resting on the Markov property; **wrong discount** — γ = 0.99 at 50 Hz control is a 2-second effective horizon, far too short to value a grasp that pays off in 10 seconds (scale γ with the control frequency); **reward-per-step sign errors** — a positive per-step reward in a task with escape-able episodes teaches the agent to *not terminate* (the classic "agent runs in circles forever" bug); **time-limit confusion** — if episodes are cut at 1,000 steps for convenience, bootstrapping *as if* the cut were a true terminal state corrupts values (treat timeouts as non-terminal by bootstrapping $V(s_{1000})$; Chapter 6 returns to this).
+</Pitfall>
+
+## 9. Summary
+
+- A state is **Markov** when it screens off history: $\Pr(S_{t+1}, R_{t+1} \mid S_t, A_t)$ needs nothing older. Markov-ness is a property of your state *design*.
+- A finite MDP is $(\mathcal{S}, \mathcal{A}, p, \gamma)$ with dynamics $p(s', r \mid s, a)$; $P(s' \mid s,a)$ and $r(s,a)$ are its marginals.
+- The **return** $G_t = \sum_k \gamma^k R_{t+k+1}$ is bounded by $R_{\max}/(1-\gamma)$; $1/(1-\gamma)$ is the effective horizon; $G_t = R_{t+1} + \gamma G_{t+1}$ is the master recursion. Absorbing states unify episodic and continuing tasks.
+- $V^\pi(s) = \E_\pi[G_t \mid S_t = s]$ and $Q^\pi(s,a)$ add a pinned first action; they interconvert by one step of averaging/lookahead; $A^\pi = Q^\pi - V^\pi$.
+- **Bellman expectation equation**: $V^\pi(s) = \sum_a \pi(a \mid s) \sum_{s',r} p(s',r \mid s,a)[r + \gamma V^\pi(s')]$ — a consistency condition, a linear system solvable as $V = (I - \gamma P^\pi)^{-1} r^\pi$, and the fixed point of the operator $\mathcal{T}^\pi$.
+- **Bellman optimality equations** swap the average for a max, becoming nonlinear; $\pi^*(s) = \argmax_a Q^*(s,a)$ — greedy on $Q^*$ is optimal, which is why $Q$ matters so much.
+- In finite MDPs an optimal policy exists that dominates in *every* state, and a deterministic one suffices.
+- POMDPs model partial observability; beliefs restore Markov-ness at exponential cost; practice substitutes learned memory. 
+
+## 10. Papers & Further Reading
+
+- **Bellman, "A Markovian Decision Process" (Journal of Mathematics and Mechanics, 1957)** — [jstor.org/stable/24900506](https://www.jstor.org/stable/24900506) — and his book *Dynamic Programming* (Princeton, 1957). The birth of the framework and of the phrase "curse of dimensionality." Historical reading, but Section 5's equations are on his pages.
+- **Howard, *Dynamic Programming and Markov Processes* (MIT Press, 1960)** — [mit.edu press archive](https://mitpress.mit.edu/9780262080095/dynamic-programming-and-markov-processes/). Introduced policy iteration; the earliest recognizably modern MDP text.
+- **Puterman, *Markov Decision Processes: Discrete Stochastic Dynamic Programming* (Wiley, 1994)** — [doi.org/10.1002/9780470316887](https://doi.org/10.1002/9780470316887). The mathematical reference: every existence theorem this chapter waved at, proved in full generality (countable states, undiscounted criteria, semi-MDPs). Consult, don't read cover to cover.
+- **Sutton & Barto, Ch. 3** — [incompleteideas.net/book/the-book-2nd.html](http://incompleteideas.net/book/the-book-2nd.html). The presentation this chapter's conventions follow, with more examples and the pole-balancing formulation.
+- **Kaelbling, Littman & Cassandra, "Planning and Acting in Partially Observable Stochastic Domains" (Artificial Intelligence, 1998)** — [doi.org/10.1016/S0004-3702(98)00023-X](https://doi.org/10.1016/S0004-3702(98)00023-X). The canonical POMDP paper: belief-state MDPs, exact algorithms, and why they are hopeless beyond tiny problems.
+- **Szepesvári, *Algorithms for Reinforcement Learning* (Morgan & Claypool, 2010)** — [sztaki.hu/~szcsaba/papers/RLAlgsInMDPs.pdf](https://sites.ualberta.ca/~szepesva/papers/RLAlgsInMDPs.pdf). Sixty dense, rigorous pages from MDP definitions to function approximation; the best short bridge between this book's Parts 0–I and the theory literature (revisited in Chapter 21).
+
+## 11. Exercises
+
+**3.1 (understand)** For each proposed state, say whether it is (approximately) Markov for the task, and if not, name the hidden variable: (a) blackjack — your card total, dealer's visible card, and whether you hold a usable ace; (b) pole balancing — cart position and pole angle only; (c) a thermostat — current room temperature, for a room whose radiator takes 10 minutes to heat up; (d) Go — the current board position plus whose turn it is (careful: think about repetition rules).
+
+**3.2 (understand)** An MDP has rewards bounded in $[-1, 1]$ and $\gamma = 0.95$. Give the tightest possible bounds on $V^\pi(s)$ for any policy. How do the bounds change if rewards lie in $[0, 1]$? What does this tell you about comparing "reward scales" across environments?
+
+**3.3 (derive)** Prove the termination interpretation of discounting: let the environment terminate at each step with probability $1 - \gamma$ (independently), delivering reward 0 forever after, and let $\tilde{G}_t$ be the *undiscounted* return of this modified process. Show $\E[\tilde{G}_t] = \E[\sum_k \gamma^k R_{t+k+1}]$ for any fixed reward sequence, hence for any policy.
+
+**3.4 (derive)** Derive the Bellman expectation equation for $Q^\pi$ from scratch, mirroring Section 5's derivation for $V^\pi$, and state exactly where the Markov property is used. Then verify the two interconversion identities of Section 4 are consistent with both Bellman equations (substitute each into the other).
+
+**3.5 (derive)** Show that $\E_{a \sim \pi(\cdot \mid s)}\left[ A^\pi(s, a) \right] = 0$ for every state, and that a policy is optimal if and only if $\max_a A^{\pi}(s, a) = 0$ in every state. (The second half is a compact restatement of the Bellman optimality condition — worth doing slowly.)
+
+**3.6 (derive)** In the 4×4 gridworld with the uniform random policy, verify the Bellman expectation equation numerically at one state: take the cell adjacent to the top-left terminal (value $-14.0$), enumerate its four action outcomes, and confirm $-14 = \frac{1}{4}\sum_a [r + V(s')]$ using the solved values printed in Section 7.
+
+**3.7 (implement)** Modify the Section 7 code to compute $V^\pi$ for γ = 0.9 (now the full 16-state system $(I - \gamma P)V = r$ is nonsingular — solve it without pinning terminals and check the terminal values come out 0 anyway). Compare the value surface to γ = 1: which states change most, and why?
+
+**3.8 (implement)** Add a "wind" to the gridworld: with probability 0.2 the agent is pushed one extra cell East (walls still block). Rebuild $P^\pi$ and re-solve. Explain the asymmetry that appears in the value function of the *symmetric* random policy.
+
+**3.9 (derive)** Prove that if two policies satisfy $Q^{\pi}(s, \pi'(s)) \ge V^\pi(s)$ for all $s$, then $V^{\pi'}(s) \ge V^\pi(s)$ for all $s$. *Hint: expand $V^\pi(s) \le Q^\pi(s, \pi'(s)) = \E[R_{t+1} + \gamma V^\pi(S_{t+1}) \mid A_t = \pi'(s)]$ and keep substituting the inequality into itself, telescoping.* (You have just proven the **policy improvement theorem** — the engine of Chapter 4. We will cite this exercise there.)
+
+**3.10 (research)** The optimal-policy existence theorem fails in subtle ways beyond finite MDPs: construct (or find in Puterman §mixed criteria) an example with countably infinite states where no optimal policy exists (only ε-optimal ones), and explain which step of the finite-case argument breaks. What does this suggest about "optimal" as a goal for continuous-state deep RL?
