@@ -114,6 +114,16 @@ export const workSection = {
       imagePosition: "center 40%",
     },
     {
+      title: "RL Bible",
+      category: "Writing",
+      date: "Jul 2026",
+      description:
+        "A from-scratch guide to reinforcement learning: bandits, Bellman equations, deep RL, offline RL, world models, and the vision-language-action policies driving robots.",
+      href: "/writing/rl-guide",
+      image: "/projects/rl-bible.png",
+      imageContain: true,
+    },
+    {
       title: "LoRA VLA Research @ BracketBot",
       category: "Research",
       date: "May 2026",
