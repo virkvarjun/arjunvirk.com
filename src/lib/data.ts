@@ -6,7 +6,8 @@ import {
   thinkingReflections,
   manifestoTwoReflections,
 } from "./chapters";
-import { roboticsGuideChapters } from "./robotics-chapters";
+// Hidden with robotics-guide card — restore when uncommenting that writing entry:
+// import { roboticsGuideChapters } from "./robotics-chapters";
 
 export const profile = {
   name: "Arjun Virk",
@@ -75,16 +76,17 @@ export const workSection = {
   heading: "Work",
   subtitle: "Writing, research, and projects.",
   projects: [
-    {
-      title: "OpenPi-GPU SHARDER",
-      category: "Research",
-      date: "Jun 2026",
-      description:
-        "An implementation of a multi-node FSDP for the OpenPI repo.",
-      href: "https://virkvarjun.github.io/OpenPI-GPU/",
-      image: "/projects/openpi-gpu-sharder.png",
-      imageBare: true,
-    },
+    // Hidden for now — restore later:
+    // {
+    //   title: "OpenPi-GPU SHARDER",
+    //   category: "Research",
+    //   date: "Jun 2026",
+    //   description:
+    //     "An implementation of a multi-node FSDP for the OpenPI repo.",
+    //   href: "https://virkvarjun.github.io/OpenPI-GPU/",
+    //   image: "/projects/openpi-gpu-sharder.png",
+    //   imageBare: true,
+    // },
     {
       title: "Machine Learning Bible",
       category: "Writing",
@@ -95,34 +97,36 @@ export const workSection = {
       image: "/projects/ml-bible.png",
       imagePosition: "30% center",
     },
-    {
-      title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
-      category: "Research",
-      date: "Apr 2026",
-      description:
-        "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
-      href: "https://virkvarjun.github.io/KhemKernel/",
-      image: "/projects/picochem.png",
-    },
-    {
-      title: "Robotics Bible",
-      category: "Writing",
-      date: "Jul 2026",
-      description: "A full guide of ML in Robotics.",
-      href: "/writing/robotics-guide",
-      image: "/projects/robotics-bible.webp",
-      imagePosition: "center 40%",
-    },
-    {
-      title: "RL Bible",
-      category: "Writing",
-      date: "Jul 2026",
-      description:
-        "A from-scratch guide to reinforcement learning: bandits, Bellman equations, deep RL, offline RL, world models, and the vision-language-action policies driving robots.",
-      href: "/writing/rl-guide",
-      image: "/projects/rl-bible.png",
-      imageContain: true,
-    },
+    // Hidden for now — restore later:
+    // {
+    //   title: "KhemKernel: Transformer from Scratch in numpy + Custom CUDA Kernels",
+    //   category: "Research",
+    //   date: "Apr 2026",
+    //   description:
+    //     "Built an encoder-decoder Transformer from scratch in NumPy and C++, using 5,000+ handwritten lines and custom CUDA kernels for FlashAttention to translate SMILES into IUPAC names.",
+    //   href: "https://virkvarjun.github.io/KhemKernel/",
+    //   image: "/projects/picochem.png",
+    // },
+    // Hidden for now — restore later:
+    // {
+    //   title: "Robotics Bible",
+    //   category: "Writing",
+    //   date: "Jul 2026",
+    //   description: "A full guide of ML in Robotics.",
+    //   href: "/writing/robotics-guide",
+    //   image: "/projects/robotics-bible.webp",
+    //   imagePosition: "center 40%",
+    // },
+    // {
+    //   title: "RL Bible",
+    //   category: "Writing",
+    //   date: "Jul 2026",
+    //   description:
+    //     "A from-scratch guide to reinforcement learning: bandits, Bellman equations, deep RL, offline RL, world models, and the vision-language-action policies driving robots.",
+    //   href: "/writing/rl-guide",
+    //   image: "/projects/rl-bible.png",
+    //   imageContain: true,
+    // },
     {
       title: "LoRA VLA Research @ BracketBot",
       category: "Research",
@@ -169,16 +173,17 @@ export const workSection = {
       href: "https://partner.projectboard.world/ysc/project/using-machine-learning-to-quantify-pan-cancer-immunotherapy-response-and-optimizing-treatments",
       image: "/projects/immuno.png",
     },
-    {
-      title: "Inference Engineering: A Deep Dive",
-      category: "Writing",
-      date: "Jun 2026",
-      description:
-        "A deep dive into LLM inference and GPU architecture.",
-      href: "/inference-engineering.html",
-      image: "/projects/inference-engineering.png",
-      imageContain: true,
-    },
+    // Hidden for now — restore later:
+    // {
+    //   title: "Inference Engineering: A Deep Dive",
+    //   category: "Writing",
+    //   date: "Jun 2026",
+    //   description:
+    //     "A deep dive into LLM inference and GPU architecture.",
+    //   href: "/inference-engineering.html",
+    //   image: "/projects/inference-engineering.png",
+    //   imageContain: true,
+    // },
     {
       title: "Explanation Tuning Research (Triage)",
       category: "Engineering",
@@ -206,15 +211,16 @@ export const workSection = {
       href: "https://drive.google.com/file/d/1iY6WqhUoQef0hN14b8RVFlftUAU0BiyM/view?usp=sharing",
       image: "/projects/wisp.png",
     },
-    {
-      title: "Meridian",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "An app that logs what you are doing every ten minutes, learns your peak productivity hours, and builds a dynamic daily schedule around them.",
-      href: "/projects/meridian-demo.mp4",
-      image: "/projects/meridian-poster.png",
-    },
+    // Hidden for now — restore later:
+    // {
+    //   title: "Meridian",
+    //   category: "Engineering",
+    //   date: "Jul 2026",
+    //   description:
+    //     "An app that logs what you are doing every ten minutes, learns your peak productivity hours, and builds a dynamic daily schedule around them.",
+    //   href: "/projects/meridian-demo.mp4",
+    //   image: "/projects/meridian-poster.png",
+    // },
     {
       title: "Dancing Humanoid (1st Place Provincially)",
       category: "Engineering",
@@ -224,16 +230,17 @@ export const workSection = {
       href: "https://www.youtube.com/watch?v=To6ZkVqr8FM",
       image: "/projects/dancing.png",
     },
-    {
-      title: "Backtracking",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "An app that fights the forgetting curve by tracking what you have learned and tuning the questions it asks each day so the material sticks.",
-      href: "https://recall-delta-two.vercel.app/",
-      image: "/projects/backtracking.svg",
-      imageContain: true,
-    },
+    // Hidden for now — restore later:
+    // {
+    //   title: "Backtracking",
+    //   category: "Engineering",
+    //   date: "Jul 2026",
+    //   description:
+    //     "An app that fights the forgetting curve by tracking what you have learned and tuning the questions it asks each day so the material sticks.",
+    //   href: "https://recall-delta-two.vercel.app/",
+    //   image: "/projects/backtracking.svg",
+    //   imageContain: true,
+    // },
     {
       title: "Hack49: 700K Reached, $13K Funding",
       category: "Leadership",
@@ -243,15 +250,16 @@ export const workSection = {
       href: "https://www.youtube.com/@hack_49",
       image: "/projects/hack49.png",
     },
-    {
-      title: "Daybreak",
-      category: "Engineering",
-      date: "Jul 2026",
-      description:
-        "A personal daily digest of paper recommendations, relevant news, and takes from the leaders you follow on X, built as a calmer replacement for endless scrolling.",
-      href: "/projects/daybreak-demo.mp4",
-      image: "/projects/daybreak-poster.png",
-    },
+    // Hidden for now — restore later:
+    // {
+    //   title: "Daybreak",
+    //   category: "Engineering",
+    //   date: "Jul 2026",
+    //   description:
+    //     "A personal daily digest of paper recommendations, relevant news, and takes from the leaders you follow on X, built as a calmer replacement for endless scrolling.",
+    //   href: "/projects/daybreak-demo.mp4",
+    //   image: "/projects/daybreak-poster.png",
+    // },
     {
       title: "Robot See, Robot Do",
       category: "Writing",
@@ -348,20 +356,21 @@ export const writing: WritingCategory[] = [
       "A from-scratch guide to machine learning, classical algorithms, neural networks, transformers, vision, and agents.",
     chapters: mlGuideChapters,
   },
-  {
-    key: "robotics-guide",
-    title: "Robotics Bible",
-    description:
-      "A from-scratch guide to robots: the body, the math, classical autonomy, reinforcement learning, and the vision-language-action models driving the current wave of general-purpose machines.",
-    chapters: roboticsGuideChapters,
-  },
-  {
-    key: "rl-guide",
-    title: "RL Bible",
-    description:
-      "A from-scratch guide to reinforcement learning — bandits, Bellman equations, deep RL, offline RL, world models, and vision-language-action policies for robots.",
-    link: { label: "Table of contents", href: "/writing/rl-guide" },
-  },
+  // Hidden for now — restore later:
+  // {
+  //   key: "robotics-guide",
+  //   title: "Robotics Bible",
+  //   description:
+  //     "A from-scratch guide to robots: the body, the math, classical autonomy, reinforcement learning, and the vision-language-action models driving the current wave of general-purpose machines.",
+  //   chapters: roboticsGuideChapters,
+  // },
+  // {
+  //   key: "rl-guide",
+  //   title: "RL Bible",
+  //   description:
+  //     "A from-scratch guide to reinforcement learning — bandits, Bellman equations, deep RL, offline RL, world models, and vision-language-action policies for robots.",
+  //   link: { label: "Table of contents", href: "/writing/rl-guide" },
+  // },
   {
     key: "becoming",
     title: "Becoming",
